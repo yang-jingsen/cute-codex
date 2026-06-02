@@ -22,6 +22,9 @@ impl ChatWidget {
         self.thread_id = Some(session.thread_id);
         self.bottom_pane
             .set_queue_submissions(/*queue_submissions*/ false);
+        if self.session_started_at.is_none() {
+            self.session_started_at = Some(Instant::now());
+        }
         if previous_thread_id != self.thread_id {
             self.review.recent_auto_review_denials = RecentAutoReviewDenials::default();
         }
@@ -132,6 +135,8 @@ impl ChatWidget {
         }
         self.transcript.saw_copy_source_this_turn = false;
         self.refresh_skills_for_current_cwd(/*force_reload*/ true);
+        self.maybe_emit_session_started_notification(&session, display, previous_thread_id);
+        self.maybe_track_session_startup_idle(&session, display, previous_thread_id);
         if self.connectors_enabled() {
             self.prefetch_connectors();
         }

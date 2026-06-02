@@ -182,6 +182,12 @@ impl ChatWidget {
             }
             ServerNotification::ThreadClosed(_) => {
                 if !from_replay {
+                    self.post_notify_service_event(
+                        NotifyServiceEvent::ThreadClosed,
+                        self.current_turn_duration_seconds(),
+                        0,
+                        None,
+                    );
                     self.on_shutdown_complete();
                 }
             }
@@ -240,7 +246,16 @@ impl ChatWidget {
             | ServerNotification::WindowsWorldWritableWarning(_)
             | ServerNotification::WindowsSandboxSetupCompleted(_)
             | ServerNotification::AccountLoginCompleted(_) => {}
-            ServerNotification::ContextCompacted(_) => {}
+            ServerNotification::ContextCompacted(_) => {
+                if !from_replay {
+                    self.post_notify_service_event(
+                        NotifyServiceEvent::ContextCompacted,
+                        self.current_turn_duration_seconds(),
+                        0,
+                        None,
+                    );
+                }
+            }
         }
     }
 
@@ -264,6 +279,23 @@ impl ChatWidget {
             }
             TurnStatus::Interrupted => {
                 self.last_non_retry_error = None;
+                if replay_kind.is_none() {
+                    self.post_notify_service_event(
+                        NotifyServiceEvent::TurnInterrupted,
+                        notification
+                            .turn
+                            .duration_ms
+                            .and_then(|duration_ms| u64::try_from(duration_ms).ok())
+                            .map(|duration_ms| duration_ms / 1_000),
+                        0,
+                        Some(serde_json::json!({
+                            "turn": {
+                                "turn_id": &notification.turn.id,
+                                "duration_ms": notification.turn.duration_ms
+                            }
+                        })),
+                    );
+                }
                 let reason = if self
                     .turn_lifecycle
                     .take_budget_limited(notification.turn.id.as_str())
@@ -275,6 +307,24 @@ impl ChatWidget {
                 self.on_interrupted_turn(reason);
             }
             TurnStatus::Failed => {
+                if replay_kind.is_none() {
+                    self.post_notify_service_event(
+                        NotifyServiceEvent::TurnFailed,
+                        notification
+                            .turn
+                            .duration_ms
+                            .and_then(|duration_ms| u64::try_from(duration_ms).ok())
+                            .map(|duration_ms| duration_ms / 1_000),
+                        0,
+                        Some(serde_json::json!({
+                            "turn": {
+                                "turn_id": &notification.turn.id,
+                                "duration_ms": notification.turn.duration_ms,
+                                "error": notification.turn.error.as_ref().map(|error| &error.message)
+                            }
+                        })),
+                    );
+                }
                 if let Some(error) = notification.turn.error {
                     if self.last_non_retry_error.as_ref()
                         == Some(&(notification.turn.id.clone(), error.message.clone()))
@@ -299,6 +349,9 @@ impl ChatWidget {
         notification: ItemStartedNotification,
         from_replay: bool,
     ) {
+        if !from_replay {
+            self.emit_started_notification_for_thread_item(&notification.item);
+        }
         match notification.item {
             item @ ThreadItem::CommandExecution { .. } => self.on_command_execution_started(item),
             ThreadItem::FileChange { id: _, changes, .. } => {
@@ -344,6 +397,9 @@ impl ChatWidget {
         notification: ItemCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        if replay_kind.is_none() {
+            self.emit_completed_notification_for_thread_item(&notification.item);
+        }
         self.handle_thread_item(
             notification.item,
             notification.turn_id,

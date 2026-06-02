@@ -1,0 +1,1566 @@
+diff --git a/codex-rs/cli/tests/mcp_list.rs b/codex-rs/cli/tests/mcp_list.rs
+index bed3505985..aad6047503 100644
+--- a/codex-rs/cli/tests/mcp_list.rs
++++ b/codex-rs/cli/tests/mcp_list.rs
+@@ -9,16 +9,48 @@ use predicates::str::contains;
+ use pretty_assertions::assert_eq;
+ use serde_json::Value as JsonValue;
+ use serde_json::json;
++use serial_test::serial;
+ use tempfile::TempDir;
+ 
++struct EnvVarGuard {
++    key: &'static str,
++    old: Option<std::ffi::OsString>,
++}
++
++impl EnvVarGuard {
++    fn remove(key: &'static str) -> Self {
++        let old = std::env::var_os(key);
++        unsafe { std::env::remove_var(key) };
++        Self { key, old }
++    }
++}
++
++impl Drop for EnvVarGuard {
++    fn drop(&mut self) {
++        unsafe {
++            match self.old.take() {
++                Some(value) => std::env::set_var(self.key, value),
++                None => std::env::remove_var(self.key),
++            }
++        }
++    }
++}
++
+ fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
+     let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
+     cmd.env("CODEX_HOME", codex_home);
++    cmd.env_remove("CODEX_CONFIG_FILE");
++    cmd.env_remove("CODEX_AUTH_FILE");
++    cmd.env_remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
+     Ok(cmd)
+ }
+ 
+ #[test]
++#[serial(mcp_list_env)]
+ fn list_shows_empty_state() -> Result<()> {
++    let _config = EnvVarGuard::remove("CODEX_CONFIG_FILE");
++    let _auth = EnvVarGuard::remove("CODEX_AUTH_FILE");
++    let _status = EnvVarGuard::remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
+     let codex_home = TempDir::new()?;
+ 
+     let mut cmd = codex_command(codex_home.path())?;
+@@ -31,7 +63,11 @@ fn list_shows_empty_state() -> Result<()> {
+ }
+ 
+ #[tokio::test]
++#[serial(mcp_list_env)]
+ async fn list_and_get_render_expected_output() -> Result<()> {
++    let _config = EnvVarGuard::remove("CODEX_CONFIG_FILE");
++    let _auth = EnvVarGuard::remove("CODEX_AUTH_FILE");
++    let _status = EnvVarGuard::remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
+     let codex_home = TempDir::new()?;
+ 
+     let mut add = codex_command(codex_home.path())?;
+@@ -126,7 +162,7 @@ async fn list_and_get_render_expected_output() -> Result<()> {
+     assert!(stdout.contains("APP_TOKEN=*****"));
+     assert!(stdout.contains("WORKSPACE_ID=*****"));
+     assert!(stdout.contains("enabled: true"));
+-    assert!(stdout.contains("remove: codex mcp remove docs"));
++    assert!(stdout.contains("remove: cute-codex mcp remove docs"));
+ 
+     let mut get_json_cmd = codex_command(codex_home.path())?;
+     get_json_cmd
+@@ -139,7 +175,11 @@ async fn list_and_get_render_expected_output() -> Result<()> {
+ }
+ 
+ #[tokio::test]
++#[serial(mcp_list_env)]
+ async fn get_disabled_server_shows_single_line() -> Result<()> {
++    let _config = EnvVarGuard::remove("CODEX_CONFIG_FILE");
++    let _auth = EnvVarGuard::remove("CODEX_AUTH_FILE");
++    let _status = EnvVarGuard::remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
+     let codex_home = TempDir::new()?;
+ 
+     let mut add = codex_command(codex_home.path())?;
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index 62cb727159..bb87f3cd21 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -1698,8 +1698,7 @@ impl App {
+                     tui.frame_requester().schedule_frame();
+                 }
+             }
+-            AppEvent::StatusLineSetup { items } => {
+-                let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
++            AppEvent::StatusLineSetup { ids } => {
+                 let edit = crate::legacy_core::config::edit::status_line_items_edit(&ids);
+                 let apply_result = ConfigEditsBuilder::new(&self.config.codex_home)
+                     .with_edits([edit])
+@@ -1708,7 +1707,7 @@ impl App {
+                 match apply_result {
+                     Ok(()) => {
+                         self.config.tui_status_line = Some(ids.clone());
+-                        self.chat_widget.setup_status_line(items);
++                        self.chat_widget.setup_status_line(ids);
+                     }
+                     Err(err) => {
+                         tracing::error!(error = %err, "failed to persist status line items; keeping previous selection");
+diff --git a/codex-rs/tui/src/app/tests.rs b/codex-rs/tui/src/app/tests.rs
+index 756c50869d..87a49e1bb9 100644
+--- a/codex-rs/tui/src/app/tests.rs
++++ b/codex-rs/tui/src/app/tests.rs
+@@ -1208,8 +1208,9 @@ async fn replayed_interrupted_turn_restores_queued_input_to_composer() {
+ #[tokio::test]
+ async fn token_usage_update_refreshes_status_line_with_runtime_context_window() {
+     let mut app = make_test_app().await;
+-    app.chat_widget
+-        .setup_status_line(vec![crate::bottom_pane::StatusLineItem::ContextWindowSize]);
++    app.chat_widget.setup_status_line(vec![
++        crate::bottom_pane::StatusLineItem::ContextWindowSize.to_string(),
++    ]);
+ 
+     assert_eq!(app.chat_widget.status_line_text(), None);
+ 
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 4c351266ff..81aabd2042 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -33,7 +33,6 @@ use codex_utils_approval_presets::ApprovalPreset;
+ 
+ use crate::app_command::AppCommand;
+ use crate::bottom_pane::ApprovalRequest;
+-use crate::bottom_pane::StatusLineItem;
+ use crate::bottom_pane::TerminalTitleItem;
+ use crate::chatwidget::UserMessage;
+ use codex_config::types::ApprovalsReviewer;
+@@ -749,7 +748,7 @@ pub(crate) enum AppEvent {
+     },
+     /// Apply a user-confirmed status-line item ordering/selection.
+     StatusLineSetup {
+-        items: Vec<StatusLineItem>,
++        ids: Vec<String>,
+     },
+     /// Dismiss the status-line setup UI without changing config.
+     StatusLineSetupCancelled,
+diff --git a/codex-rs/tui/src/bottom_pane/mod.rs b/codex-rs/tui/src/bottom_pane/mod.rs
+index 02275755b7..e3a08b4f65 100644
+--- a/codex-rs/tui/src/bottom_pane/mod.rs
++++ b/codex-rs/tui/src/bottom_pane/mod.rs
+@@ -118,7 +118,9 @@ pub(crate) use feedback_view::feedback_success_cell;
+ pub(crate) use feedback_view::feedback_upload_consent_params;
+ pub(crate) use skills_toggle_view::SkillsToggleItem;
+ pub(crate) use skills_toggle_view::SkillsToggleView;
++pub(crate) use status_line_setup::StatusLineChoice;
+ pub(crate) use status_line_setup::StatusLineItem;
++pub(crate) use status_line_setup::StatusLinePreviewData;
+ pub(crate) use status_line_setup::StatusLineSetupView;
+ pub(crate) use status_surface_preview::StatusSurfacePreviewData;
+ pub(crate) use status_surface_preview::StatusSurfacePreviewItem;
+@@ -199,6 +201,7 @@ pub(crate) struct BottomPane {
+     view_stack: Vec<Box<dyn BottomPaneView>>,
+     delayed_approval_requests: VecDeque<DelayedApprovalRequest>,
+     last_composer_activity_at: Option<Instant>,
++    composer_activity_generation: u64,
+ 
+     app_event_tx: AppEventSender,
+     frame_requester: FrameRequester,
+@@ -265,6 +268,7 @@ impl BottomPane {
+             view_stack: Vec::new(),
+             delayed_approval_requests: VecDeque::new(),
+             last_composer_activity_at: None,
++            composer_activity_generation: 0,
+             app_event_tx,
+             frame_requester,
+             has_input_focus,
+@@ -489,6 +493,7 @@ impl BottomPane {
+ 
+     fn record_composer_activity_at(&mut self, now: Instant) {
+         self.last_composer_activity_at = Some(now);
++        self.composer_activity_generation = self.composer_activity_generation.saturating_add(1);
+         if !self.delayed_approval_requests.is_empty()
+             && let Some(delay) = self.approval_prompt_delay_remaining(now)
+         {
+@@ -682,6 +687,7 @@ impl BottomPane {
+ 
+     pub(crate) fn insert_str(&mut self, text: &str) {
+         self.composer.insert_str(text);
++        self.record_composer_activity_at(Instant::now());
+         self.composer.sync_popups();
+         self.request_redraw();
+     }
+@@ -785,6 +791,7 @@ impl BottomPane {
+ 
+     pub(crate) fn apply_external_edit(&mut self, text: String) {
+         self.composer.apply_external_edit(text);
++        self.record_composer_activity_at(Instant::now());
+         self.request_redraw();
+     }
+ 
+@@ -1123,6 +1130,14 @@ impl BottomPane {
+         self.composer.is_empty()
+     }
+ 
++    pub(crate) fn composer_activity_generation(&self) -> u64 {
++        self.composer_activity_generation
++    }
++
++    pub(crate) fn last_composer_activity_at(&self) -> Option<Instant> {
++        self.last_composer_activity_at
++    }
++
+     pub(crate) fn is_task_running(&self) -> bool {
+         self.is_task_running
+     }
+@@ -1427,6 +1442,7 @@ impl BottomPane {
+     pub(crate) fn attach_image(&mut self, path: PathBuf) {
+         if self.view_stack.is_empty() {
+             self.composer.attach_image(path);
++            self.record_composer_activity_at(Instant::now());
+             self.request_redraw();
+         }
+     }
+diff --git a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap
+deleted file mode 100644
+index ff93e83748..0000000000
+--- a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__status_line_setup__tests__setup_view_snapshot_uses_runtime_preview_values.snap
++++ /dev/null
+@@ -1,21 +0,0 @@
+----
+-source: tui/src/bottom_pane/status_line_setup.rs
+-expression: "render_lines(&view, 72)"
+----
+-                                                                        
+-  Configure Status Line                                                 
+-  Select which items to display in the status line.                     
+-                                                                        
+-  Type to search                                                        
+-  >                                                                     
+-› [x] model                 Current model name                          
+-  [x] current-dir           Current working directory                   
+-  [x] git-branch            Current Git branch (omitted when unavaila…  
+-  [ ] model-with-reasoning  Current model name with reasoning level     
+-  [ ] project-name          Project name (omitted when unavailable)     
+-  [ ] run-state             Compact session run-state text (Ready, Wo…  
+-  [ ] context-remaining     Percentage of context window remaining (o…  
+-  [ ] context-used          Percentage of context window used (omitte…  
+-                                                                        
+-  gpt-5-codex · ~/codex-rs · jif/statusline-preview                     
+-  Use ↑↓ to navigate, ←→ to move, space to select, enter to confirm, esc
+diff --git a/codex-rs/tui/src/bottom_pane/status_line_setup.rs b/codex-rs/tui/src/bottom_pane/status_line_setup.rs
+index ea522f3bf0..8b163ace47 100644
+--- a/codex-rs/tui/src/bottom_pane/status_line_setup.rs
++++ b/codex-rs/tui/src/bottom_pane/status_line_setup.rs
+@@ -19,8 +19,9 @@
+ 
+ use ratatui::buffer::Buffer;
+ use ratatui::layout::Rect;
++use ratatui::text::Line;
++use std::collections::HashMap;
+ use std::collections::HashSet;
+-use strum::IntoEnumIterator;
+ use strum_macros::Display;
+ use strum_macros::EnumIter;
+ use strum_macros::EnumString;
+@@ -31,7 +32,6 @@ use crate::bottom_pane::CancellationEvent;
+ use crate::bottom_pane::bottom_pane_view::BottomPaneView;
+ use crate::bottom_pane::multi_select_picker::MultiSelectItem;
+ use crate::bottom_pane::multi_select_picker::MultiSelectPicker;
+-use crate::bottom_pane::status_surface_preview::StatusSurfacePreviewData;
+ use crate::bottom_pane::status_surface_preview::StatusSurfacePreviewItem;
+ use crate::render::renderable::Renderable;
+ 
+@@ -114,6 +114,12 @@ pub(crate) enum StatusLineItem {
+ 
+     /// Latest checklist task progress from `update_plan` (if available).
+     TaskProgress,
++
++    /// Launcher-provided profile label (if available).
++    LaunchProfile,
++
++    /// Launcher-provided runtime label (if available).
++    LaunchRuntime,
+ }
+ 
+ impl StatusLineItem {
+@@ -153,6 +159,12 @@ impl StatusLineItem {
+             StatusLineItem::TaskProgress => {
+                 "Latest task progress from update_plan (omitted until available)"
+             }
++            StatusLineItem::LaunchProfile => {
++                "Launcher-provided profile label (omitted when unavailable)"
++            }
++            StatusLineItem::LaunchRuntime => {
++                "Launcher-provided runtime label (omitted when unavailable)"
++            }
+         }
+     }
+ 
+@@ -177,10 +189,73 @@ impl StatusLineItem {
+             StatusLineItem::FastMode => StatusSurfacePreviewItem::FastMode,
+             StatusLineItem::ThreadTitle => StatusSurfacePreviewItem::ThreadTitle,
+             StatusLineItem::TaskProgress => StatusSurfacePreviewItem::TaskProgress,
++            StatusLineItem::LaunchProfile => StatusSurfacePreviewItem::ThreadTitle,
++            StatusLineItem::LaunchRuntime => StatusSurfacePreviewItem::Status,
+         }
+     }
+ }
+ 
++/// A choice shown in the status-line configuration picker.
++/// Wraps both built-in `StatusLineItem` variants and custom items.
++#[derive(Clone, Debug, Eq, PartialEq)]
++pub(crate) struct StatusLineChoice {
++    pub(crate) id: String,
++    pub(crate) name: String,
++    pub(crate) description: Option<String>,
++}
++
++impl StatusLineChoice {
++    pub(crate) fn builtin(item: StatusLineItem) -> Self {
++        Self {
++            id: item.to_string(),
++            name: item.to_string(),
++            description: Some(item.description().to_string()),
++        }
++    }
++
++    fn into_select_item(self, enabled: bool) -> MultiSelectItem {
++        MultiSelectItem {
++            id: self.id,
++            name: self.name,
++            description: self.description,
++            enabled,
++        }
++    }
++}
++
++/// Preview data used by the status-line setup view to render a live preview line.
++#[derive(Clone, Debug)]
++pub(crate) struct StatusLinePreviewData {
++    values: HashMap<String, Line<'static>>,
++}
++
++impl StatusLinePreviewData {
++    pub(crate) fn new(values: HashMap<String, Line<'static>>) -> Self {
++        Self { values }
++    }
++
++    pub(crate) fn from_iter(iter: impl Iterator<Item = (String, Line<'static>)>) -> Self {
++        Self {
++            values: iter.collect(),
++        }
++    }
++
++    pub(crate) fn line_for_ids(&self, ids: impl Iterator<Item = String>) -> Line<'static> {
++        let parts: Vec<_> = ids.filter_map(|id| self.values.get(&id)).cloned().collect();
++        if parts.is_empty() {
++            return Line::raw("");
++        }
++        let mut spans = Vec::new();
++        for (i, part) in parts.into_iter().enumerate() {
++            if i > 0 {
++                spans.push(ratatui::text::Span::raw(" · "));
++            }
++            spans.extend(part.spans);
++        }
++        Line::from(spans)
++    }
++}
++
+ /// Interactive view for configuring which items appear in the status line.
+ ///
+ /// Wraps a [`MultiSelectPicker`] with status-line-specific behavior:
+@@ -200,13 +275,13 @@ impl StatusLineSetupView {
+     ///
+     /// * `status_line_items` - Currently configured item IDs (in display order),
+     ///   or `None` to start with all items disabled
++    /// * `choices` - Available choices (built-in + custom items)
++    /// * `preview_data` - Preview line data keyed by item id
+     /// * `app_event_tx` - Event sender for dispatching configuration changes
+-    ///
+-    /// Items from `status_line_items` are shown first (in order) and marked as
+-    /// enabled. Remaining items are appended and marked as disabled.
+     pub(crate) fn new(
+         status_line_items: Option<&[String]>,
+-        preview_data: StatusSurfacePreviewData,
++        choices: &[StatusLineChoice],
++        preview_data: StatusLinePreviewData,
+         app_event_tx: AppEventSender,
+     ) -> Self {
+         let mut used_ids = HashSet::new();
+@@ -214,23 +289,20 @@ impl StatusLineSetupView {
+ 
+         if let Some(selected_items) = status_line_items.as_ref() {
+             for id in *selected_items {
+-                let Ok(item) = id.parse::<StatusLineItem>() else {
+-                    continue;
+-                };
+-                let item_id = item.to_string();
+-                if !used_ids.insert(item_id.clone()) {
++                if !used_ids.insert(id.clone()) {
+                     continue;
+                 }
+-                items.push(Self::status_line_select_item(item, /*enabled*/ true));
++                if let Some(choice) = choices.iter().find(|c| c.id == *id) {
++                    items.push(choice.clone().into_select_item(true));
++                }
+             }
+         }
+ 
+-        for item in StatusLineItem::iter() {
+-            let item_id = item.to_string();
+-            if used_ids.contains(&item_id) {
++        for choice in choices {
++            if used_ids.contains(&choice.id) {
+                 continue;
+             }
+-            items.push(Self::status_line_select_item(item, /*enabled*/ false));
++            items.push(choice.clone().into_select_item(false));
+         }
+ 
+         Self {
+@@ -246,21 +318,20 @@ impl StatusLineSetupView {
+             .items(items)
+             .enable_ordering()
+             .on_preview(move |items| {
+-                preview_data.line_for_items(
++                let line = preview_data.line_for_ids(
+                     items
+                         .iter()
+                         .filter(|item| item.enabled)
+-                        .filter_map(|item| item.id.parse::<StatusLineItem>().ok())
+-                        .map(StatusLineItem::preview_item),
+-                )
++                        .map(|item| item.id.clone()),
++                );
++                if line.spans.is_empty() {
++                    None
++                } else {
++                    Some(line)
++                }
+             })
+             .on_confirm(|ids, app_event| {
+-                let items = ids
+-                    .iter()
+-                    .map(|id| id.parse::<StatusLineItem>())
+-                    .collect::<Result<Vec<_>, _>>()
+-                    .unwrap_or_default();
+-                app_event.send(AppEvent::StatusLineSetup { items });
++                app_event.send(AppEvent::StatusLineSetup { ids: ids.to_vec() });
+             })
+             .on_cancel(|app_event| {
+                 app_event.send(AppEvent::StatusLineSetupCancelled);
+@@ -268,16 +339,6 @@ impl StatusLineSetupView {
+             .build(),
+         }
+     }
+-
+-    /// Converts a [`StatusLineItem`] into a [`MultiSelectItem`] for the picker.
+-    fn status_line_select_item(item: StatusLineItem, enabled: bool) -> MultiSelectItem {
+-        MultiSelectItem {
+-            id: item.to_string(),
+-            name: item.to_string(),
+-            description: Some(item.description().to_string()),
+-            enabled,
+-        }
+-    }
+ }
+ 
+ impl BottomPaneView for StatusLineSetupView {
+@@ -309,6 +370,7 @@ impl Renderable for StatusLineSetupView {
+ mod tests {
+     use super::*;
+     use crate::app_event_sender::AppEventSender;
++    use crate::bottom_pane::StatusSurfacePreviewData;
+     use insta::assert_snapshot;
+     use pretty_assertions::assert_eq;
+     use ratatui::buffer::Buffer;
+@@ -508,30 +570,40 @@ mod tests {
+     #[test]
+     fn setup_view_snapshot_uses_runtime_preview_values() {
+         let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
++        let choices = [
++            StatusLineChoice::builtin(StatusLineItem::ModelName),
++            StatusLineChoice::builtin(StatusLineItem::CurrentDir),
++            StatusLineChoice::builtin(StatusLineItem::GitBranch),
++            StatusLineChoice::builtin(StatusLineItem::WeeklyLimit),
++        ];
+         let view = StatusLineSetupView::new(
+             Some(&[
+                 StatusLineItem::ModelName.to_string(),
+                 StatusLineItem::CurrentDir.to_string(),
+                 StatusLineItem::GitBranch.to_string(),
+             ]),
+-            StatusSurfacePreviewData::from_iter([
+-                (
+-                    StatusLineItem::ModelName.preview_item(),
+-                    "gpt-5-codex".to_string(),
+-                ),
+-                (
+-                    StatusLineItem::CurrentDir.preview_item(),
+-                    "~/codex-rs".to_string(),
+-                ),
+-                (
+-                    StatusLineItem::GitBranch.preview_item(),
+-                    "jif/statusline-preview".to_string(),
+-                ),
+-                (
+-                    StatusLineItem::WeeklyLimit.preview_item(),
+-                    "weekly 82%".to_string(),
+-                ),
+-            ]),
++            &choices,
++            StatusLinePreviewData::from_iter(
++                [
++                    (
++                        StatusLineItem::ModelName.to_string(),
++                        Line::from("gpt-5-codex"),
++                    ),
++                    (
++                        StatusLineItem::CurrentDir.to_string(),
++                        Line::from("~/codex-rs"),
++                    ),
++                    (
++                        StatusLineItem::GitBranch.to_string(),
++                        Line::from("jif/statusline-preview"),
++                    ),
++                    (
++                        StatusLineItem::WeeklyLimit.to_string(),
++                        Line::from("weekly 82%"),
++                    ),
++                ]
++                .into_iter(),
++            ),
+             AppEventSender::new(tx_raw),
+         );
+ 
+diff --git a/codex-rs/tui/src/bottom_pane/status_surface_preview.rs b/codex-rs/tui/src/bottom_pane/status_surface_preview.rs
+index 93fca824ca..b70c309c6d 100644
+--- a/codex-rs/tui/src/bottom_pane/status_surface_preview.rs
++++ b/codex-rs/tui/src/bottom_pane/status_surface_preview.rs
+@@ -30,7 +30,7 @@ pub(crate) enum StatusSurfacePreviewItem {
+ impl StatusSurfacePreviewItem {
+     fn placeholder(self) -> &'static str {
+         match self {
+-            StatusSurfacePreviewItem::AppName => "codex",
++            StatusSurfacePreviewItem::AppName => "cute-codex",
+             StatusSurfacePreviewItem::ProjectName => "my-project",
+             StatusSurfacePreviewItem::ProjectRoot => "my-project",
+             StatusSurfacePreviewItem::CurrentDir => "~/my-project/subdir",
+@@ -155,6 +155,7 @@ impl StatusSurfacePreviewData {
+         self.values.get(&item).map(|value| value.text.as_str())
+     }
+ 
++    #[allow(dead_code)]
+     pub(crate) fn line_for_items<I>(&self, items: I) -> Option<Line<'static>>
+     where
+         I: IntoIterator<Item = StatusSurfacePreviewItem>,
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index cdd31e5329..8e9e7ab58a 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -51,12 +51,17 @@ use crate::app_server_approval_conversions::network_approval_context_to_core;
+ use crate::app_server_session::ThreadSessionState;
+ #[cfg(not(target_os = "linux"))]
+ use crate::audio_device::list_realtime_audio_device_names;
++use crate::bottom_pane::StatusLineChoice;
+ use crate::bottom_pane::StatusLineItem;
++use crate::bottom_pane::StatusLinePreviewData;
+ use crate::bottom_pane::StatusLineSetupView;
+ use crate::bottom_pane::StatusSurfacePreviewData;
+ use crate::bottom_pane::StatusSurfacePreviewItem;
+ use crate::bottom_pane::TerminalTitleItem;
+ use crate::bottom_pane::TerminalTitleSetupView;
++use crate::custom_status_items::CustomStatusContext;
++use crate::custom_status_items::CustomStatusItem;
++use crate::custom_status_items::load_custom_status_items;
+ use crate::legacy_core::DEFAULT_AGENTS_MD_FILENAME;
+ use crate::legacy_core::config::Config;
+ use crate::legacy_core::config::Constrained;
+@@ -987,6 +992,11 @@ pub(crate) struct ChatWidget {
+     queued_message_edit_hint_binding: Option<KeyBinding>,
+     // Pending notification to show when unfocused on next Draw
+     pending_notification: Option<Notification>,
++    idle_entered_at: Option<Instant>,
++    idle_notification_status: Option<crate::notify_service::IdleNotifyStatus>,
++    idle_composer_activity_generation: Option<u64>,
++    idle_notification_sent: bool,
++    session_started_at: Option<Instant>,
+     /// When `Some`, the user has pressed a quit shortcut and the second press
+     /// must occur before `quit_shortcut_expires_at`.
+     quit_shortcut_expires_at: Option<Instant>,
+@@ -1056,6 +1066,8 @@ pub(crate) struct ChatWidget {
+     status_line_project_root_name_cache: Option<CachedProjectRootName>,
+     // Cached git branch name for the status line (None if unknown).
+     status_line_branch: Option<String>,
++    // Dynamic status-line items loaded from the launcher-managed catalog file.
++    custom_status_items: Vec<CustomStatusItem>,
+     // CWD used to resolve the cached branch; change resets branch state.
+     status_line_branch_cwd: Option<PathBuf>,
+     // True while an async branch lookup is in flight.
+@@ -2199,9 +2211,8 @@ impl ChatWidget {
+     /// Applies status-line item selection from the setup view to in-memory config.
+     ///
+     /// An empty selection persists as an explicit empty list.
+-    pub(crate) fn setup_status_line(&mut self, items: Vec<StatusLineItem>) {
+-        tracing::info!("status line setup confirmed with items: {items:#?}");
+-        let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
++    pub(crate) fn setup_status_line(&mut self, ids: Vec<String>) {
++        tracing::info!("status line setup confirmed with ids: {ids:#?}");
+         self.config.tui_status_line = Some(ids);
+         self.refresh_status_line();
+     }
+@@ -2355,6 +2366,9 @@ impl ChatWidget {
+         self.refresh_plan_mode_nudge();
+         self.last_turn_id = None;
+         self.thread_name = event.thread_name.clone();
++        if self.session_started_at.is_none() {
++            self.session_started_at = Some(Instant::now());
++        }
+         self.current_goal_status_indicator = None;
+         self.current_goal_status = None;
+         self.goal_status_active_turn_started_at = None;
+@@ -2742,6 +2756,7 @@ impl ChatWidget {
+     // Raw reasoning uses the same flow as summarized reasoning
+ 
+     fn on_task_started(&mut self) {
++        self.clear_idle_state();
+         self.user_turn_pending_start = false;
+         self.agent_turn_running = true;
+         self.goal_status_active_turn_started_at = Some(Instant::now());
+@@ -2890,6 +2905,7 @@ impl ChatWidget {
+             self.notify(Notification::AgentTurnComplete {
+                 response: notification_response,
+             });
++            self.enter_idle_state(crate::notify_service::IdleNotifyStatus::TaskCompleted);
+         }
+ 
+         self.maybe_show_pending_rate_limit_prompt();
+@@ -4711,6 +4727,7 @@ impl ChatWidget {
+         {
+             self.refresh_terminal_title();
+         }
++        self.check_idle_notification_timer();
+     }
+ 
+     /// Handle completion of an `AgentMessage` turn item.
+@@ -4995,6 +5012,7 @@ impl ChatWidget {
+         let command = shlex::try_join(ev.command.iter().map(String::as_str))
+             .unwrap_or_else(|_| ev.command.join(" "));
+         self.notify(Notification::ExecApprovalRequested { command });
++        self.enter_idle_state(crate::notify_service::IdleNotifyStatus::WaitingApproval);
+ 
+         let available_decisions = ev.effective_available_decisions();
+         let request = ApprovalRequest::Exec {
+@@ -5030,6 +5048,7 @@ impl ChatWidget {
+             cwd: self.config.cwd.to_path_buf(),
+             changes: ev.changes.keys().cloned().collect(),
+         });
++        self.enter_idle_state(crate::notify_service::IdleNotifyStatus::WaitingApproval);
+     }
+ 
+     pub(crate) fn handle_elicitation_request_now(&mut self, ev: ElicitationRequestEvent) {
+@@ -5396,6 +5415,11 @@ impl ChatWidget {
+             suppress_session_configured_redraw: false,
+             suppress_initial_user_message_submit: false,
+             pending_notification: None,
++            idle_entered_at: None,
++            idle_notification_status: None,
++            idle_composer_activity_generation: None,
++            idle_notification_sent: false,
++            session_started_at: None,
+             quit_shortcut_expires_at: None,
+             quit_shortcut_key: None,
+             is_review_mode: false,
+@@ -5422,6 +5446,7 @@ impl ChatWidget {
+             terminal_title_animation_origin: Instant::now(),
+             status_line_project_root_name_cache: None,
+             status_line_branch: None,
++            custom_status_items: load_custom_status_items(),
+             status_line_branch_cwd: None,
+             status_line_branch_pending: false,
+             status_line_branch_lookup_complete: false,
+@@ -7836,6 +7861,170 @@ impl ChatWidget {
+         }
+     }
+ 
++    fn notify_service_enabled(&self) -> bool {
++        self.config
++            .notify_service
++            .notify_service_url
++            .as_ref()
++            .is_some_and(|url| !url.is_empty())
++    }
++
++    fn enter_idle_state(&mut self, status: crate::notify_service::IdleNotifyStatus) {
++        if !self.notify_service_enabled() {
++            return;
++        }
++        self.idle_entered_at = Some(Instant::now());
++        self.idle_notification_status = Some(status);
++        self.idle_composer_activity_generation =
++            Some(self.bottom_pane.composer_activity_generation());
++        self.idle_notification_sent = false;
++        let timeout = std::time::Duration::from_secs(
++            self.config.notify_service.notify_service_idle_timeout_secs,
++        );
++        self.frame_requester.schedule_frame_in(timeout);
++    }
++
++    fn clear_idle_state(&mut self) {
++        self.idle_entered_at = None;
++        self.idle_notification_status = None;
++        self.idle_composer_activity_generation = None;
++        self.idle_notification_sent = false;
++    }
++
++    fn fire_idle_notification(
++        &mut self,
++        status: crate::notify_service::IdleNotifyStatus,
++        idle_seconds: u64,
++    ) {
++        let ns = &self.config.notify_service;
++        let Some(url) = ns.notify_service_url.as_ref().filter(|u| !u.is_empty()) else {
++            return;
++        };
++        let cwd = self
++            .current_cwd
++            .clone()
++            .unwrap_or_else(|| self.config.cwd.as_path().to_path_buf());
++        let usage = self.token_usage();
++        let payload = crate::notify_service::build_payload(
++            status,
++            &cwd,
++            &ns.notify_service_agent_name,
++            self.thread_name.as_deref(),
++            self.session_started_at,
++            &usage,
++            idle_seconds,
++        );
++        crate::notify_service::send_idle_notification(
++            url.clone(),
++            ns.notify_service_token.clone(),
++            payload,
++        );
++        self.idle_notification_sent = true;
++    }
++
++    fn idle_notification_due_at(
++        &self,
++        now: Instant,
++    ) -> Option<(crate::notify_service::IdleNotifyStatus, u64)> {
++        let short_timeout = std::time::Duration::from_secs(
++            self.config.notify_service.notify_service_idle_timeout_secs,
++        );
++        let entered_at = self.idle_entered_at?;
++        let status = self.idle_notification_status.clone()?;
++        let elapsed = now.checked_duration_since(entered_at)?;
++        if !matches!(
++            status,
++            crate::notify_service::IdleNotifyStatus::TaskCompleted
++        ) {
++            if elapsed >= short_timeout {
++                return Some((status, elapsed.as_secs()));
++            }
++            return None;
++        }
++
++        let composer_changed = self
++            .idle_composer_activity_generation
++            .is_some_and(|generation| {
++                generation != self.bottom_pane.composer_activity_generation()
++            })
++            || self.external_editor_state != ExternalEditorState::Closed;
++        if !composer_changed {
++            if elapsed >= short_timeout {
++                return Some((status, elapsed.as_secs()));
++            }
++            return None;
++        }
++
++        let long_timeout = std::time::Duration::from_secs(
++            self.config
++                .notify_service
++                .notify_service_composer_idle_timeout_secs,
++        );
++        let composer_idle_started_at = self
++            .bottom_pane
++            .last_composer_activity_at()
++            .filter(|last_activity_at| *last_activity_at > entered_at)
++            .unwrap_or(entered_at);
++        let composer_elapsed = now.checked_duration_since(composer_idle_started_at)?;
++        if composer_elapsed >= long_timeout {
++            return Some((
++                crate::notify_service::IdleNotifyStatus::ThinkingTooLong,
++                composer_elapsed.as_secs(),
++            ));
++        }
++        None
++    }
++
++    fn check_idle_notification_timer(&mut self) {
++        if self.idle_notification_sent {
++            return;
++        }
++        let now = Instant::now();
++        if let Some((status, idle_seconds)) = self.idle_notification_due_at(now) {
++            self.fire_idle_notification(status, idle_seconds);
++            return;
++        }
++
++        if !matches!(
++            self.idle_notification_status,
++            Some(crate::notify_service::IdleNotifyStatus::TaskCompleted)
++        ) {
++            return;
++        }
++        let Some(entered_at) = self.idle_entered_at else {
++            return;
++        };
++        let composer_changed = self
++            .idle_composer_activity_generation
++            .is_some_and(|generation| {
++                generation != self.bottom_pane.composer_activity_generation()
++            })
++            || self.external_editor_state != ExternalEditorState::Closed;
++        if !composer_changed {
++            return;
++        }
++        let composer_idle_started_at = self
++            .bottom_pane
++            .last_composer_activity_at()
++            .filter(|last_activity_at| *last_activity_at > entered_at)
++            .unwrap_or(entered_at);
++        let long_timeout = std::time::Duration::from_secs(
++            self.config
++                .notify_service
++                .notify_service_composer_idle_timeout_secs,
++        );
++        if let Some(elapsed) = now.checked_duration_since(composer_idle_started_at)
++            && let Some(remaining) = long_timeout.checked_sub(elapsed)
++            && !remaining.is_zero()
++        {
++            self.frame_requester.schedule_frame_in(remaining);
++        }
++    }
++
++    pub(crate) fn session_started_at(&self) -> Option<Instant> {
++        self.session_started_at
++    }
++
+     /// Mark the active cell as failed (✗) and flush it into history.
+     fn finalize_active_cell_as_failed(&mut self) {
+         if let Some(mut cell) = self.active_cell.take() {
+@@ -8056,9 +8245,14 @@ impl ChatWidget {
+ 
+     fn open_status_line_setup(&mut self) {
+         let configured_status_line_items = self.configured_status_line_items();
++        let available_items = self.available_status_line_choices();
+         let view = StatusLineSetupView::new(
+             Some(configured_status_line_items.as_slice()),
+-            self.status_surface_preview_data(),
++            available_items.as_slice(),
++            StatusLinePreviewData::from_iter(available_items.iter().filter_map(|item| {
++                self.status_line_preview_line_for_id(&item.id)
++                    .map(|value| (item.id.clone(), value))
++            })),
+             self.app_event_tx.clone(),
+         );
+         self.bottom_pane.show_view(Box::new(view));
+@@ -8910,7 +9104,7 @@ impl ChatWidget {
+ 
+         let header = self.model_menu_header(
+             "Select Model and Effort",
+-            "Access legacy models by running codex -m <model_name> or in your config.toml",
++            "Access legacy models by running cute-codex -m <model_name> or in your config.toml",
+         );
+         self.bottom_pane.show_selection_view(SelectionViewParams {
+             footer_hint: Some(self.bottom_pane.standard_popup_hint_line()),
+@@ -10966,7 +11160,7 @@ impl ChatWidget {
+ 
+     fn rename_confirmation_cell(name: &str, thread_id: Option<ThreadId>) -> PlainHistoryCell {
+         let resume_cmd = crate::legacy_core::util::resume_command(Some(name), thread_id)
+-            .unwrap_or_else(|| format!("codex resume {name}"));
++            .unwrap_or_else(|| format!("cute-codex resume {name}"));
+         let name = name.to_string();
+         let line = vec![
+             "• ".into(),
+diff --git a/codex-rs/tui/src/chatwidget/status_surfaces.rs b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+index 6b590d7ea6..a0fe78637c 100644
+--- a/codex-rs/tui/src/chatwidget/status_surfaces.rs
++++ b/codex-rs/tui/src/chatwidget/status_surfaces.rs
+@@ -4,6 +4,7 @@
+ //! behavior easier to review without paging through the rest of `chatwidget.rs`.
+ 
+ use super::*;
++use crate::custom_status_items::CustomStatusItem;
+ use crate::status::format_tokens_compact;
+ 
+ /// Items shown in the terminal title when the user has not configured a
+@@ -46,7 +47,7 @@ pub(super) enum TerminalTitleStatusKind {
+ /// refresh pass compute those shared concerns once, then render both surfaces
+ /// from the same selection set.
+ struct StatusSurfaceSelections {
+-    status_line_items: Vec<StatusLineItem>,
++    status_line_items: Vec<StatusLineSelection>,
+     invalid_status_line_items: Vec<String>,
+     terminal_title_items: Vec<TerminalTitleItem>,
+     invalid_terminal_title_items: Vec<String>,
+@@ -54,13 +55,23 @@ struct StatusSurfaceSelections {
+ 
+ impl StatusSurfaceSelections {
+     fn uses_git_branch(&self) -> bool {
+-        self.status_line_items.contains(&StatusLineItem::GitBranch)
+-            || self
+-                .terminal_title_items
+-                .contains(&TerminalTitleItem::GitBranch)
++        self.status_line_items.iter().any(|item| {
++            matches!(
++                item,
++                StatusLineSelection::Builtin(StatusLineItem::GitBranch)
++            )
++        }) || self
++            .terminal_title_items
++            .contains(&TerminalTitleItem::GitBranch)
+     }
+ }
+ 
++#[derive(Clone, Debug, Eq, PartialEq)]
++enum StatusLineSelection {
++    Builtin(StatusLineItem),
++    Custom(String),
++}
++
+ /// Cached project-root display name keyed by the cwd used for the last lookup.
+ ///
+ /// Terminal-title refreshes can happen very frequently, so the title path avoids
+@@ -150,18 +161,19 @@ impl ChatWidget {
+             return;
+         }
+ 
+-        let mut parts = Vec::new();
++        let mut line: Option<Line<'static>> = None;
+         for item in &selections.status_line_items {
+-            if let Some(value) = self.status_line_value_for_item(item) {
+-                parts.push(value);
++            let Some(value) = self.status_line_line_for_item(item) else {
++                continue;
++            };
++            if let Some(existing) = line.as_mut() {
++                existing.spans.push(" · ".into());
++                existing.spans.extend(value.spans);
++            } else {
++                line = Some(value);
+             }
+         }
+ 
+-        let line = if parts.is_empty() {
+-            None
+-        } else {
+-            Some(Line::from(parts.join(" · ")))
+-        };
+         self.set_status_line(line);
+     }
+ 
+@@ -353,8 +365,24 @@ impl ChatWidget {
+     /// Parses configured status-line ids into known items and collects unknown ids.
+     ///
+     /// Unknown ids are deduplicated in insertion order for warning messages.
+-    fn status_line_items_with_invalids(&self) -> (Vec<StatusLineItem>, Vec<String>) {
+-        parse_items_with_invalids(self.configured_status_line_items())
++    fn status_line_items_with_invalids(&self) -> (Vec<StatusLineSelection>, Vec<String>) {
++        let ids = self.configured_status_line_items();
++        let mut items = Vec::new();
++        let mut invalid = Vec::new();
++        let mut seen = std::collections::HashSet::new();
++        for id in &ids {
++            if !seen.insert(id.clone()) {
++                continue;
++            }
++            if let Ok(item) = id.parse::<StatusLineItem>() {
++                items.push(StatusLineSelection::Builtin(item));
++            } else if self.custom_status_items.iter().any(|c| c.id == *id) {
++                items.push(StatusLineSelection::Custom(id.clone()));
++            } else if !invalid.contains(id) {
++                invalid.push(id.clone());
++            }
++        }
++        (items, invalid)
+     }
+ 
+     pub(super) fn configured_status_line_items(&self) -> Vec<String> {
+@@ -571,6 +599,67 @@ impl ChatWidget {
+                 (!trimmed.is_empty()).then(|| trimmed.to_string())
+             }),
+             StatusLineItem::TaskProgress => self.terminal_title_task_progress(),
++            StatusLineItem::LaunchProfile => std::env::var("CODEX_LAUNCH_PROFILE")
++                .ok()
++                .filter(|v| !v.is_empty()),
++            StatusLineItem::LaunchRuntime => std::env::var("CODEX_LAUNCH_RUNTIME")
++                .ok()
++                .filter(|v| !v.is_empty()),
++        }
++    }
++
++    fn status_line_line_for_item(
++        &mut self,
++        selection: &StatusLineSelection,
++    ) -> Option<Line<'static>> {
++        match selection {
++            StatusLineSelection::Builtin(item) => {
++                self.status_line_value_for_item(item).map(|v| Line::raw(v))
++            }
++            StatusLineSelection::Custom(id) => {
++                let cwd = self.status_line_cwd().to_path_buf();
++                self.custom_status_items
++                    .iter()
++                    .find(|c| c.id == *id)
++                    .and_then(|c| {
++                        c.render_line(
++                            crate::custom_status_items::CustomStatusContext::StatusLine {
++                                cwd: &cwd,
++                            },
++                        )
++                    })
++            }
++        }
++    }
++
++    pub(super) fn available_status_line_choices(&self) -> Vec<StatusLineChoice> {
++        use strum::IntoEnumIterator;
++        let mut choices: Vec<StatusLineChoice> = StatusLineItem::iter()
++            .map(StatusLineChoice::builtin)
++            .collect();
++        for custom in &self.custom_status_items {
++            choices.push(StatusLineChoice {
++                id: custom.id.clone(),
++                name: custom.title.clone(),
++                description: custom.description.clone(),
++            });
++        }
++        choices
++    }
++
++    pub(super) fn status_line_preview_line_for_id(&mut self, id: &str) -> Option<Line<'static>> {
++        if let Ok(item) = id.parse::<StatusLineItem>() {
++            self.status_line_value_for_item(&item).map(|v| Line::raw(v))
++        } else {
++            let cwd = self.status_line_cwd().to_path_buf();
++            self.custom_status_items
++                .iter()
++                .find(|c| c.id == id)
++                .and_then(|c| {
++                    c.render_line(crate::custom_status_items::CustomStatusContext::Preview {
++                        cwd: &cwd,
++                    })
++                })
+         }
+     }
+ 
+@@ -579,7 +668,7 @@ impl ChatWidget {
+         item: StatusSurfacePreviewItem,
+     ) -> Option<String> {
+         let status_line_item = match item {
+-            StatusSurfacePreviewItem::AppName => return Some("codex".to_string()),
++            StatusSurfacePreviewItem::AppName => return Some("cute-codex".to_string()),
+             StatusSurfacePreviewItem::ProjectName => return self.terminal_title_project_name(),
+             StatusSurfacePreviewItem::ProjectRoot => StatusLineItem::ProjectRoot,
+             StatusSurfacePreviewItem::Status => return Some(self.run_state_status_text()),
+@@ -613,7 +702,7 @@ impl ChatWidget {
+         now: Instant,
+     ) -> Option<String> {
+         match item {
+-            TerminalTitleItem::AppName => Some("codex".to_string()),
++            TerminalTitleItem::AppName => Some("cute-codex".to_string()),
+             TerminalTitleItem::Project => self.terminal_title_project_name(),
+             TerminalTitleItem::CurrentDir => Some(Self::truncate_terminal_title_part(
+                 format_directory_display(self.status_line_cwd(), /*max_width*/ None),
+diff --git a/codex-rs/tui/src/chatwidget/tests/app_server.rs b/codex-rs/tui/src/chatwidget/tests/app_server.rs
+index 9c2e1c83d4..651c4ad2b9 100644
+--- a/codex-rs/tui/src/chatwidget/tests/app_server.rs
++++ b/codex-rs/tui/src/chatwidget/tests/app_server.rs
+@@ -767,7 +767,7 @@ async fn live_app_server_thread_name_update_shows_resume_hint() {
+     assert_eq!(cells.len(), 1);
+     let rendered = lines_to_single_string(&cells[0]);
+     assert!(rendered.contains("Thread renamed to review-fix"));
+-    assert!(rendered.contains("codex resume review-fix"));
++    assert!(rendered.contains("cute-codex resume review-fix"));
+ }
+ 
+ #[tokio::test]
+diff --git a/codex-rs/tui/src/chatwidget/tests/helpers.rs b/codex-rs/tui/src/chatwidget/tests/helpers.rs
+index 015340bbb2..74b8a429e2 100644
+--- a/codex-rs/tui/src/chatwidget/tests/helpers.rs
++++ b/codex-rs/tui/src/chatwidget/tests/helpers.rs
+@@ -277,6 +277,11 @@ pub(super) async fn make_chatwidget_manual(
+         suppress_session_configured_redraw: false,
+         suppress_initial_user_message_submit: false,
+         pending_notification: None,
++        idle_entered_at: None,
++        idle_notification_status: None,
++        idle_composer_activity_generation: None,
++        idle_notification_sent: false,
++        session_started_at: None,
+         quit_shortcut_expires_at: None,
+         quit_shortcut_key: None,
+         is_review_mode: false,
+@@ -303,6 +308,7 @@ pub(super) async fn make_chatwidget_manual(
+         terminal_title_animation_origin: Instant::now(),
+         status_line_project_root_name_cache: None,
+         status_line_branch: None,
++        custom_status_items: crate::custom_status_items::load_custom_status_items(),
+         status_line_branch_cwd: None,
+         status_line_branch_pending: false,
+         status_line_branch_lookup_complete: false,
+diff --git a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
+index 530629b2ae..5a50251213 100644
+--- a/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
++++ b/codex-rs/tui/src/chatwidget/tests/status_and_layout.rs
+@@ -1445,6 +1445,83 @@ async fn status_line_fast_mode_renders_on_and_off() {
+     assert_eq!(status_line_text(&chat), Some("Fast on".to_string()));
+ }
+ 
++struct EnvVarGuard {
++    key: &'static str,
++    original: Option<std::ffi::OsString>,
++}
++
++impl EnvVarGuard {
++    fn set(key: &'static str, value: &str) -> Self {
++        let original = std::env::var_os(key);
++        unsafe { std::env::set_var(key, value) };
++        Self { key, original }
++    }
++}
++
++impl Drop for EnvVarGuard {
++    fn drop(&mut self) {
++        unsafe {
++            match self.original.as_ref() {
++                Some(value) => std::env::set_var(self.key, value),
++                None => std::env::remove_var(self.key),
++            }
++        }
++    }
++}
++
++#[tokio::test]
++async fn status_line_launch_profile_and_runtime_render_when_set() {
++    let _profile = EnvVarGuard::set("CODEX_LAUNCH_PROFILE", "sample-profile");
++    let _runtime = EnvVarGuard::set("CODEX_LAUNCH_RUNTIME", "docker");
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    chat.config.tui_status_line = Some(vec![
++        "launch-profile".to_string(),
++        "launch-runtime".to_string(),
++    ]);
++
++    chat.refresh_status_line();
++
++    assert_eq!(
++        status_line_text(&chat),
++        Some("Profile sample-profile · Runtime docker".to_string())
++    );
++}
++
++#[tokio::test]
++async fn status_line_custom_catalog_item_renders_when_selected() {
++    let tempdir = tempdir().expect("tempdir");
++    let catalog_path = tempdir.path().join("custom-status-items.json");
++    std::fs::write(
++        &catalog_path,
++        r##"{
++  "items": [
++    {
++      "id": "custom:profile",
++      "title": "Profile",
++      "description": "Launcher profile label",
++      "source": { "kind": "launch_profile" },
++      "render": { "kind": "label_value", "label": "Profile" },
++      "style": { "fg": "#F6A3C8", "bold": true }
++    }
++  ]
++}"##,
++    )
++    .expect("write catalog");
++
++    let _catalog = EnvVarGuard::set(
++        "CODEX_CUSTOM_STATUS_ITEMS_FILE",
++        catalog_path.to_string_lossy().as_ref(),
++    );
++    let _profile = EnvVarGuard::set("CODEX_LAUNCH_PROFILE", "sample-profile");
++
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
++    chat.config.tui_status_line = Some(vec!["custom:profile".to_string()]);
++
++    chat.refresh_status_line();
++
++    assert_eq!(status_line_text(&chat), Some("Profile sample-profile".to_string()));
++}
++
+ #[tokio::test]
+ async fn status_line_fast_mode_footer_snapshot() {
+     use ratatui::Terminal;
+diff --git a/codex-rs/tui/src/custom_status_items.rs b/codex-rs/tui/src/custom_status_items.rs
+new file mode 100644
+index 0000000000..27f679db2f
+--- /dev/null
++++ b/codex-rs/tui/src/custom_status_items.rs
+@@ -0,0 +1,337 @@
++use ratatui::style::Color;
++use ratatui::style::Modifier;
++use ratatui::style::Style;
++use ratatui::text::Line;
++use ratatui::text::Span;
++use serde::Deserialize;
++use std::collections::HashSet;
++use std::fs;
++use std::path::Path;
++use std::path::PathBuf;
++
++pub(crate) const CODEX_CUSTOM_STATUS_ITEMS_FILE_ENV_VAR: &str = "CODEX_CUSTOM_STATUS_ITEMS_FILE";
++pub(crate) const CODEX_LAUNCH_PROFILE_ENV_VAR: &str = "CODEX_LAUNCH_PROFILE";
++pub(crate) const CODEX_LAUNCH_RUNTIME_ENV_VAR: &str = "CODEX_LAUNCH_RUNTIME";
++pub(crate) const CODEX_LAUNCH_PROFILE_SOURCE_ENV_VAR: &str = "CODEX_LAUNCH_PROFILE_SOURCE";
++pub(crate) const CODEX_LAUNCH_PROFILE_TYPE_ENV_VAR: &str = "CODEX_LAUNCH_PROFILE_TYPE";
++pub(crate) const CODEX_LAUNCH_PROFILE_EMAIL_ENV_VAR: &str = "CODEX_LAUNCH_PROFILE_EMAIL";
++
++#[derive(Debug, Clone)]
++pub(crate) struct CustomStatusItem {
++    pub(crate) id: String,
++    pub(crate) title: String,
++    pub(crate) description: Option<String>,
++    source: CustomStatusItemSource,
++    render: CustomStatusItemRender,
++    style: Style,
++    catalog_dir: Option<PathBuf>,
++}
++
++#[derive(Debug, Clone, Copy)]
++pub(crate) enum CustomStatusContext<'a> {
++    StatusLine { cwd: &'a Path },
++    Preview { cwd: &'a Path },
++}
++
++#[derive(Debug, Deserialize)]
++struct CustomStatusItemsCatalogFile {
++    #[serde(default)]
++    items: Vec<CustomStatusItemConfig>,
++}
++
++#[derive(Debug, Deserialize)]
++struct CustomStatusItemConfig {
++    id: String,
++    title: String,
++    #[serde(default)]
++    description: Option<String>,
++    source: CustomStatusItemSource,
++    #[serde(default)]
++    render: CustomStatusItemRender,
++    #[serde(default)]
++    style: CustomStatusItemStyle,
++}
++
++#[derive(Debug, Clone, Deserialize)]
++#[serde(tag = "kind", rename_all = "snake_case")]
++enum CustomStatusItemSource {
++    Static {
++        value: String,
++    },
++    Env {
++        key: String,
++        #[serde(default = "default_true")]
++        trim: bool,
++    },
++    FileText {
++        path: String,
++        #[serde(default = "default_true")]
++        trim: bool,
++    },
++    LaunchProfile,
++    LaunchRuntime,
++    LaunchProfileSource,
++    LaunchProfileType,
++    LaunchProfileEmail,
++    CurrentDir,
++}
++
++#[derive(Debug, Clone, Deserialize)]
++#[serde(tag = "kind", rename_all = "snake_case")]
++enum CustomStatusItemRender {
++    Value,
++    LabelValue { label: String },
++    Template { template: String },
++}
++
++impl Default for CustomStatusItemRender {
++    fn default() -> Self {
++        Self::Value
++    }
++}
++
++#[derive(Debug, Clone, Default, Deserialize)]
++struct CustomStatusItemStyle {
++    #[serde(default)]
++    fg: Option<String>,
++    #[serde(default)]
++    bg: Option<String>,
++    #[serde(default)]
++    bold: bool,
++    #[serde(default)]
++    dim: bool,
++    #[serde(default)]
++    italic: bool,
++    #[serde(default)]
++    underlined: bool,
++}
++
++fn default_true() -> bool {
++    true
++}
++
++impl CustomStatusItem {
++    pub(crate) fn render_line(&self, context: CustomStatusContext<'_>) -> Option<Line<'static>> {
++        let raw_value = self.resolve_value(context)?;
++        let rendered = self.render.render(&self.id, &self.title, &raw_value);
++        let trimmed = rendered.trim();
++        if trimmed.is_empty() {
++            None
++        } else {
++            Some(Line::from(Span::styled(trimmed.to_string(), self.style)))
++        }
++    }
++
++    fn resolve_value(&self, context: CustomStatusContext<'_>) -> Option<String> {
++        let value = match &self.source {
++            CustomStatusItemSource::Static { value } => Some(value.clone()),
++            CustomStatusItemSource::Env { key, trim } => {
++                let value = std::env::var(key).ok()?;
++                Some(normalize_status_text(&value, *trim))
++            }
++            CustomStatusItemSource::FileText { path, trim } => {
++                let resolved = self.resolve_catalog_relative_path(path);
++                let text = fs::read_to_string(&resolved).ok()?;
++                Some(normalize_status_text(&text, *trim))
++            }
++            CustomStatusItemSource::LaunchProfile => {
++                let value = std::env::var(CODEX_LAUNCH_PROFILE_ENV_VAR).ok()?;
++                Some(normalize_status_text(&value, /*trim*/ true))
++            }
++            CustomStatusItemSource::LaunchRuntime => {
++                let value = std::env::var(CODEX_LAUNCH_RUNTIME_ENV_VAR).ok()?;
++                Some(normalize_status_text(&value, /*trim*/ true))
++            }
++            CustomStatusItemSource::LaunchProfileSource => {
++                let value = std::env::var(CODEX_LAUNCH_PROFILE_SOURCE_ENV_VAR).ok()?;
++                Some(normalize_status_text(&value, /*trim*/ true))
++            }
++            CustomStatusItemSource::LaunchProfileType => {
++                let value = std::env::var(CODEX_LAUNCH_PROFILE_TYPE_ENV_VAR).ok()?;
++                Some(normalize_status_text(&value, /*trim*/ true))
++            }
++            CustomStatusItemSource::LaunchProfileEmail => {
++                let value = std::env::var(CODEX_LAUNCH_PROFILE_EMAIL_ENV_VAR).ok()?;
++                Some(normalize_status_text(&value, /*trim*/ true))
++            }
++            CustomStatusItemSource::CurrentDir => match context {
++                CustomStatusContext::StatusLine { cwd } | CustomStatusContext::Preview { cwd } => {
++                    Some(crate::status::format_directory_display(
++                        cwd, /*max_width*/ None,
++                    ))
++                }
++            },
++        }?;
++
++        (!value.is_empty()).then_some(value)
++    }
++
++    fn resolve_catalog_relative_path(&self, configured_path: &str) -> PathBuf {
++        let path = PathBuf::from(configured_path);
++        if path.is_absolute() {
++            return path;
++        }
++
++        self.catalog_dir
++            .as_ref()
++            .map(|dir| dir.join(path.clone()))
++            .unwrap_or(path)
++    }
++}
++
++impl CustomStatusItemRender {
++    fn render(&self, id: &str, title: &str, value: &str) -> String {
++        match self {
++            CustomStatusItemRender::Value => value.to_string(),
++            CustomStatusItemRender::LabelValue { label } => format!("{label} {value}"),
++            CustomStatusItemRender::Template { template } => template
++                .replace("{id}", id)
++                .replace("{title}", title)
++                .replace("{value}", value),
++        }
++    }
++}
++
++pub(crate) fn load_custom_status_items() -> Vec<CustomStatusItem> {
++    let path = match std::env::var(CODEX_CUSTOM_STATUS_ITEMS_FILE_ENV_VAR) {
++        Ok(value) if !value.trim().is_empty() => PathBuf::from(value),
++        _ => return Vec::new(),
++    };
++
++    let contents = match fs::read_to_string(&path) {
++        Ok(contents) => contents,
++        Err(err) => {
++            tracing::warn!(
++                path = %path.display(),
++                error = %err,
++                "failed to read custom status items catalog"
++            );
++            return Vec::new();
++        }
++    };
++
++    let catalog = match serde_json::from_str::<CustomStatusItemsCatalogFile>(&contents) {
++        Ok(catalog) => catalog,
++        Err(err) => {
++            tracing::warn!(
++                path = %path.display(),
++                error = %err,
++                "failed to parse custom status items catalog"
++            );
++            return Vec::new();
++        }
++    };
++
++    let catalog_dir = path.parent().map(Path::to_path_buf);
++    let mut seen = HashSet::new();
++    let mut items = Vec::new();
++
++    for item in catalog.items {
++        let id = item.id.trim();
++        if id.is_empty() || !seen.insert(id.to_string()) {
++            continue;
++        }
++
++        let title = item.title.trim();
++        items.push(CustomStatusItem {
++            id: id.to_string(),
++            title: if title.is_empty() {
++                id.to_string()
++            } else {
++                title.to_string()
++            },
++            description: item
++                .description
++                .as_deref()
++                .map(str::trim)
++                .filter(|value| !value.is_empty())
++                .map(str::to_string),
++            source: item.source,
++            render: item.render,
++            style: item.style.to_style(),
++            catalog_dir: catalog_dir.clone(),
++        });
++    }
++
++    items
++}
++
++impl CustomStatusItemStyle {
++    fn to_style(&self) -> Style {
++        let mut style = Style::default();
++
++        if let Some(fg) = self.fg.as_deref().and_then(parse_color) {
++            style = style.fg(fg);
++        }
++        if let Some(bg) = self.bg.as_deref().and_then(parse_color) {
++            style = style.bg(bg);
++        }
++        if self.bold {
++            style = style.add_modifier(Modifier::BOLD);
++        }
++        if self.dim {
++            style = style.add_modifier(Modifier::DIM);
++        }
++        if self.italic {
++            style = style.add_modifier(Modifier::ITALIC);
++        }
++        if self.underlined {
++            style = style.add_modifier(Modifier::UNDERLINED);
++        }
++
++        style
++    }
++}
++
++fn normalize_status_text(value: &str, trim: bool) -> String {
++    let normalized = value
++        .lines()
++        .map(str::trim)
++        .filter(|segment| !segment.is_empty())
++        .collect::<Vec<_>>()
++        .join(" ");
++
++    if trim {
++        normalized.trim().to_string()
++    } else {
++        normalized
++    }
++}
++
++fn parse_color(value: &str) -> Option<Color> {
++    let value = value.trim();
++    if let Some(hex) = value.strip_prefix('#') {
++        return parse_hex_color(hex);
++    }
++
++    match value.to_ascii_lowercase().as_str() {
++        "black" => Some(Color::Black),
++        "red" => Some(Color::Red),
++        "green" => Some(Color::Green),
++        "yellow" => Some(Color::Yellow),
++        "blue" => Some(Color::Blue),
++        "magenta" => Some(Color::Magenta),
++        "cyan" => Some(Color::Cyan),
++        "gray" | "grey" => Some(Color::Gray),
++        "darkgray" | "darkgrey" => Some(Color::DarkGray),
++        "lightred" => Some(Color::LightRed),
++        "lightgreen" => Some(Color::LightGreen),
++        "lightyellow" => Some(Color::LightYellow),
++        "lightblue" => Some(Color::LightBlue),
++        "lightmagenta" => Some(Color::LightMagenta),
++        "lightcyan" => Some(Color::LightCyan),
++        "white" => Some(Color::White),
++        _ => None,
++    }
++}
++
++fn parse_hex_color(value: &str) -> Option<Color> {
++    if value.len() != 6 {
++        return None;
++    }
++
++    let r = u8::from_str_radix(&value[0..2], 16).ok()?;
++    let g = u8::from_str_radix(&value[2..4], 16).ok()?;
++    let b = u8::from_str_radix(&value[4..6], 16).ok()?;
++    Some(Color::Rgb(r, g, b))
++}
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index 39b4294b4a..105c946b8c 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -112,6 +112,7 @@ mod clipboard_copy;
+ mod clipboard_paste;
+ mod collaboration_modes;
+ mod color;
++mod custom_status_items;
+ pub(crate) mod custom_terminal;
+ pub use custom_terminal::Terminal;
+ mod auto_review_denials;
+@@ -145,6 +146,7 @@ mod model_catalog;
+ mod model_migration;
+ mod multi_agents;
+ mod notifications;
++pub(crate) mod notify_service;
+ #[cfg(any(not(debug_assertions), test))]
+ mod npm_registry;
+ pub(crate) mod onboarding;

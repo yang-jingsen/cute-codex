@@ -60,6 +60,13 @@ impl App {
                 )
                 .await;
             }
+            AppEvent::IdleNotifyTimerFired { generation } => {
+                self.chat_widget.handle_idle_notify_timer_fired(generation);
+            }
+            AppEvent::SessionStartupIdleTimerFired { generation } => {
+                self.chat_widget
+                    .handle_session_startup_idle_timer_fired(generation);
+            }
             AppEvent::OpenResumePicker => {
                 let picker_app_server = match crate::start_app_server_for_picker(
                     &self.config,
@@ -350,6 +357,13 @@ impl App {
                     .approve_recent_auto_review_denial(thread_id, id);
             }
             AppEvent::SubmitThreadOp { thread_id, op } => {
+                if matches!(
+                    op,
+                    AppCommand::ExecApproval { .. } | AppCommand::PatchApproval { .. }
+                ) {
+                    self.chat_widget
+                        .clear_waiting_approval_idle_state_for_thread(thread_id);
+                }
                 self.submit_thread_op(app_server, thread_id, op).await?;
             }
             AppEvent::ThreadHistoryEntryResponse { thread_id, event } => {
@@ -1908,10 +1922,9 @@ impl App {
                 }
             }
             AppEvent::StatusLineSetup {
-                items,
+                ids,
                 use_theme_colors,
             } => {
-                let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
                 let items_edit = crate::legacy_core::config::edit::status_line_items_edit(&ids);
                 let colors_edit =
                     crate::legacy_core::config::edit::status_line_use_colors_edit(use_theme_colors);
@@ -1923,7 +1936,7 @@ impl App {
                     Ok(()) => {
                         self.config.tui_status_line = Some(ids.clone());
                         self.config.tui_status_line_use_colors = use_theme_colors;
-                        self.chat_widget.setup_status_line(items, use_theme_colors);
+                        self.chat_widget.setup_status_line(ids, use_theme_colors);
                     }
                     Err(err) => {
                         tracing::error!(error = %err, "failed to persist status line settings; keeping previous selection");
@@ -2165,6 +2178,7 @@ impl App {
         app_server: &mut AppServerSession,
         mode: ExitMode,
     ) -> AppRunControl {
+        self.chat_widget.clear_idle_state_for_exit();
         match mode {
             ExitMode::ShutdownFirst => {
                 // Mark the thread we are explicitly shutting down for exit so

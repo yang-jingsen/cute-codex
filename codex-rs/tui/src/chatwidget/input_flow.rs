@@ -83,9 +83,10 @@ impl ChatWidget {
         action: QueuedInputAction,
     ) {
         if !self.is_session_configured() || self.is_user_turn_pending_or_running() {
-            self.input_queue
-                .queued_user_messages
-                .push_back(QueuedUserMessage::new(user_message, action));
+            let notify_sent = self.emit_user_message_sent_notification(&user_message);
+            self.input_queue.queued_user_messages.push_back(
+                QueuedUserMessage::new_with_notify_sent(user_message, action, notify_sent),
+            );
             self.input_queue
                 .queued_user_message_history_records
                 .push_back(UserMessageHistoryRecord::UserMessageText);
@@ -108,23 +109,33 @@ impl ChatWidget {
             let Some((queued_message, history_record)) = self.pop_next_queued_user_message() else {
                 break;
             };
-            match queued_message.action {
+            let (user_message, action, notify_sent) = queued_message.into_parts();
+            let notify_disposition = if notify_sent {
+                UserMessageNotifyDisposition::AlreadyEmitted
+            } else {
+                UserMessageNotifyDisposition::Emit
+            };
+            match action {
                 QueuedInputAction::Plain => {
-                    submitted_follow_up = self.submit_user_message_with_history_record(
-                        queued_message.into_user_message(),
-                        history_record,
-                    );
+                    submitted_follow_up = self
+                        .submit_user_message_with_history_and_shell_escape_policy_inner(
+                            user_message,
+                            history_record,
+                            ShellEscapePolicy::Allow,
+                            notify_disposition,
+                        )
+                        .0;
                     break;
                 }
                 QueuedInputAction::ParseSlash => {
-                    let drain = self.submit_queued_slash_prompt(queued_message.into_user_message());
+                    let drain = self.submit_queued_slash_prompt(user_message, notify_disposition);
                     if drain == QueueDrain::Stop {
                         submitted_follow_up = self.is_user_turn_pending_or_running();
                         break;
                     }
                 }
                 QueuedInputAction::RunShell => {
-                    let drain = self.submit_queued_shell_prompt(queued_message.into_user_message());
+                    let drain = self.submit_queued_shell_prompt(user_message, notify_disposition);
                     if drain == QueueDrain::Stop {
                         submitted_follow_up = self.is_user_turn_pending_or_running();
                         break;

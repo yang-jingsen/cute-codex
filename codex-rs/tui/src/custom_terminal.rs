@@ -24,6 +24,8 @@
 use std::io;
 use std::io::Write;
 
+use crossterm::ExecutableCommand;
+use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::cursor::SetCursorStyle;
 use crossterm::queue;
@@ -33,7 +35,9 @@ use crossterm::style::SetAttribute;
 use crossterm::style::SetBackgroundColor;
 use crossterm::style::SetColors;
 use crossterm::style::SetForegroundColor;
+use crossterm::terminal::BeginSynchronizedUpdate;
 use crossterm::terminal::Clear;
+use crossterm::terminal::EndSynchronizedUpdate;
 use derive_more::IsVariant;
 use ratatui::backend::Backend;
 use ratatui::backend::ClearType;
@@ -285,6 +289,24 @@ where
         &mut self.backend
     }
 
+    /// Enter terminal synchronized update mode on the same backend writer used for drawing.
+    pub fn begin_synchronized_update(&mut self) -> io::Result<()> {
+        self.backend.queue(BeginSynchronizedUpdate)?;
+        Ok(())
+    }
+
+    /// Leave terminal synchronized update mode and flush the backend writer.
+    pub fn end_synchronized_update(&mut self) -> io::Result<()> {
+        self.backend.execute(EndSynchronizedUpdate)?;
+        Ok(())
+    }
+
+    /// Write raw terminal protocol bytes through the active backend writer.
+    pub fn write_raw(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.backend.write_all(bytes)?;
+        Backend::flush(&mut self.backend)
+    }
+
     /// Obtains a difference between the previous and the current buffer and passes it to the
     /// current backend for drawing.
     pub fn flush(&mut self) -> io::Result<()> {
@@ -416,8 +438,8 @@ where
             None => self.hide_cursor()?,
             Some(position) => {
                 self.set_cursor_style(cursor_style)?;
-                self.show_cursor()?;
                 self.set_cursor_position(position)?;
+                self.show_cursor()?;
             }
         }
 

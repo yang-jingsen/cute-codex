@@ -43,6 +43,7 @@ use codex_config::CloudRequirementsLoader;
 use codex_config::ConfigLoadError;
 use codex_config::LoaderOverrides;
 use codex_config::format_config_error_with_source;
+use codex_config::types::SessionPickerProviderFilter;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerRuntimePaths;
 use codex_login::AuthConfig;
@@ -119,6 +120,7 @@ mod clipboard_paste;
 mod collaboration_modes;
 mod color;
 mod config_update;
+mod custom_status_items;
 pub(crate) mod custom_terminal;
 mod pets;
 pub use custom_terminal::Terminal;
@@ -158,6 +160,7 @@ mod model_migration;
 mod motion;
 mod multi_agents;
 mod notifications;
+pub(crate) mod notify_service;
 #[cfg(any(not(debug_assertions), test))]
 mod npm_registry;
 pub(crate) mod onboarding;
@@ -186,6 +189,7 @@ mod style;
 mod terminal_hyperlinks;
 mod terminal_palette;
 mod terminal_probe;
+mod terminal_sideband;
 mod terminal_title;
 mod text_formatting;
 mod theme_picker;
@@ -681,7 +685,7 @@ async fn lookup_session_target_by_name_with_app_server(
                 limit: Some(100),
                 sort_key: Some(AppServerThreadSortKey::UpdatedAt),
                 sort_direction: None,
-                model_providers: None,
+                model_providers: Some(Vec::new()),
                 source_kinds: Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode]),
                 archived: Some(false),
                 cwd: None,
@@ -769,10 +773,14 @@ fn latest_session_lookup_params(
         limit: Some(1),
         sort_key: Some(AppServerThreadSortKey::UpdatedAt),
         sort_direction: None,
-        model_providers: if uses_remote_workspace {
-            None
-        } else {
+        model_providers: if !uses_remote_workspace
+            && matches!(
+                config.tui_session_picker_provider_filter,
+                SessionPickerProviderFilter::Current
+            ) {
             Some(vec![config.model_provider_id.clone()])
+        } else {
+            Some(Vec::new())
         },
         source_kinds: Some(resume_source_kinds(include_non_interactive)),
         archived: Some(false),
@@ -2328,7 +2336,7 @@ mod tests {
             /*include_non_interactive*/ false,
         );
 
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(params.cwd, None);
         Ok(())
     }
@@ -2370,7 +2378,7 @@ mod tests {
             /*include_non_interactive*/ false,
         );
 
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.cwd,
             Some(ThreadListCwdFilter::One(String::from("repo/on/server")))

@@ -31,6 +31,9 @@ use crate::keymap::primary_binding;
 use crate::render::renderable::FlexRenderable;
 use crate::render::renderable::Renderable;
 use crate::render::renderable::RenderableItem;
+use crate::terminal_sideband::ComposerSidebandState;
+use crate::terminal_sideband::KeymapSidebandState;
+use crate::terminal_sideband::TerminalSidebandState;
 use crate::tui::FrameRequester;
 pub(crate) use bottom_pane_view::BottomPaneView;
 pub(crate) use bottom_pane_view::ViewCompletion;
@@ -129,7 +132,9 @@ pub(crate) use feedback_view::feedback_success_cell;
 pub(crate) use feedback_view::feedback_upload_consent_params;
 pub(crate) use skills_toggle_view::SkillsToggleItem;
 pub(crate) use skills_toggle_view::SkillsToggleView;
+pub(crate) use status_line_setup::StatusLineChoice;
 pub(crate) use status_line_setup::StatusLineItem;
+pub(crate) use status_line_setup::StatusLinePreviewData;
 pub(crate) use status_line_setup::StatusLineSetupView;
 pub(crate) use status_surface_preview::StatusSurfacePreviewData;
 pub(crate) use status_surface_preview::StatusSurfacePreviewItem;
@@ -212,6 +217,7 @@ pub(crate) struct BottomPane {
     view_stack: Vec<Box<dyn BottomPaneView>>,
     delayed_approval_requests: VecDeque<DelayedApprovalRequest>,
     last_composer_activity_at: Option<Instant>,
+    composer_activity_generation: u64,
 
     app_event_tx: AppEventSender,
     frame_requester: FrameRequester,
@@ -279,6 +285,7 @@ impl BottomPane {
             view_stack: Vec::new(),
             delayed_approval_requests: VecDeque::new(),
             last_composer_activity_at: None,
+            composer_activity_generation: 0,
             app_event_tx,
             frame_requester,
             thread_id: None,
@@ -537,6 +544,7 @@ impl BottomPane {
 
     fn record_composer_activity_at(&mut self, now: Instant) {
         self.last_composer_activity_at = Some(now);
+        self.composer_activity_generation = self.composer_activity_generation.saturating_add(1);
         if !self.delayed_approval_requests.is_empty()
             && let Some(delay) = self.approval_prompt_delay_remaining(now)
         {
@@ -729,6 +737,7 @@ impl BottomPane {
 
     pub(crate) fn insert_str(&mut self, text: &str) {
         self.composer.insert_str(text);
+        self.record_composer_activity_at(Instant::now());
         self.request_redraw();
     }
 
@@ -807,6 +816,7 @@ impl BottomPane {
 
     pub(crate) fn clear_composer_for_ctrl_c(&mut self) {
         if let Some(text) = self.composer.clear_for_ctrl_c() {
+            self.record_composer_activity_at(Instant::now());
             if let Some(thread_id) = self.thread_id {
                 self.app_event_tx
                     .send(AppEvent::AppendMessageHistoryEntry { thread_id, text });
@@ -858,6 +868,7 @@ impl BottomPane {
 
     pub(crate) fn apply_external_edit(&mut self, text: String) {
         self.composer.apply_external_edit(text);
+        self.record_composer_activity_at(Instant::now());
         self.request_redraw();
     }
 
@@ -1223,6 +1234,14 @@ impl BottomPane {
         self.composer.is_empty()
     }
 
+    pub(crate) fn composer_activity_generation(&self) -> u64 {
+        self.composer_activity_generation
+    }
+
+    pub(crate) fn last_composer_activity_at(&self) -> Option<Instant> {
+        self.last_composer_activity_at
+    }
+
     #[cfg(test)]
     pub(crate) fn composer_is_vim_enabled(&self) -> bool {
         self.composer.is_vim_enabled()
@@ -1239,6 +1258,61 @@ impl BottomPane {
     pub(crate) fn terminal_title_requires_action(&self) -> bool {
         self.active_view()
             .is_some_and(bottom_pane_view::BottomPaneView::terminal_title_requires_action)
+    }
+
+    pub(crate) fn terminal_sideband_state(
+        &self,
+        area: Rect,
+        cols: u16,
+        rows: u16,
+    ) -> TerminalSidebandState {
+        if self.has_active_view() {
+            let requires_action = self.terminal_title_requires_action();
+            return TerminalSidebandState {
+                cols,
+                rows,
+                input_ready: requires_action,
+                mode: if requires_action {
+                    "approval_prompt"
+                } else {
+                    "hidden"
+                },
+                keymap: Some(KeymapSidebandState::empty(if requires_action {
+                    "approval_prompt"
+                } else {
+                    "hidden"
+                })),
+                composer: ComposerSidebandState::hidden(),
+                footer: None,
+            };
+        }
+
+        let composer_height = self.composer.desired_height(area.width).min(area.height);
+        let composer_area = Rect::new(
+            area.x,
+            area.bottom().saturating_sub(composer_height),
+            area.width,
+            composer_height,
+        );
+        let input_ready = self.composer.input_enabled() && !self.is_task_running;
+        let mode = self
+            .composer
+            .terminal_sideband_mode(if self.is_task_running {
+                "assistant_running"
+            } else {
+                "editing"
+            });
+        TerminalSidebandState {
+            cols,
+            rows,
+            input_ready,
+            mode,
+            keymap: Some(self.composer.terminal_sideband_keymap_state(mode)),
+            composer: self
+                .composer
+                .terminal_sideband_composer_state(composer_area, input_ready),
+            footer: None,
+        }
     }
 
     pub(crate) fn has_active_view(&self) -> bool {
@@ -1556,6 +1630,7 @@ impl BottomPane {
     pub(crate) fn attach_image(&mut self, path: PathBuf) {
         if self.view_stack.is_empty() {
             self.composer.attach_image(path);
+            self.record_composer_activity_at(Instant::now());
             self.request_redraw();
         }
     }

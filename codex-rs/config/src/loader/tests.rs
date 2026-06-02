@@ -7,8 +7,35 @@ use codex_file_system::FileSystemResult;
 use codex_file_system::FileSystemSandboxContext;
 use codex_file_system::ReadDirectoryEntry;
 use codex_file_system::RemoveOptions;
+use codex_utils_absolute_path::test_support::PathBufExt;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
+
+struct EnvVarGuard {
+    key: &'static str,
+    old: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &std::path::Path) -> Self {
+        let old = std::env::var_os(key);
+        unsafe {
+            std::env::set_var(key, value);
+        }
+        Self { key, old }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match self.old.as_ref() {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+}
 
 struct TestFileSystem;
 
@@ -74,6 +101,38 @@ impl ExecutorFileSystem for TestFileSystem {
     ) -> FileSystemResult<()> {
         unimplemented!("test filesystem only supports reads")
     }
+}
+
+#[tokio::test]
+async fn codex_config_file_env_selects_active_user_config() {
+    let tmp = tempdir().expect("tempdir");
+    let selected_config = tmp.path().join("selected.config.toml");
+
+    std::fs::write(tmp.path().join(CONFIG_TOML_FILE), r#"model = "base""#)
+        .expect("write default user config");
+    std::fs::write(&selected_config, r#"model = "selected""#).expect("write selected user config");
+    let _guard = EnvVarGuard::set("CODEX_CONFIG_FILE", &selected_config);
+
+    let layers = load_config_layers_state(
+        &TestFileSystem,
+        tmp.path(),
+        /*cwd*/ None,
+        &[],
+        LoaderOverrides::without_managed_config_for_tests(),
+        CloudRequirementsLoader::default(),
+        &crate::NoopThreadConfigLoader,
+    )
+    .await
+    .expect("load config layers");
+
+    assert_eq!(layers.get_user_config_file(), Some(&selected_config.abs()));
+    assert_eq!(
+        layers
+            .effective_config()
+            .get("model")
+            .and_then(TomlValue::as_str),
+        Some("selected")
+    );
 }
 
 #[tokio::test]

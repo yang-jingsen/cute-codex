@@ -7,6 +7,7 @@ use super::*;
 
 impl ChatWidget {
     pub(super) fn on_patch_apply_begin(&mut self, changes: HashMap<PathBuf, FileChange>) {
+        self.clear_waiting_approval_idle_state();
         self.add_to_history(history_cell::new_patch_event(changes, &self.config.cwd));
     }
 

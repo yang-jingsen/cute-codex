@@ -7,6 +7,20 @@ use super::*;
 
 impl ChatWidget {
     pub(super) fn on_hook_started(&mut self, run: codex_app_server_protocol::HookRunSummary) {
+        self.post_notify_service_event(
+            NotifyServiceEvent::HookStarted,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "hook": {
+                    "id": run.id.clone(),
+                    "event_name": run.event_name.clone(),
+                    "handler_type": run.handler_type.clone(),
+                    "execution_mode": run.execution_mode.clone(),
+                    "scope": run.scope.clone()
+                }
+            })),
+        );
         self.flush_answer_stream_with_separator();
         self.flush_completed_hook_output();
         match self.active_hook_cell.as_mut() {
@@ -29,6 +43,22 @@ impl ChatWidget {
         &mut self,
         completed: codex_app_server_protocol::HookRunSummary,
     ) {
+        self.post_notify_service_event(
+            NotifyServiceEvent::HookCompleted,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "hook": {
+                    "id": completed.id.clone(),
+                    "event_name": completed.event_name.clone(),
+                    "handler_type": completed.handler_type.clone(),
+                    "execution_mode": completed.execution_mode.clone(),
+                    "scope": completed.scope.clone(),
+                    "status": completed.status.clone(),
+                    "duration_ms": completed.duration_ms
+                }
+            })),
+        );
         let completed_existing_run = self
             .active_hook_cell
             .as_mut()

@@ -21,8 +21,10 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::text::Line;
+use ratatui::text::Span;
+use std::collections::HashMap;
 use std::collections::HashSet;
-use strum::IntoEnumIterator;
 use strum_macros::Display;
 use strum_macros::EnumIter;
 use strum_macros::EnumString;
@@ -33,7 +35,6 @@ use crate::bottom_pane::CancellationEvent;
 use crate::bottom_pane::bottom_pane_view::BottomPaneView;
 use crate::bottom_pane::multi_select_picker::MultiSelectItem;
 use crate::bottom_pane::multi_select_picker::MultiSelectPicker;
-use crate::bottom_pane::status_surface_preview::StatusSurfacePreviewData;
 use crate::bottom_pane::status_surface_preview::StatusSurfacePreviewItem;
 use crate::keymap::ListKeymap;
 use crate::render::renderable::Renderable;
@@ -187,6 +188,7 @@ impl StatusLineItem {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn preview_item(self) -> StatusSurfacePreviewItem {
         match self {
             StatusLineItem::ModelName => StatusSurfacePreviewItem::Model,
@@ -217,6 +219,66 @@ impl StatusLineItem {
     }
 }
 
+/// A choice shown in the status-line configuration picker.
+/// Wraps both built-in [`StatusLineItem`] variants and custom launcher items.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct StatusLineChoice {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) description: Option<String>,
+}
+
+impl StatusLineChoice {
+    pub(crate) fn builtin(item: StatusLineItem) -> Self {
+        Self {
+            id: item.to_string(),
+            name: item.to_string(),
+            description: Some(item.description().to_string()),
+        }
+    }
+
+    fn into_select_item(self, enabled: bool) -> MultiSelectItem {
+        MultiSelectItem {
+            id: self.id,
+            name: self.name,
+            description: self.description,
+            enabled,
+            orderable: true,
+            section_break_after: false,
+        }
+    }
+}
+
+/// Preview data used by the status-line setup view to render a live preview line.
+#[derive(Clone, Debug)]
+pub(crate) struct StatusLinePreviewData {
+    values: HashMap<String, Line<'static>>,
+}
+
+impl StatusLinePreviewData {
+    pub(crate) fn from_iter(iter: impl IntoIterator<Item = (String, Line<'static>)>) -> Self {
+        Self {
+            values: iter.into_iter().collect(),
+        }
+    }
+
+    pub(crate) fn line_for_ids(&self, ids: impl Iterator<Item = String>) -> Line<'static> {
+        let parts: Vec<_> = ids.filter_map(|id| self.values.get(&id)).cloned().collect();
+        if parts.is_empty() {
+            return Line::raw("");
+        }
+
+        let mut spans = Vec::new();
+        for (index, part) in parts.into_iter().enumerate() {
+            if index > 0 {
+                spans.push(Span::raw(" · "));
+            }
+            spans.extend(part.spans);
+        }
+        Line::from(spans)
+    }
+}
+
 /// Interactive view for configuring which items appear in the status line.
 ///
 /// Wraps a [`MultiSelectPicker`] with status-line-specific behavior:
@@ -236,8 +298,9 @@ impl StatusLineSetupView {
     ///
     /// * `status_line_items` - Currently configured item IDs (in display order),
     ///   or `None` to start with all items disabled
-    /// * `use_theme_colors` - Whether the preview and saved status line use colors from
-    ///   the active theme
+    /// * `use_theme_colors` - Whether the saved status line uses colors from the active theme
+    /// * `choices` - Available choices (built-in + custom items)
+    /// * `preview_data` - Preview line data keyed by item id
     /// * `app_event_tx` - Event sender for dispatching configuration changes
     ///
     /// Items from `status_line_items` are shown first (in order) and marked as
@@ -245,7 +308,8 @@ impl StatusLineSetupView {
     pub(crate) fn new(
         status_line_items: Option<&[String]>,
         use_theme_colors: bool,
-        preview_data: StatusSurfacePreviewData,
+        choices: &[StatusLineChoice],
+        preview_data: StatusLinePreviewData,
         app_event_tx: AppEventSender,
         list_keymap: ListKeymap,
     ) -> Self {
@@ -261,31 +325,20 @@ impl StatusLineSetupView {
 
         if let Some(selected_items) = status_line_items.as_ref() {
             for id in *selected_items {
-                let Ok(item) = id.parse::<StatusLineItem>() else {
-                    continue;
-                };
-                let item_id = item.to_string();
-                if !used_ids.insert(item_id.clone()) {
+                if !used_ids.insert(id.clone()) {
                     continue;
                 }
-                items.push(Self::status_line_select_item(
-                    item,
-                    /*enabled*/ true,
-                    &preview_data,
-                ));
+                if let Some(choice) = choices.iter().find(|choice| choice.id == *id) {
+                    items.push(choice.clone().into_select_item(/*enabled*/ true));
+                }
             }
         }
 
-        for item in StatusLineItem::iter() {
-            let item_id = item.to_string();
-            if used_ids.contains(&item_id) {
+        for choice in choices {
+            if used_ids.contains(&choice.id) {
                 continue;
             }
-            items.push(Self::status_line_select_item(
-                item,
-                /*enabled*/ false,
-                &preview_data,
-            ));
+            items.push(choice.clone().into_select_item(/*enabled*/ false));
         }
 
         Self {
@@ -298,29 +351,30 @@ impl StatusLineSetupView {
             .items(items)
             .enable_ordering()
             .on_preview(move |items| {
-                let use_theme_colors = items
-                    .iter()
-                    .find(|item| item.id == STATUS_LINE_USE_THEME_COLORS_ITEM_ID)
-                    .map(|item| item.enabled)
-                    .unwrap_or(true);
-                preview_data.status_line_for_items(
+                let line = preview_data.line_for_ids(
                     items
                         .iter()
                         .filter(|item| item.enabled)
-                        .filter_map(|item| item.id.parse::<StatusLineItem>().ok()),
-                    use_theme_colors,
-                )
+                        .filter(|item| item.id != STATUS_LINE_USE_THEME_COLORS_ITEM_ID)
+                        .map(|item| item.id.clone()),
+                );
+                if line.spans.is_empty() {
+                    None
+                } else {
+                    Some(line)
+                }
             })
             .on_confirm(|ids, app_event| {
                 let use_theme_colors = ids
                     .iter()
                     .any(|id| id == STATUS_LINE_USE_THEME_COLORS_ITEM_ID);
-                let items = ids
+                let ids = ids
                     .iter()
-                    .filter_map(|id| id.parse::<StatusLineItem>().ok())
+                    .filter(|id| *id != STATUS_LINE_USE_THEME_COLORS_ITEM_ID)
+                    .cloned()
                     .collect::<Vec<_>>();
                 app_event.send(AppEvent::StatusLineSetup {
-                    items,
+                    ids,
                     use_theme_colors,
                 });
             })
@@ -328,32 +382,6 @@ impl StatusLineSetupView {
                 app_event.send(AppEvent::StatusLineSetupCancelled);
             })
             .build(),
-        }
-    }
-
-    /// Converts a [`StatusLineItem`] into a [`MultiSelectItem`] for the picker.
-    fn status_line_select_item(
-        item: StatusLineItem,
-        enabled: bool,
-        preview_data: &StatusSurfacePreviewData,
-    ) -> MultiSelectItem {
-        let default_name = item.to_string();
-        let default_description = item.description();
-        let (name, description) = match item {
-            StatusLineItem::FiveHourLimit | StatusLineItem::WeeklyLimit => (
-                preview_data.rate_limit_item_name(item.preview_item(), &default_name),
-                preview_data.rate_limit_item_description(item.preview_item(), default_description),
-            ),
-            _ => (default_name, default_description.to_string()),
-        };
-
-        MultiSelectItem {
-            id: item.to_string(),
-            name,
-            description: Some(description),
-            enabled,
-            orderable: true,
-            section_break_after: false,
         }
     }
 }
@@ -387,6 +415,7 @@ impl Renderable for StatusLineSetupView {
 mod tests {
     use super::*;
     use crate::app_event_sender::AppEventSender;
+    use crate::bottom_pane::status_surface_preview::StatusSurfacePreviewData;
     use insta::assert_snapshot;
     use pretty_assertions::assert_eq;
     use ratatui::buffer::Buffer;
@@ -616,6 +645,12 @@ mod tests {
     #[test]
     fn setup_view_snapshot_uses_runtime_preview_values() {
         let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+        let choices = [
+            StatusLineChoice::builtin(StatusLineItem::ModelName),
+            StatusLineChoice::builtin(StatusLineItem::CurrentDir),
+            StatusLineChoice::builtin(StatusLineItem::GitBranch),
+            StatusLineChoice::builtin(StatusLineItem::WeeklyLimit),
+        ];
         let view = StatusLineSetupView::new(
             Some(&[
                 StatusLineItem::ModelName.to_string(),
@@ -623,24 +658,28 @@ mod tests {
                 StatusLineItem::GitBranch.to_string(),
             ]),
             /*use_theme_colors*/ true,
-            StatusSurfacePreviewData::from_iter([
-                (
-                    StatusLineItem::ModelName.preview_item(),
-                    "gpt-5-codex".to_string(),
-                ),
-                (
-                    StatusLineItem::CurrentDir.preview_item(),
-                    "~/codex-rs".to_string(),
-                ),
-                (
-                    StatusLineItem::GitBranch.preview_item(),
-                    "jif/statusline-preview".to_string(),
-                ),
-                (
-                    StatusLineItem::WeeklyLimit.preview_item(),
-                    "weekly 82% left".to_string(),
-                ),
-            ]),
+            &choices,
+            StatusLinePreviewData::from_iter(
+                [
+                    (
+                        StatusLineItem::ModelName.to_string(),
+                        Line::from("gpt-5-codex"),
+                    ),
+                    (
+                        StatusLineItem::CurrentDir.to_string(),
+                        Line::from("~/codex-rs"),
+                    ),
+                    (
+                        StatusLineItem::GitBranch.to_string(),
+                        Line::from("jif/statusline-preview"),
+                    ),
+                    (
+                        StatusLineItem::WeeklyLimit.to_string(),
+                        Line::from("weekly 82%"),
+                    ),
+                ]
+                .into_iter(),
+            ),
             AppEventSender::new(tx_raw),
             crate::keymap::RuntimeKeymap::defaults().list,
         );

@@ -1,4 +1,5 @@
 use super::*;
+use codex_config::types::SessionPickerProviderFilter;
 use codex_otel::set_parent_from_w3c_trace_context;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::models::ActivePermissionProfile;
@@ -298,7 +299,16 @@ async fn resume_lookup_model_providers_filters_only_last_lookup() {
         resume_lookup_model_providers(&config, &last_args),
         Some(vec!["test-provider".to_string()])
     );
-    assert_eq!(resume_lookup_model_providers(&config, &named_args), None);
+    assert_eq!(
+        resume_lookup_model_providers(&config, &named_args),
+        Some(Vec::new())
+    );
+
+    config.tui_session_picker_provider_filter = SessionPickerProviderFilter::All;
+    assert_eq!(
+        resume_lookup_model_providers(&config, &last_args),
+        Some(Vec::new())
+    );
 }
 
 #[test]

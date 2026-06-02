@@ -50,7 +50,9 @@ use crate::approval_events::ApplyPatchApprovalRequestEvent;
 use crate::approval_events::ExecApprovalRequestEvent;
 #[cfg(not(target_os = "linux"))]
 use crate::audio_device::list_realtime_audio_device_names;
+use crate::bottom_pane::StatusLineChoice;
 use crate::bottom_pane::StatusLineItem;
+use crate::bottom_pane::StatusLinePreviewData;
 use crate::bottom_pane::StatusLineSetupView;
 use crate::bottom_pane::StatusSurfacePreviewData;
 use crate::bottom_pane::StatusSurfacePreviewItem;
@@ -129,6 +131,7 @@ use codex_app_server_protocol::UserInput;
 use codex_config::ConfigLayerStackOrdering;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::Notifications;
+use codex_config::types::NotifyServiceEvent;
 use codex_config::types::WindowsSandboxModeToml;
 use codex_core_skills::model::SkillMetadata;
 use codex_features::FEATURES;
@@ -291,6 +294,7 @@ use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::clipboard_paste::paste_image_to_temp_png;
 use crate::collaboration_modes;
+use crate::custom_status_items::CustomStatusItem;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::CommandOutput;
 use crate::exec_cell::ExecCell;
@@ -322,6 +326,7 @@ use crate::status::RateLimitSnapshotDisplay;
 use crate::status::remote_connection::RemoteConnectionStatus;
 use crate::status_indicator_widget::STATUS_DETAILS_DEFAULT_MAX_LINES;
 use crate::status_indicator_widget::StatusDetailsCapitalization;
+use crate::terminal_sideband::TerminalSidebandState;
 use crate::text_formatting::truncate_text;
 use crate::tui::FrameRequester;
 mod command_lifecycle;
@@ -376,6 +381,7 @@ use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
 mod notifications;
 use self::notifications::Notification;
+mod notify_service_events;
 mod permission_popups;
 mod permissions_menu;
 mod protocol;
@@ -431,6 +437,7 @@ use self::user_messages::UserMessageDisplay;
 #[cfg(test)]
 use self::user_messages::UserMessageHistoryOverride;
 use self::user_messages::UserMessageHistoryRecord;
+use self::user_messages::UserMessageNotifyDisposition;
 use self::user_messages::app_server_text_elements;
 pub(crate) use self::user_messages::create_initial_user_message;
 use self::user_messages::merge_user_messages;
@@ -569,6 +576,7 @@ pub(crate) struct ChatWidget {
     suppressed_exec_calls: HashSet<String>,
     skills_all: Vec<ProtocolSkillMetadata>,
     skills_initial_state: Option<HashMap<AbsolutePathBuf, bool>>,
+    custom_status_items: Vec<CustomStatusItem>,
     last_unified_wait: Option<UnifiedExecWaitState>,
     unified_exec_wait_streak: Option<UnifiedExecWaitStreak>,
     turn_lifecycle: TurnLifecycleState,
@@ -652,6 +660,19 @@ pub(crate) struct ChatWidget {
     queued_message_edit_hint_binding: Option<KeyBinding>,
     // Pending notification to show when unfocused on next Draw
     pending_notification: Option<Notification>,
+    idle_entered_at: Option<Instant>,
+    idle_notification_status: Option<crate::notify_service::IdleNotifyStatus>,
+    idle_composer_activity_generation: Option<u64>,
+    idle_turn_duration_seconds: Option<u64>,
+    idle_notification_sent: bool,
+    idle_notification_generation: u64,
+    idle_timer_due_at: Option<Instant>,
+    session_started_at: Option<Instant>,
+    session_startup_idle_entered_at: Option<Instant>,
+    session_startup_idle_notification_sent: bool,
+    session_startup_idle_generation: u64,
+    session_startup_idle_timer_due_at: Option<Instant>,
+    notify_service_session_started_sent_for: Option<ThreadId>,
     /// When `Some`, the user has pressed a quit shortcut and the second press
     /// must occur before `quit_shortcut_expires_at`.
     quit_shortcut_expires_at: Option<Instant>,
@@ -1926,6 +1947,23 @@ impl ChatWidget {
     pub(crate) fn active_cell_transcript_lines(&self, width: u16) -> Option<Vec<Line<'static>>> {
         self.active_cell_transcript_hyperlink_lines(width)
             .map(crate::terminal_hyperlinks::visible_lines)
+    }
+
+    pub(crate) fn terminal_sideband_state(
+        &self,
+        area: Rect,
+        cols: u16,
+        rows: u16,
+    ) -> TerminalSidebandState {
+        let bottom_pane_height = self.bottom_pane.desired_height(area.width).min(area.height);
+        let bottom_pane_area = Rect::new(
+            area.x,
+            area.bottom().saturating_sub(bottom_pane_height),
+            area.width,
+            bottom_pane_height,
+        );
+        self.bottom_pane
+            .terminal_sideband_state(bottom_pane_area, cols, rows)
     }
 
     /// Return a reference to the widget's current config (includes any

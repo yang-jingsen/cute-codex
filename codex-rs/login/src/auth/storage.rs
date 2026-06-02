@@ -34,7 +34,7 @@ pub struct AuthDotJson {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_mode: Option<AuthMode>,
 
-    #[serde(rename = "OPENAI_API_KEY")]
+    #[serde(rename = "OPENAI_API_KEY", alias = "openai_api_key")]
     pub openai_api_key: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -82,6 +82,12 @@ impl From<AgentIdentityJwtClaims> for AgentIdentityAuthRecord {
 }
 
 pub(super) fn get_auth_file(codex_home: &Path) -> PathBuf {
+    if let Ok(val) = std::env::var("CODEX_AUTH_FILE") {
+        let trimmed = val.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
     codex_home.join("auth.json")
 }
 
@@ -161,9 +167,10 @@ const KEYRING_SERVICE: &str = "Codex Auth";
 
 // turns codex_home path into a stable, short key string
 fn compute_store_key(codex_home: &Path) -> std::io::Result<String> {
-    let canonical = codex_home
+    let auth_file = get_auth_file(codex_home);
+    let canonical = auth_file
         .canonicalize()
-        .unwrap_or_else(|_| codex_home.to_path_buf());
+        .unwrap_or_else(|_| auth_file.clone());
     let path_str = canonical.to_string_lossy();
     let mut hasher = Sha256::new();
     hasher.update(path_str.as_bytes());

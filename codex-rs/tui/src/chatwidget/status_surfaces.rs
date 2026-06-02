@@ -8,6 +8,7 @@ use crate::bottom_pane::status_line_from_segments;
 use crate::branch_summary;
 use crate::chatwidget::limit_label_for_window;
 use crate::chatwidget::rate_limits::get_limits_duration;
+use crate::custom_status_items::CustomStatusContext;
 use crate::legacy_core::config::Config;
 use crate::status::format_tokens_compact;
 use codex_app_server_protocol::AskForApproval;
@@ -44,7 +45,7 @@ const TERMINAL_TITLE_ACTION_REQUIRED_PREFIX_HIDDEN: &str = "[ . ] Action Require
 /// refresh pass compute those shared concerns once, then render both surfaces
 /// from the same selection set.
 struct StatusSurfaceSelections {
-    status_line_items: Vec<StatusLineItem>,
+    status_line_items: Vec<StatusLineSelection>,
     invalid_status_line_items: Vec<String>,
     terminal_title_items: Vec<TerminalTitleItem>,
     invalid_terminal_title_items: Vec<String>,
@@ -52,19 +53,32 @@ struct StatusSurfaceSelections {
 
 impl StatusSurfaceSelections {
     fn uses_git_branch(&self) -> bool {
-        self.status_line_items.contains(&StatusLineItem::GitBranch)
-            || self
-                .terminal_title_items
-                .contains(&TerminalTitleItem::GitBranch)
+        self.status_line_items.iter().any(|item| {
+            matches!(
+                item,
+                StatusLineSelection::Builtin(StatusLineItem::GitBranch)
+            )
+        }) || self
+            .terminal_title_items
+            .contains(&TerminalTitleItem::GitBranch)
     }
 
     fn uses_git_summary(&self) -> bool {
-        self.status_line_items
-            .contains(&StatusLineItem::PullRequestNumber)
-            || self
-                .status_line_items
-                .contains(&StatusLineItem::BranchChanges)
+        self.status_line_items.iter().any(|item| {
+            matches!(
+                item,
+                StatusLineSelection::Builtin(
+                    StatusLineItem::PullRequestNumber | StatusLineItem::BranchChanges
+                )
+            )
+        })
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum StatusLineSelection {
+    Builtin(StatusLineItem),
+    Custom(String),
 }
 
 /// Cached project-root display name keyed by the cwd used for the last lookup.
@@ -168,22 +182,27 @@ impl ChatWidget {
             return;
         }
 
-        let mut segments = Vec::new();
-        for item in &selections.status_line_items {
-            if let Some(value) = self.status_line_value_for_item(*item) {
-                segments.push((*item, value));
+        let mut line: Option<Line<'static>> = None;
+        let mut hyperlink_url = None;
+        for selection in &selections.status_line_items {
+            let Some(value) = self.status_line_line_for_selection(selection) else {
+                continue;
+            };
+            if matches!(
+                selection,
+                StatusLineSelection::Builtin(StatusLineItem::PullRequestNumber)
+            ) {
+                hyperlink_url = self.status_line_pull_request_url();
+            }
+            if let Some(existing) = line.as_mut() {
+                existing.spans.push(" · ".dim());
+                existing.spans.extend(value.spans);
+            } else {
+                line = Some(value);
             }
         }
 
-        self.set_status_line(status_line_from_segments(
-            segments,
-            self.config.tui_status_line_use_colors,
-        ));
-        let hyperlink_url = selections
-            .status_line_items
-            .contains(&StatusLineItem::PullRequestNumber)
-            .then(|| self.status_line_pull_request_url())
-            .flatten();
+        self.set_status_line(line);
         self.set_status_line_hyperlink(hyperlink_url);
     }
 
@@ -385,8 +404,24 @@ impl ChatWidget {
     /// Parses configured status-line ids into known items and collects unknown ids.
     ///
     /// Unknown ids are deduplicated in insertion order for warning messages.
-    fn status_line_items_with_invalids(&self) -> (Vec<StatusLineItem>, Vec<String>) {
-        parse_items_with_invalids(self.configured_status_line_items())
+    fn status_line_items_with_invalids(&self) -> (Vec<StatusLineSelection>, Vec<String>) {
+        let ids = self.configured_status_line_items();
+        let mut items = Vec::new();
+        let mut invalid = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for id in &ids {
+            if !seen.insert(id.clone()) {
+                continue;
+            }
+            if let Ok(item) = id.parse::<StatusLineItem>() {
+                items.push(StatusLineSelection::Builtin(item));
+            } else if self.custom_status_items.iter().any(|item| item.id == *id) {
+                items.push(StatusLineSelection::Custom(id.clone()));
+            } else if !invalid.contains(id) {
+                invalid.push(id.clone());
+            }
+        }
+        (items, invalid)
     }
 
     pub(super) fn configured_status_line_items(&self) -> Vec<String> {
@@ -661,6 +696,59 @@ impl ChatWidget {
             .as_ref()
             .and_then(|summary| summary.pull_request.as_ref())
             .map(|pull_request| pull_request.url.clone())
+    }
+
+    fn status_line_line_for_selection(
+        &mut self,
+        selection: &StatusLineSelection,
+    ) -> Option<Line<'static>> {
+        match selection {
+            StatusLineSelection::Builtin(item) => {
+                self.status_line_value_for_item(*item).and_then(|value| {
+                    status_line_from_segments(
+                        [(*item, value)],
+                        self.config.tui_status_line_use_colors,
+                    )
+                })
+            }
+            StatusLineSelection::Custom(id) => {
+                let cwd = self.status_line_cwd().to_path_buf();
+                self.custom_status_items
+                    .iter()
+                    .find(|item| item.id == *id)
+                    .and_then(|item| {
+                        item.render_line(CustomStatusContext::StatusLine { cwd: &cwd })
+                    })
+            }
+        }
+    }
+
+    pub(super) fn available_status_line_choices(&self) -> Vec<StatusLineChoice> {
+        use strum::IntoEnumIterator;
+        let mut choices: Vec<StatusLineChoice> = StatusLineItem::iter()
+            .map(StatusLineChoice::builtin)
+            .collect();
+        for custom in &self.custom_status_items {
+            choices.push(StatusLineChoice {
+                id: custom.id.clone(),
+                name: custom.title.clone(),
+                description: custom.description.clone(),
+            });
+        }
+        choices
+    }
+
+    pub(super) fn status_line_preview_line_for_id(&mut self, id: &str) -> Option<Line<'static>> {
+        if let Ok(item) = id.parse::<StatusLineItem>() {
+            let value = self.status_line_value_for_item(item)?;
+            status_line_from_segments([(item, value)], /*use_theme_colors*/ true)
+        } else {
+            let cwd = self.status_line_cwd().to_path_buf();
+            self.custom_status_items
+                .iter()
+                .find(|item| item.id == id)
+                .and_then(|item| item.render_line(CustomStatusContext::Preview { cwd: &cwd }))
+        }
     }
 
     pub(super) fn status_surface_preview_value_for_item(

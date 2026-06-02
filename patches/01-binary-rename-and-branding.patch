@@ -1,0 +1,228 @@
+diff --git a/codex-rs/cli/src/login.rs b/codex-rs/cli/src/login.rs
+index 1baa344b8d..4cbda88a62 100644
+--- a/codex-rs/cli/src/login.rs
++++ b/codex-rs/cli/src/login.rs
+@@ -109,7 +109,7 @@ fn init_login_file_logging(config: &Config) -> Option<WorkerGuard> {
+ 
+ fn print_login_server_start(actual_port: u16, auth_url: &str) {
+     eprintln!(
+-        "Starting local login server on http://localhost:{actual_port}.\nIf your browser did not open, navigate to this URL to authenticate:\n\n{auth_url}\n\nOn a remote or headless machine? Use `codex login --device-auth` instead."
++        "Starting local login server on http://localhost:{actual_port}.\nIf your browser did not open, navigate to this URL to authenticate:\n\n{auth_url}\n\nOn a remote or headless machine? Use `cute-codex login --device-auth` instead."
+     );
+ }
+ 
+@@ -224,7 +224,7 @@ pub async fn run_login_with_agent_identity(
+ 
+ pub fn read_api_key_from_stdin() -> String {
+     read_stdin_secret(
+-        "--with-api-key expects the API key on stdin. Try piping it, e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`.",
++        "--with-api-key expects the API key on stdin. Try piping it, e.g. `printenv OPENAI_API_KEY | cute-codex login --with-api-key`.",
+         "Reading API key from stdin...",
+         "No API key provided via stdin.",
+     )
+@@ -232,7 +232,7 @@ pub fn read_api_key_from_stdin() -> String {
+ 
+ pub fn read_agent_identity_from_stdin() -> String {
+     read_stdin_secret(
+-        "--with-agent-identity expects the Agent Identity token on stdin. Try piping it, e.g. `printenv CODEX_AGENT_IDENTITY | codex login --with-agent-identity`.",
++        "--with-agent-identity expects the Agent Identity token on stdin. Try piping it, e.g. `printenv CODEX_AGENT_IDENTITY | cute-codex login --with-agent-identity`.",
+         "Reading Agent Identity token from stdin...",
+         "No Agent Identity token provided via stdin.",
+     )
+diff --git a/codex-rs/cli/src/mcp_cmd.rs b/codex-rs/cli/src/mcp_cmd.rs
+index c5b4751322..a1ba7b879c 100644
+--- a/codex-rs/cli/src/mcp_cmd.rs
++++ b/codex-rs/cli/src/mcp_cmd.rs
+@@ -72,7 +72,7 @@ pub struct GetArgs {
+ }
+ 
+ #[derive(Debug, clap::Parser)]
+-#[command(override_usage = "codex mcp add [OPTIONS] <NAME> (--url <URL> | -- <COMMAND>...)")]
++#[command(override_usage = "cute-codex mcp add [OPTIONS] <NAME> (--url <URL> | -- <COMMAND>...)")]
+ pub struct AddArgs {
+     /// Name for the MCP server configuration.
+     pub name: String,
+@@ -347,7 +347,7 @@ async fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Re
+         }
+         McpOAuthLoginSupport::Unsupported => {}
+         McpOAuthLoginSupport::Unknown(_) => println!(
+-            "MCP server may or may not require login. Run `codex mcp login {name}` to login."
++            "MCP server may or may not require login. Run `cute-codex mcp login {name}` to login."
+         ),
+     }
+ 
+@@ -553,7 +553,7 @@ async fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) ->
+     }
+ 
+     if entries.is_empty() {
+-        println!("No MCP servers configured yet. Try `codex mcp add my-tool -- my-command`.");
++        println!("No MCP servers configured yet. Try `cute-codex mcp add my-tool -- my-command`.");
+         return Ok(());
+     }
+ 
+@@ -893,7 +893,7 @@ async fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Re
+         };
+         println!("  default_tools_approval_mode: {approval_mode}");
+     }
+-    println!("  remove: codex mcp remove {}", get_args.name);
++    println!("  remove: cute-codex mcp remove {}", get_args.name);
+ 
+     Ok(())
+ }
+diff --git a/codex-rs/tui/src/history_cell.rs b/codex-rs/tui/src/history_cell.rs
+index 803cfcde5f..4a1e504ec6 100644
+--- a/codex-rs/tui/src/history_cell.rs
++++ b/codex-rs/tui/src/history_cell.rs
+@@ -39,6 +39,7 @@ use crate::tooltips;
+ use crate::ui_consts::LIVE_PREFIX_COLS;
+ use crate::update_action::UpdateAction;
+ use crate::version::CODEX_CLI_VERSION;
++use crate::version::display_version_label;
+ use crate::wrapping::RtOptions;
+ use crate::wrapping::adaptive_wrap_line;
+ use crate::wrapping::adaptive_wrap_lines;
+@@ -1447,12 +1448,12 @@ impl HistoryCell for SessionHeaderHistoryCell {
+ 
+         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
+ 
+-        // Title line rendered inside the box: ">_ OpenAI Codex (vX)"
++        // Title line rendered inside the box: ">_ cute-codex (vX)"
+         let title_spans: Vec<Span<'static>> = vec![
+             Span::from(">_ ").dim(),
+-            Span::from("OpenAI Codex").bold(),
++            Span::from(crate::version::CODEX_CLI_DISPLAY_NAME).bold(),
+             Span::from(" ").dim(),
+-            Span::from(format!("(v{})", self.version)).dim(),
++            Span::from(format!("({})", display_version_label(self.version))).dim(),
+         ];
+ 
+         const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
+diff --git a/codex-rs/tui/src/status/card.rs b/codex-rs/tui/src/status/card.rs
+index 918ddc177a..5fb08f5b35 100644
+--- a/codex-rs/tui/src/status/card.rs
++++ b/codex-rs/tui/src/status/card.rs
+@@ -3,7 +3,9 @@ use crate::history_cell::HistoryCell;
+ use crate::history_cell::PlainHistoryCell;
+ use crate::history_cell::with_border_with_inner_width;
+ use crate::legacy_core::config::Config;
++use crate::version::CODEX_CLI_DISPLAY_NAME;
+ use crate::version::CODEX_CLI_VERSION;
++use crate::version::display_version_label;
+ use chrono::DateTime;
+ use chrono::Local;
+ use codex_model_provider_info::WireApi;
+@@ -647,9 +649,9 @@ impl HistoryCell for StatusHistoryCell {
+         let mut lines: Vec<Line<'static>> = Vec::new();
+         lines.push(Line::from(vec![
+             Span::from(format!("{}>_ ", FieldFormatter::INDENT)).dim(),
+-            Span::from("OpenAI Codex").bold(),
++            Span::from(CODEX_CLI_DISPLAY_NAME).bold(),
+             Span::from(" ").dim(),
+-            Span::from(format!("(v{CODEX_CLI_VERSION})")).dim(),
++            Span::from(format!("({})", display_version_label(CODEX_CLI_VERSION))).dim(),
+         ]));
+         lines.push(Line::from(Vec::<Span<'static>>::new()));
+ 
+@@ -666,7 +668,7 @@ impl HistoryCell for StatusHistoryCell {
+                 (None, None) => "ChatGPT".to_string(),
+             },
+             StatusAccountDisplay::ApiKey => {
+-                "API key configured (run codex login to use ChatGPT)".to_string()
++                "API key configured (run cute-codex login to use ChatGPT)".to_string()
+             }
+         });
+ 
+diff --git a/codex-rs/tui/src/tooltips.rs b/codex-rs/tui/src/tooltips.rs
+index 8eb156156e..617f949144 100644
+--- a/codex-rs/tui/src/tooltips.rs
++++ b/codex-rs/tui/src/tooltips.rs
+@@ -9,10 +9,10 @@ const ANNOUNCEMENT_TIP_URL: &str =
+ const IS_MACOS: bool = cfg!(target_os = "macos");
+ const IS_WINDOWS: bool = cfg!(target_os = "windows");
+ 
+-const APP_TOOLTIP: &str = "Try the **Codex App**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
++const APP_TOOLTIP: &str = "Try the **Codex App**. Run 'cute-codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
+ const FAST_TOOLTIP: &str =
+     "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
+-const OTHER_TOOLTIP: &str = "*New* Build faster with the **Codex App**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
++const OTHER_TOOLTIP: &str = "*New* Build faster with the **Codex App**. Run 'cute-codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
+ const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+ const FREE_GO_TOOLTIP: &str =
+     "*New* For a limited time, Codex is included in your plan for free – let’s build together.";
+@@ -27,7 +27,7 @@ lazy_static! {
+             if line.is_empty() || line.starts_with('#') {
+                 return false;
+             }
+-            if !IS_MACOS && !IS_WINDOWS && line.contains("codex app") {
++            if !IS_MACOS && !IS_WINDOWS && line.contains("cute-codex app") {
+                 return false;
+             }
+             true
+diff --git a/codex-rs/tui/src/version.rs b/codex-rs/tui/src/version.rs
+index 8c8d108dc6..8905ec016c 100644
+--- a/codex-rs/tui/src/version.rs
++++ b/codex-rs/tui/src/version.rs
+@@ -1,2 +1,39 @@
++/// The display name shown by this custom Codex build.
++pub const CODEX_CLI_DISPLAY_NAME: &str = "cute-codex";
++
+ /// The current Codex CLI version as embedded at compile time.
+ pub const CODEX_CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
++
++/// Optional compile-time build tag for locally patched builds.
++///
++/// Set `CUTE_CODEX_BUILD_TAG` in the environment before `cargo build` to append
++/// a short marker in the TUI header, for example `FT` or `FT-D`.
++pub const CODEX_CLI_BUILD_TAG: Option<&str> = option_env!("CUTE_CODEX_BUILD_TAG");
++
++pub fn display_version_label(version: &str) -> String {
++    match CODEX_CLI_BUILD_TAG.map(str::trim) {
++        Some(tag) if !tag.is_empty() => format!("v{version} {tag}"),
++        _ => format!("v{version}"),
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn display_version_label_uses_plain_version_when_tag_missing() {
++        let tag = CODEX_CLI_BUILD_TAG.map(str::trim).unwrap_or_default();
++        if tag.is_empty() {
++            assert_eq!(display_version_label("0.122.0"), "v0.122.0");
++        }
++    }
++
++    #[test]
++    fn display_version_label_appends_tag_when_present() {
++        let tag = CODEX_CLI_BUILD_TAG.map(str::trim).unwrap_or_default();
++        if !tag.is_empty() {
++            assert_eq!(display_version_label("0.122.0"), format!("v0.122.0 {tag}"));
++        }
++    }
++}
+diff --git a/codex-rs/tui/tooltips.txt b/codex-rs/tui/tooltips.txt
+index 6927ad5111..8dd691ad8c 100644
+--- a/codex-rs/tui/tooltips.txt
++++ b/codex-rs/tui/tooltips.txt
+@@ -11,10 +11,10 @@ Use /fork to branch the current chat into a new thread.
+ Use /side to start a side conversation in a temporary fork without polluting the main thread.
+ Use /init to create an AGENTS.md with project-specific guidance.
+ Use /mcp to list configured MCP tools.
+-Run `codex app` to open Codex Desktop (it installs on macOS if needed).
++Run `cute-codex app` to open Codex Desktop (it installs on macOS if needed).
+ Use /personality to customize how Codex communicates.
+ Use /rename to rename your threads for easier thread resuming.
+-Use the OpenAI docs MCP for API questions; enable it with `codex mcp add openaiDeveloperDocs --url https://developers.openai.com/mcp`.
++Use the OpenAI docs MCP for API questions; enable it with `cute-codex mcp add openaiDeveloperDocs --url https://developers.openai.com/mcp`.
+ Join the OpenAI community Discord: http://discord.gg/openai
+ Visit the Codex community forum: https://community.openai.com/c/codex/37
+ You can run any shell command from Codex using `!` (e.g. `!ls`)
+@@ -24,5 +24,5 @@ Press Tab to queue a message when a task is running; otherwise it sends immediat
+ [tui.keymap] in ~/.codex/config.toml lets you rebind supported shortcuts.
+ See the Codex keymap documentation for supported actions and examples.
+ Paste an image with Ctrl+V to attach it to your next message.
+-You can resume a previous conversation by running `codex resume`
++You can resume a previous conversation by running `cute-codex resume`
+ Use /copy or press Ctrl+O to copy the latest agent response as Markdown.

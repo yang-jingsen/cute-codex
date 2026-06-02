@@ -1215,6 +1215,49 @@ See the Codex keymap documentation for supported actions and examples."
             app.chat_widget.thread_name(),
             app.chat_widget.rollout_path().as_deref(),
         );
+        app.chat_widget.clear_idle_state_for_exit();
+        // Fire session-exit idle notification if configured and session was substantial.
+        {
+            let ns = &app.config.notify_service;
+            let usage = app.chat_widget.token_usage();
+            if ns
+                .notify_service_url
+                .as_ref()
+                .is_some_and(|u: &String| !u.is_empty())
+                && usage.total_tokens >= ns.notify_service_min_tokens
+                && crate::notify_service::event_enabled(
+                    ns,
+                    crate::notify_service::IdleNotifyStatus::SessionExit,
+                )
+            {
+                let cwd = app.config.cwd.to_path_buf();
+                let payload = crate::notify_service::build_payload_with_details(
+                    crate::notify_service::IdleNotifyStatus::SessionExit,
+                    &cwd,
+                    &ns.notify_service_agent_name,
+                    app.chat_widget.thread_name().as_deref(),
+                    app.chat_widget.thread_id().map(|id| id.to_string()),
+                    app.chat_widget.session_started_at(),
+                    None,
+                    &usage,
+                    0,
+                    None,
+                );
+                if tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    crate::notify_service::send_idle_notification_once(
+                        ns.notify_service_url.clone().unwrap_or_default(),
+                        ns.notify_service_token.clone(),
+                        payload,
+                    ),
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("timed out sending session-exit idle notification");
+                }
+            }
+        }
         Ok(AppExitInfo {
             token_usage: app.token_usage(),
             thread_id: resumable_thread.as_ref().map(|thread| thread.thread_id),
@@ -1323,8 +1366,10 @@ See the Codex keymap documentation for supported actions and examples."
         tui: &mut tui::Tui,
         terminal_resize_reflow_enabled: bool,
     ) -> Result<Rect> {
-        let desired_height = self.chat_widget.desired_height(tui.terminal.size()?.width);
+        let terminal_size = tui.terminal.size()?;
+        let desired_height = self.chat_widget.desired_height(terminal_size.width);
         let mut rendered_area = Rect::default();
+        let mut terminal_sideband_state = None;
         if terminal_resize_reflow_enabled {
             tui.draw_with_resize_reflow(desired_height, |frame| {
                 let area = frame.area();
@@ -1334,6 +1379,11 @@ See the Codex keymap documentation for supported actions and examples."
                     frame.set_cursor_style(self.chat_widget.cursor_style(area));
                     frame.set_cursor_position((x, y));
                 }
+                terminal_sideband_state = Some(self.chat_widget.terminal_sideband_state(
+                    area,
+                    terminal_size.width,
+                    terminal_size.height,
+                ));
             })?;
         } else {
             tui.draw(desired_height, |frame| {
@@ -1344,7 +1394,15 @@ See the Codex keymap documentation for supported actions and examples."
                     frame.set_cursor_style(self.chat_widget.cursor_style(area));
                     frame.set_cursor_position((x, y));
                 }
+                terminal_sideband_state = Some(self.chat_widget.terminal_sideband_state(
+                    area,
+                    terminal_size.width,
+                    terminal_size.height,
+                ));
             })?;
+        }
+        if let Some(state) = terminal_sideband_state {
+            tui.emit_terminal_sideband(state)?;
         }
         Ok(rendered_area)
     }

@@ -49,14 +49,26 @@ impl ChatWidget {
         drain
     }
 
-    pub(super) fn submit_queued_shell_prompt(&mut self, user_message: UserMessage) -> QueueDrain {
+    pub(super) fn submit_queued_shell_prompt(
+        &mut self,
+        user_message: UserMessage,
+        notify_disposition: UserMessageNotifyDisposition,
+    ) -> QueueDrain {
         match user_message.text.strip_prefix('!') {
             Some(command) => {
+                if notify_disposition == UserMessageNotifyDisposition::Emit {
+                    self.emit_user_message_sent_notification(&user_message);
+                }
                 let history_text = user_message.text.clone();
                 self.submit_shell_command_with_history(command, &history_text)
             }
             None => {
-                self.submit_user_message(user_message);
+                self.submit_user_message_with_history_and_shell_escape_policy_inner(
+                    user_message,
+                    UserMessageHistoryRecord::UserMessageText,
+                    ShellEscapePolicy::Allow,
+                    notify_disposition,
+                );
                 QueueDrain::Stop
             }
         }
@@ -101,11 +113,35 @@ impl ChatWidget {
         history_record: UserMessageHistoryRecord,
         shell_escape_policy: ShellEscapePolicy,
     ) -> (bool, Option<AppCommand>) {
+        self.submit_user_message_with_history_and_shell_escape_policy_inner(
+            user_message,
+            history_record,
+            shell_escape_policy,
+            UserMessageNotifyDisposition::Emit,
+        )
+    }
+
+    pub(super) fn submit_user_message_with_history_and_shell_escape_policy_inner(
+        &mut self,
+        user_message: UserMessage,
+        history_record: UserMessageHistoryRecord,
+        shell_escape_policy: ShellEscapePolicy,
+        notify_disposition: UserMessageNotifyDisposition,
+    ) -> (bool, Option<AppCommand>) {
         if !self.is_session_configured() {
             tracing::warn!("cannot submit user message before session is configured; queueing");
-            self.input_queue
-                .queued_user_messages
-                .push_front(QueuedUserMessage::from(user_message));
+            let notify_sent = if notify_disposition == UserMessageNotifyDisposition::Emit {
+                self.emit_user_message_sent_notification(&user_message)
+            } else {
+                true
+            };
+            self.input_queue.queued_user_messages.push_front(
+                QueuedUserMessage::new_with_notify_sent(
+                    user_message,
+                    QueuedInputAction::Plain,
+                    notify_sent,
+                ),
+            );
             self.input_queue
                 .queued_user_message_history_records
                 .push_front(history_record);
@@ -136,6 +172,10 @@ impl ChatWidget {
                 remote_image_urls,
             );
             return (false, None);
+        }
+        let notify_user_message = user_message.clone();
+        if notify_disposition == UserMessageNotifyDisposition::Emit {
+            self.emit_user_message_sent_notification(&notify_user_message);
         }
         let UserMessage {
             text,
@@ -354,6 +394,10 @@ impl ChatWidget {
         if !self.submit_op(op.clone()) {
             return (false, None);
         }
+        self.emit_user_message_dispatched_notification(
+            &notify_user_message,
+            notify_disposition == UserMessageNotifyDisposition::AlreadyEmitted,
+        );
         if render_in_history {
             self.input_queue.user_turn_pending_start = true;
         }

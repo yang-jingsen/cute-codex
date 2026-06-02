@@ -55,6 +55,21 @@ async fn file_storage_save_persists_auth_dot_json() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn file_storage_load_accepts_legacy_lowercase_api_key_field() -> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let storage = FileAuthStorage::new(codex_home.path().to_path_buf());
+    let auth_file = get_auth_file(codex_home.path());
+    std::fs::write(
+        &auth_file,
+        r#"{"openai_api_key":"legacy-key","tokens":null}"#,
+    )?;
+
+    let loaded = storage.load()?.expect("auth should load");
+    assert_eq!(loaded.openai_api_key.as_deref(), Some("legacy-key"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn file_storage_round_trips_agent_identity_auth() -> anyhow::Result<()> {
     let codex_home = tempdir()?;
     let storage = FileAuthStorage::new(codex_home.path().to_path_buf());

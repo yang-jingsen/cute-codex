@@ -166,6 +166,14 @@ impl ChatWidget {
                 self.exit_review_mode_after_item();
             }
             ThreadItem::ContextCompaction { .. } => {
+                if !from_replay {
+                    self.post_notify_service_event(
+                        NotifyServiceEvent::ContextCompacted,
+                        self.current_turn_duration_seconds(),
+                        0,
+                        None,
+                    );
+                }
                 self.add_info_message("Context compacted".to_string(), /*hint*/ None);
             }
             ThreadItem::HookPrompt { .. } => {}

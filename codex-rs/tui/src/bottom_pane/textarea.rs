@@ -128,6 +128,12 @@ pub(crate) struct TextAreaState {
     scroll: u16,
 }
 
+impl TextAreaState {
+    pub(crate) fn scroll(&self) -> u16 {
+        self.scroll
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum KillBufferKind {
     /// Characterwise kills and yanks paste at the cursor.

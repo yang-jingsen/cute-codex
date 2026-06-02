@@ -1,0 +1,74 @@
+diff --git a/codex-rs/cli/Cargo.toml b/codex-rs/cli/Cargo.toml
+index cdee241b42..bbb7cb757f 100644
+--- a/codex-rs/cli/Cargo.toml
++++ b/codex-rs/cli/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "codex-cli"
+-version.workspace = true
++version = "0.131.0"
+ edition.workspace = true
+ license.workspace = true
+ build = "build.rs"
+@@ -9,6 +9,10 @@ build = "build.rs"
+ name = "codex"
+ path = "src/main.rs"
+ 
++[[bin]]
++name = "cute-codex"
++path = "src/main.rs"
++
+ [lib]
+ name = "codex_cli"
+ path = "src/lib.rs"
+@@ -77,4 +81,5 @@ assert_matches = { workspace = true }
+ codex-utils-cargo-bin = { workspace = true }
+ predicates = { workspace = true }
+ pretty_assertions = { workspace = true }
++serial_test = { workspace = true }
+ sqlx = { workspace = true }
+diff --git a/codex-rs/core/Cargo.toml b/codex-rs/core/Cargo.toml
+index 44c6aacac5..b48a9d79f3 100644
+--- a/codex-rs/core/Cargo.toml
++++ b/codex-rs/core/Cargo.toml
+@@ -2,7 +2,7 @@
+ edition.workspace = true
+ license.workspace = true
+ name = "codex-core"
+-version.workspace = true
++version = "0.131.0"
+ 
+ [lib]
+ doctest = false
+diff --git a/codex-rs/login/Cargo.toml b/codex-rs/login/Cargo.toml
+index 161d1b862c..f2e9c9d5e3 100644
+--- a/codex-rs/login/Cargo.toml
++++ b/codex-rs/login/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "codex-login"
+-version.workspace = true
++version = "0.131.0"
+ edition.workspace = true
+ license.workspace = true
+ 
+diff --git a/codex-rs/tui/Cargo.toml b/codex-rs/tui/Cargo.toml
+index 300449a414..d820948891 100644
+--- a/codex-rs/tui/Cargo.toml
++++ b/codex-rs/tui/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "codex-tui"
+-version.workspace = true
++version = "0.131.0"
+ edition.workspace = true
+ license.workspace = true
+ autobins = false
+@@ -69,6 +69,7 @@ derive_more = { workspace = true, features = ["is_variant"] }
+ diffy = { workspace = true }
+ dirs = { workspace = true }
+ dunce = { workspace = true }
++gethostname = { workspace = true }
+ image = { workspace = true, features = ["jpeg", "png", "gif", "webp"] }
+ itertools = { workspace = true }
+ lazy_static = { workspace = true }

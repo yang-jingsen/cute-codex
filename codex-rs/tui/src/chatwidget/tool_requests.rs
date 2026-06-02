@@ -285,6 +285,23 @@ impl ChatWidget {
         let command = shlex::try_join(ev.command.iter().map(String::as_str))
             .unwrap_or_else(|_| ev.command.join(" "));
         self.notify(Notification::ExecApprovalRequested { command });
+        self.post_notify_service_event(
+            NotifyServiceEvent::ApprovalRequested,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "approval": {
+                    "kind": "exec",
+                    "approval_id": ev.effective_approval_id(),
+                    "reason": &ev.reason,
+                    "command": &ev.command
+                }
+            })),
+        );
+        self.enter_idle_state(
+            crate::notify_service::IdleNotifyStatus::WaitingApproval,
+            self.current_turn_duration_seconds(),
+        );
 
         let available_decisions = ev.effective_available_decisions();
         let request = ApprovalRequest::Exec {
@@ -308,6 +325,9 @@ impl ChatWidget {
 
     pub(crate) fn handle_apply_patch_approval_now(&mut self, ev: ApplyPatchApprovalRequestEvent) {
         self.flush_answer_stream_with_separator();
+        let notify_call_id = ev.call_id.clone();
+        let notify_reason = ev.reason.clone();
+        let notify_change_count = ev.changes.len();
 
         let request = ApprovalRequest::ApplyPatch {
             thread_id: self.thread_id.unwrap_or_default(),
@@ -328,6 +348,23 @@ impl ChatWidget {
             cwd: self.config.cwd.to_path_buf(),
             changes: ev.changes.keys().cloned().collect(),
         });
+        self.post_notify_service_event(
+            NotifyServiceEvent::ApprovalRequested,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "approval": {
+                    "kind": "patch",
+                    "item_id": notify_call_id,
+                    "reason": notify_reason,
+                    "change_count": notify_change_count
+                }
+            })),
+        );
+        self.enter_idle_state(
+            crate::notify_service::IdleNotifyStatus::WaitingApproval,
+            self.current_turn_duration_seconds(),
+        );
     }
 
     pub(crate) fn handle_elicitation_request_now(
@@ -340,6 +377,22 @@ impl ChatWidget {
         self.notify(Notification::ElicitationRequested {
             server_name: params.server_name.clone(),
         });
+        self.post_notify_service_event(
+            NotifyServiceEvent::ApprovalRequested,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "approval": {
+                    "kind": "elicitation",
+                    "server_name": &params.server_name,
+                    "request_id": &request_id
+                }
+            })),
+        );
+        self.enter_idle_state(
+            crate::notify_service::IdleNotifyStatus::WaitingApproval,
+            self.current_turn_duration_seconds(),
+        );
 
         let thread_id = ThreadId::from_string(&params.thread_id)
             .unwrap_or_else(|_| self.thread_id.unwrap_or_default());
@@ -422,6 +475,21 @@ impl ChatWidget {
             (count, _) => format!("{count} questions requested"),
         };
         self.notify(Notification::PlanModePrompt { title });
+        self.post_notify_service_event(
+            NotifyServiceEvent::ApprovalRequested,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "approval": {
+                    "kind": "user_input",
+                    "question_count": question_count
+                }
+            })),
+        );
+        self.enter_idle_state(
+            crate::notify_service::IdleNotifyStatus::WaitingApproval,
+            self.current_turn_duration_seconds(),
+        );
         self.bottom_pane.push_user_input_request(ev);
         self.set_ambient_pet_notification(
             crate::pets::PetNotificationKind::Waiting,
@@ -432,6 +500,23 @@ impl ChatWidget {
 
     pub(crate) fn handle_request_permissions_now(&mut self, ev: RequestPermissionsEvent) {
         self.flush_answer_stream_with_separator();
+        self.post_notify_service_event(
+            NotifyServiceEvent::ApprovalRequested,
+            self.current_turn_duration_seconds(),
+            0,
+            Some(serde_json::json!({
+                "approval": {
+                    "kind": "permissions",
+                    "item_id": &ev.call_id,
+                    "reason": &ev.reason,
+                    "permissions": &ev.permissions
+                }
+            })),
+        );
+        self.enter_idle_state(
+            crate::notify_service::IdleNotifyStatus::WaitingApproval,
+            self.current_turn_duration_seconds(),
+        );
         let request = ApprovalRequest::Permissions {
             thread_id: self.thread_id.unwrap_or_default(),
             thread_label: None,

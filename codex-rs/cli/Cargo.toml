@@ -9,6 +9,10 @@ build = "build.rs"
 name = "codex"
 path = "src/main.rs"
 
+[[bin]]
+name = "cute-codex"
+path = "src/main.rs"
+
 [lib]
 name = "codex_cli"
 path = "src/lib.rs"
@@ -100,4 +104,5 @@ codex-utils-cargo-bin = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
 pretty_assertions = { workspace = true }
+serial_test = { workspace = true }
 sqlx = { workspace = true }

@@ -46,6 +46,8 @@ use crate::notifications::DesktopNotificationBackend;
 use crate::notifications::detect_backend;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::terminal_hyperlinks::plain_hyperlink_lines;
+use crate::terminal_sideband::TerminalSidebandEmitter;
+use crate::terminal_sideband::TerminalSidebandState;
 use crate::tui::event_stream::EventBroker;
 use crate::tui::event_stream::TuiEventStream;
 #[cfg(unix)]
@@ -81,6 +83,14 @@ fn should_emit_notification(condition: NotificationCondition, terminal_focused: 
     match condition {
         NotificationCondition::Unfocused => !terminal_focused,
         NotificationCondition::Always => true,
+    }
+}
+
+fn finish_synchronized_update(draw_result: Result<()>, end_result: Result<()>) -> Result<()> {
+    match (draw_result, end_result) {
+        (Err(err), _) => Err(err),
+        (Ok(()), Err(err)) => Err(err),
+        (Ok(()), Ok(())) => Ok(()),
     }
 }
 
@@ -509,6 +519,7 @@ pub struct Tui {
     alt_screen_enabled: bool,
     // Keeps unmanaged process stderr writes out of the inline viewport.
     _stderr_guard: terminal_stderr::TerminalStderrGuard,
+    terminal_sideband: TerminalSidebandEmitter,
 }
 
 struct PendingHistoryLines {
@@ -561,6 +572,7 @@ impl Tui {
             is_zellij,
             alt_screen_enabled: true,
             _stderr_guard: stderr_guard,
+            terminal_sideband: TerminalSidebandEmitter::from_env(),
         }
     }
 
@@ -584,6 +596,17 @@ impl Tui {
 
     pub fn enhanced_keys_supported(&self) -> bool {
         self.enhanced_keys_supported
+    }
+
+    pub fn emit_terminal_sideband(&mut self, state: TerminalSidebandState) -> Result<()> {
+        if !self.terminal_sideband.is_enabled() {
+            return Ok(());
+        }
+        let sequence = self
+            .terminal_sideband
+            .encode(state)
+            .map_err(std::io::Error::other)?;
+        self.terminal.write_raw(sequence.as_bytes())
     }
 
     pub fn is_alt_screen_active(&self) -> bool {
@@ -856,7 +879,8 @@ impl Tui {
 
         ensure_virtual_terminal_processing()?;
 
-        stdout().sync_update(|_| {
+        self.terminal.begin_synchronized_update()?;
+        let draw_result = (|| {
             #[cfg(unix)]
             if let Some(prepared) = prepared_resume.take() {
                 prepared.apply(&mut self.terminal)?;
@@ -910,7 +934,9 @@ impl Tui {
             terminal.draw(|frame| {
                 draw_fn(frame);
             })
-        })?
+        })();
+        let end_result = self.terminal.end_synchronized_update();
+        finish_synchronized_update(draw_result, end_result)
     }
 
     pub fn draw_ambient_pet_image(
@@ -988,7 +1014,8 @@ impl Tui {
 
         ensure_virtual_terminal_processing()?;
 
-        stdout().sync_update(|_| {
+        self.terminal.begin_synchronized_update()?;
+        let draw_result = (|| {
             #[cfg(unix)]
             if let Some(prepared) = prepared_resume.take() {
                 prepared.apply(&mut self.terminal)?;
@@ -1024,7 +1051,9 @@ impl Tui {
             terminal.draw(|frame| {
                 draw_fn(frame);
             })
-        })?
+        })();
+        let end_result = self.terminal.end_synchronized_update();
+        finish_synchronized_update(draw_result, end_result)
     }
 
     fn pending_viewport_area(&mut self) -> Result<Option<Rect>> {

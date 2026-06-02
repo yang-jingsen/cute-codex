@@ -69,6 +69,14 @@ impl App {
                     .pending_app_server_requests
                     .resolve_notification(&notification.request_id)
                 {
+                    self.chat_widget
+                        .emit_approval_resolved_notification(&request);
+                    if let Ok(thread_id) =
+                        codex_protocol::ThreadId::from_string(notification.thread_id.as_str())
+                    {
+                        self.chat_widget
+                            .clear_waiting_approval_idle_state_for_thread(thread_id);
+                    }
                     self.chat_widget.dismiss_app_server_request(&request);
                 }
             }

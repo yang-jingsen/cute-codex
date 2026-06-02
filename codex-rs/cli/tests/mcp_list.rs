@@ -9,16 +9,48 @@ use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use serde_json::Value as JsonValue;
 use serde_json::json;
+use serial_test::serial;
 use tempfile::TempDir;
+
+struct EnvVarGuard {
+    key: &'static str,
+    old: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn remove(key: &'static str) -> Self {
+        let old = std::env::var_os(key);
+        unsafe { std::env::remove_var(key) };
+        Self { key, old }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match self.old.take() {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+}
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
     let mut cmd = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
     cmd.env("CODEX_HOME", codex_home);
+    cmd.env_remove("CODEX_CONFIG_FILE");
+    cmd.env_remove("CODEX_AUTH_FILE");
+    cmd.env_remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
     Ok(cmd)
 }
 
 #[test]
+#[serial(mcp_list_env)]
 fn list_shows_empty_state() -> Result<()> {
+    let _config = EnvVarGuard::remove("CODEX_CONFIG_FILE");
+    let _auth = EnvVarGuard::remove("CODEX_AUTH_FILE");
+    let _status = EnvVarGuard::remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
     let codex_home = TempDir::new()?;
 
     let mut cmd = codex_command(codex_home.path())?;
@@ -31,7 +63,11 @@ fn list_shows_empty_state() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial(mcp_list_env)]
 async fn list_and_get_render_expected_output() -> Result<()> {
+    let _config = EnvVarGuard::remove("CODEX_CONFIG_FILE");
+    let _auth = EnvVarGuard::remove("CODEX_AUTH_FILE");
+    let _status = EnvVarGuard::remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
     let codex_home = TempDir::new()?;
 
     let mut add = codex_command(codex_home.path())?;
@@ -126,7 +162,7 @@ async fn list_and_get_render_expected_output() -> Result<()> {
     assert!(stdout.contains("APP_TOKEN=*****"));
     assert!(stdout.contains("WORKSPACE_ID=*****"));
     assert!(stdout.contains("enabled: true"));
-    assert!(stdout.contains("remove: codex mcp remove docs"));
+    assert!(stdout.contains("remove: cute-codex mcp remove docs"));
 
     let mut get_json_cmd = codex_command(codex_home.path())?;
     get_json_cmd
@@ -139,7 +175,11 @@ async fn list_and_get_render_expected_output() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial(mcp_list_env)]
 async fn get_disabled_server_shows_single_line() -> Result<()> {
+    let _config = EnvVarGuard::remove("CODEX_CONFIG_FILE");
+    let _auth = EnvVarGuard::remove("CODEX_AUTH_FILE");
+    let _status = EnvVarGuard::remove("CODEX_CUSTOM_STATUS_ITEMS_FILE");
     let codex_home = TempDir::new()?;
 
     let mut add = codex_command(codex_home.path())?;

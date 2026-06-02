@@ -2,6 +2,8 @@ use crate::client::ModelClient;
 use crate::realtime_context::build_realtime_startup_context;
 use crate::realtime_prompt::prepare_realtime_backend_prompt;
 use crate::session::session::Session;
+use crate::util::CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR;
+use crate::util::force_http_transport_enabled;
 use anyhow::Context;
 use async_channel::Receiver;
 use async_channel::RecvError;
@@ -610,6 +612,12 @@ async fn prepare_realtime_start(
     sess: &Arc<Session>,
     params: ConversationStartParams,
 ) -> CodexResult<PreparedRealtimeConversationStart> {
+    if force_http_transport_enabled() {
+        return Err(CodexErr::InvalidRequest(format!(
+            "realtime transport is unavailable while {}=1 is active",
+            CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR
+        )));
+    }
     let provider = sess.provider().await;
     let auth_manager = sess
         .services

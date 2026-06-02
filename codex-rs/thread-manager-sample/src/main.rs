@@ -40,6 +40,7 @@ use codex_core_api::Permissions;
 use codex_core_api::ProjectConfig;
 use codex_core_api::RealtimeAudioConfig;
 use codex_core_api::RealtimeConfig;
+use codex_core_api::SessionPickerProviderFilter;
 use codex_core_api::SessionPickerViewMode;
 use codex_core_api::SessionSource;
 use codex_core_api::TerminalResizeReflowConfig;
@@ -210,6 +211,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         terminal_resize_reflow: TerminalResizeReflowConfig::default(),
         tui_keymap: TuiKeymap::default(),
         tui_session_picker_view: SessionPickerViewMode::Dense,
+        tui_session_picker_provider_filter: SessionPickerProviderFilter::Current,
         tui_vim_mode_default: false,
         cwd: cwd.clone(),
         workspace_roots: vec![cwd],

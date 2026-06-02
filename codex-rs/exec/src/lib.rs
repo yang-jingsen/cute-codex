@@ -56,6 +56,7 @@ use codex_config::ConfigLoadError;
 use codex_config::ConfigLoadOptions;
 use codex_config::LoaderOverrides;
 use codex_config::format_config_error_with_source;
+use codex_config::types::SessionPickerProviderFilter;
 use codex_core::StateDbHandle;
 use codex_core::check_execpolicy_for_warnings;
 use codex_core::config::Config;
@@ -1450,10 +1451,15 @@ fn resume_lookup_model_providers(
     config: &Config,
     args: &crate::cli::ResumeArgs,
 ) -> Option<Vec<String>> {
-    if args.last {
+    if args.last
+        && matches!(
+            config.tui_session_picker_provider_filter,
+            SessionPickerProviderFilter::Current
+        )
+    {
         Some(vec![config.model_provider_id.clone()])
     } else {
-        None
+        Some(Vec::new())
     }
 }
 

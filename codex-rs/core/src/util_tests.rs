@@ -16,6 +16,37 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 
 #[test]
+fn force_http_transport_enabled_parses_truthy_and_falsey_values() {
+    let key = CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR;
+    let old = std::env::var_os(key);
+
+    unsafe {
+        std::env::set_var(key, "1");
+    }
+    assert!(force_http_transport_enabled());
+
+    unsafe {
+        std::env::set_var(key, "true");
+    }
+    assert!(force_http_transport_enabled());
+
+    unsafe {
+        std::env::set_var(key, "0");
+    }
+    assert!(!force_http_transport_enabled());
+
+    unsafe {
+        std::env::remove_var(key);
+    }
+    assert!(!force_http_transport_enabled());
+
+    match old {
+        Some(value) => unsafe { std::env::set_var(key, value) },
+        None => unsafe { std::env::remove_var(key) },
+    }
+}
+
+#[test]
 fn feedback_tags_macro_compiles() {
     #[derive(Debug)]
     struct OnlyDebug;

@@ -7,6 +7,7 @@ use tracing::error;
 
 const INITIAL_DELAY_MS: u64 = 200;
 const BACKOFF_FACTOR: f64 = 2.0;
+pub(crate) const CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR: &str = "CUTE_CODEX_FORCE_HTTP_TRANSPORT";
 
 /// Emit structured feedback metadata as key/value pairs.
 ///
@@ -102,6 +103,16 @@ pub fn resolve_path(base: &Path, path: &PathBuf) -> PathBuf {
         path.clone()
     } else {
         base.join(path)
+    }
+}
+
+pub(crate) fn force_http_transport_enabled() -> bool {
+    match std::env::var(CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => false,
     }
 }
 

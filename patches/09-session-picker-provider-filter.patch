@@ -1,0 +1,854 @@
+diff --git a/codex-rs/config/src/profile_toml.rs b/codex-rs/config/src/profile_toml.rs
+index 5f4c8d62f9..1cbc2fcf69 100644
+--- a/codex-rs/config/src/profile_toml.rs
++++ b/codex-rs/config/src/profile_toml.rs
+@@ -7,6 +7,7 @@ use crate::config_toml::ToolsToml;
+ use crate::types::AnalyticsConfigToml;
+ use crate::types::ApprovalsReviewer;
+ use crate::types::Personality;
++use crate::types::SessionPickerProviderFilter;
+ use crate::types::SessionPickerViewMode;
+ use crate::types::WindowsToml;
+ use codex_features::FeaturesToml;
+@@ -80,6 +81,9 @@ pub struct ProfileTui {
+     /// Preferred layout for resume/fork session picker results.
+     #[serde(default)]
+     pub session_picker_view: Option<SessionPickerViewMode>,
++    /// Whether resume/fork session lookup is limited to the current provider.
++    #[serde(default)]
++    pub session_picker_provider_filter: Option<SessionPickerProviderFilter>,
+ }
+ 
+ impl From<ConfigProfile> for codex_app_server_protocol::Profile {
+diff --git a/codex-rs/config/src/types.rs b/codex-rs/config/src/types.rs
+index 9caf67b4fa..0418d7d83f 100644
+--- a/codex-rs/config/src/types.rs
++++ b/codex-rs/config/src/types.rs
+@@ -82,6 +82,32 @@ impl fmt::Display for SessionPickerViewMode {
+     }
+ }
+ 
++/// Provider filter scope for resume/fork session lookup.
++#[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, PartialEq, Eq, JsonSchema)]
++#[serde(rename_all = "kebab-case")]
++pub enum SessionPickerProviderFilter {
++    /// Only show sessions created with the current model provider.
++    #[default]
++    Current,
++    /// Show sessions across all model providers that share the same CODEX_HOME.
++    All,
++}
++
++impl SessionPickerProviderFilter {
++    pub const fn as_str(self) -> &'static str {
++        match self {
++            Self::Current => "current",
++            Self::All => "all",
++        }
++    }
++}
++
++impl fmt::Display for SessionPickerProviderFilter {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.write_str(self.as_str())
++    }
++}
++
+ /// Determine where Codex should store CLI auth credentials.
+ #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+ #[serde(rename_all = "lowercase")]
+@@ -886,6 +912,10 @@ pub struct Tui {
+     #[serde(default)]
+     pub session_picker_view: Option<SessionPickerViewMode>,
+ 
++    /// Provider filter scope for resume/fork session lookup.
++    #[serde(default)]
++    pub session_picker_provider_filter: Option<SessionPickerProviderFilter>,
++
+     /// Keybinding overrides for the TUI.
+     ///
+     /// This supports rebinding selected actions globally and by context.
+diff --git a/codex-rs/core-api/src/lib.rs b/codex-rs/core-api/src/lib.rs
+index e87ee82f30..253485df4c 100644
+--- a/codex-rs/core-api/src/lib.rs
++++ b/codex-rs/core-api/src/lib.rs
+@@ -16,8 +16,10 @@ pub use codex_config::types::History;
+ pub use codex_config::types::MemoriesConfig;
+ pub use codex_config::types::ModelAvailabilityNuxConfig;
+ pub use codex_config::types::Notice;
++pub use codex_config::types::NotifyServiceSettings;
+ pub use codex_config::types::OAuthCredentialsStoreMode;
+ pub use codex_config::types::OtelConfig;
++pub use codex_config::types::SessionPickerProviderFilter;
+ pub use codex_config::types::SessionPickerViewMode;
+ pub use codex_config::types::ToolSuggestConfig;
+ pub use codex_config::types::TuiKeymap;
+diff --git a/codex-rs/core/config.schema.json b/codex-rs/core/config.schema.json
+index e810ce5f7c..2e738d632f 100644
+--- a/codex-rs/core/config.schema.json
++++ b/codex-rs/core/config.schema.json
+@@ -1918,6 +1918,52 @@
+         }
+       ]
+     },
++    "NotifyServiceEvent": {
++      "enum": [
++        "task_completed",
++        "thinking_too_long",
++        "waiting_approval",
++        "connection_error",
++        "session_exit",
++        "session_started",
++        "session_startup_idle",
++        "user_message_sent",
++        "user_message_dispatched",
++        "turn_started",
++        "turn_completed",
++        "turn_interrupted",
++        "turn_failed",
++        "approval_requested",
++        "approval_resolved",
++        "thread_closed",
++        "context_compacted",
++        "rate_limit_warning",
++        "rate_limit_prompt_shown",
++        "command_execution_started",
++        "command_execution_completed",
++        "patch_apply_started",
++        "patch_apply_completed",
++        "mcp_tool_call_started",
++        "mcp_tool_call_completed",
++        "web_search_started",
++        "web_search_completed",
++        "image_generation_started",
++        "image_generation_completed",
++        "review_started",
++        "review_completed",
++        "hook_started",
++        "hook_completed"
++      ],
++      "type": "string"
++    },
++    "NotifyServiceUserMessageContent": {
++      "enum": [
++        "none",
++        "preview",
++        "full"
++      ],
++      "type": "string"
++    },
+     "OAuthCredentialsStoreMode": {
+       "description": "Determine where Codex should store and read MCP credentials.",
+       "oneOf": [
+@@ -2215,6 +2261,15 @@
+       "additionalProperties": false,
+       "description": "TUI settings supported inside a named profile.",
+       "properties": {
++        "session_picker_provider_filter": {
++          "allOf": [
++            {
++              "$ref": "#/definitions/SessionPickerProviderFilter"
++            }
++          ],
++          "default": null,
++          "description": "Whether resume/fork session lookup is limited to the current provider."
++        },
+         "session_picker_view": {
+           "allOf": [
+             {
+@@ -2515,6 +2570,25 @@
+       },
+       "type": "object"
+     },
++    "SessionPickerProviderFilter": {
++      "description": "Provider filter scope for resume/fork session lookup.",
++      "oneOf": [
++        {
++          "description": "Only show sessions created with the current model provider.",
++          "enum": [
++            "current"
++          ],
++          "type": "string"
++        },
++        {
++          "description": "Show sessions across all model providers that share the same CODEX_HOME.",
++          "enum": [
++            "all"
++          ],
++          "type": "string"
++        }
++      ]
++    },
+     "SessionPickerViewMode": {
+       "description": "Preferred layout for the resume/fork session picker.",
+       "enum": [
+@@ -2727,7 +2801,6 @@
+       "type": "string"
+     },
+     "Tui": {
+-      "additionalProperties": false,
+       "description": "Collection of settings that are specific to the TUI.",
+       "properties": {
+         "alternate_screen": {
+@@ -2905,6 +2978,99 @@
+           "default": true,
+           "description": "Enable desktop notifications from the TUI. Defaults to `true`."
+         },
++        "notify_service_agent_name": {
++          "default": "codex",
++          "description": "Agent name in the notification payload. Default \"codex\".",
++          "type": "string"
++        },
++        "notify_service_approval_timeout_secs": {
++          "default": 30,
++          "description": "Seconds to wait before notifying about an approval prompt. Default 30.",
++          "format": "uint64",
++          "minimum": 0.0,
++          "type": "integer"
++        },
++        "notify_service_composer_idle_timeout_secs": {
++          "default": 600,
++          "description": "Seconds of unchanged composer draft before thinking-too-long fires. Default 600.",
++          "format": "uint64",
++          "minimum": 0.0,
++          "type": "integer"
++        },
++        "notify_service_events": {
++          "default": [
++            "task_completed",
++            "thinking_too_long",
++            "waiting_approval",
++            "connection_error",
++            "session_exit",
++            "session_started",
++            "session_startup_idle",
++            "user_message_sent",
++            "user_message_dispatched",
++            "turn_started",
++            "turn_completed",
++            "turn_interrupted",
++            "turn_failed",
++            "approval_requested",
++            "approval_resolved",
++            "thread_closed",
++            "context_compacted",
++            "rate_limit_warning",
++            "rate_limit_prompt_shown"
++          ],
++          "description": "Notify event allowlist. Defaults preserve the local idle/exit workflow.",
++          "items": {
++            "$ref": "#/definitions/NotifyServiceEvent"
++          },
++          "type": "array"
++        },
++        "notify_service_idle_timeout_secs": {
++          "default": 60,
++          "description": "Seconds of idle before task-completed notification fires. Default 60.",
++          "format": "uint64",
++          "minimum": 0.0,
++          "type": "integer"
++        },
++        "notify_service_min_tokens": {
++          "default": 100,
++          "description": "Minimum total tokens consumed before session_exit notification fires.",
++          "format": "int64",
++          "type": "integer"
++        },
++        "notify_service_startup_idle_timeout_secs": {
++          "default": 180,
++          "description": "Seconds to wait before notifying that a new session received no first user message.",
++          "format": "uint64",
++          "minimum": 0.0,
++          "type": "integer"
++        },
++        "notify_service_token": {
++          "default": null,
++          "description": "Bearer token for the notification endpoint.",
++          "type": "string"
++        },
++        "notify_service_url": {
++          "default": null,
++          "description": "HTTP endpoint for structured notifications. Empty or unset = disabled.",
++          "type": "string"
++        },
++        "notify_service_user_message_content": {
++          "allOf": [
++            {
++              "$ref": "#/definitions/NotifyServiceUserMessageContent"
++            }
++          ],
++          "default": "none",
++          "description": "How much user message content to include in user_message_sent payloads."
++        },
++        "notify_service_user_message_preview_chars": {
++          "default": 200,
++          "description": "Maximum chars in user_message_sent text_preview. Default 200.",
++          "format": "uint",
++          "minimum": 0.0,
++          "type": "integer"
++        },
+         "pet": {
+           "default": null,
+           "description": "Pet id to preselect in the terminal pet picker.\n\nCustom pet ids resolve against CODEX_HOME/pets/<pet-id>/pet.json.",
+@@ -2924,6 +3090,15 @@
+           "description": "Start the TUI in raw scrollback mode for copy-friendly transcript output. Defaults to `false`.",
+           "type": "boolean"
+         },
++        "session_picker_provider_filter": {
++          "allOf": [
++            {
++              "$ref": "#/definitions/SessionPickerProviderFilter"
++            }
++          ],
++          "default": null,
++          "description": "Provider filter scope for resume/fork session lookup."
++        },
+         "session_picker_view": {
+           "allOf": [
+             {
+diff --git a/codex-rs/core/src/config/config_tests.rs b/codex-rs/core/src/config/config_tests.rs
+index 46f29b32a8..c2dc0d2c60 100644
+--- a/codex-rs/core/src/config/config_tests.rs
++++ b/codex-rs/core/src/config/config_tests.rs
+@@ -50,10 +50,12 @@ use codex_config::types::Notice;
+ use codex_config::types::NotificationCondition;
+ use codex_config::types::NotificationMethod;
+ use codex_config::types::Notifications;
++use codex_config::types::NotifyServiceSettings;
+ use codex_config::types::OtelConfig;
+ use codex_config::types::OtelConfigToml;
+ use codex_config::types::OtelExporterKind;
+ use codex_config::types::SandboxWorkspaceWrite;
++use codex_config::types::SessionPickerProviderFilter;
+ use codex_config::types::SessionPickerViewMode;
+ use codex_config::types::SkillsConfig;
+ use codex_config::types::ToolSuggestDisabledTool;
+@@ -571,6 +573,7 @@ fn config_toml_deserializes_model_availability_nux() {
+         cfg.tui.expect("tui config should deserialize"),
+         Tui {
+             notification_settings: TuiNotificationSettings::default(),
++            notify_service_settings: NotifyServiceSettings::default(),
+             animations: true,
+             show_tooltips: true,
+             vim_mode_default: false,
+@@ -583,6 +586,7 @@ fn config_toml_deserializes_model_availability_nux() {
+             pet: None,
+             pet_anchor: TuiPetAnchor::Composer,
+             session_picker_view: None,
++            session_picker_provider_filter: None,
+             keymap: TuiKeymap::default(),
+             model_availability_nux: ModelAvailabilityNuxConfig {
+                 shown_count: HashMap::from([
+@@ -3178,6 +3182,22 @@ session_picker_view = "dense"
+     );
+ }
+ 
++#[test]
++fn tui_session_picker_provider_filter_deserializes_from_toml() {
++    let cfg = r#"
++[tui]
++session_picker_provider_filter = "all"
++"#;
++    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
++    assert_eq!(
++        parsed
++            .tui
++            .as_ref()
++            .and_then(|t| t.session_picker_provider_filter),
++        Some(SessionPickerProviderFilter::All),
++    );
++}
++
+ #[test]
+ fn tui_pet_deserializes_from_toml() {
+     let cfg = r#"
+@@ -3203,6 +3223,21 @@ fn tui_session_picker_view_defaults_to_none() {
+     );
+ }
+ 
++#[test]
++fn tui_session_picker_provider_filter_defaults_to_none() {
++    let cfg = r#"
++[tui]
++"#;
++    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
++    assert_eq!(
++        parsed
++            .tui
++            .as_ref()
++            .and_then(|t| t.session_picker_provider_filter),
++        None,
++    );
++}
++
+ #[test]
+ fn tui_pet_defaults_to_none() {
+     let cfg = r#"
+@@ -3267,6 +3302,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
+         tui,
+         Tui {
+             notification_settings: TuiNotificationSettings::default(),
++            notify_service_settings: NotifyServiceSettings::default(),
+             animations: true,
+             show_tooltips: true,
+             vim_mode_default: false,
+@@ -3279,6 +3315,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
+             pet: None,
+             pet_anchor: TuiPetAnchor::Composer,
+             session_picker_view: None,
++            session_picker_provider_filter: None,
+             keymap: TuiKeymap::default(),
+             model_availability_nux: ModelAvailabilityNuxConfig::default(),
+             terminal_resize_reflow_max_rows: None,
+@@ -3486,6 +3523,66 @@ session_picker_view = "comfortable"
+     );
+ }
+ 
++#[tokio::test]
++async fn runtime_config_resolves_session_picker_provider_filter_default_and_override() {
++    let cfg = Config::load_from_base_config_with_overrides(
++        ConfigToml::default(),
++        ConfigOverrides::default(),
++        tempdir().expect("tempdir").abs(),
++    )
++    .await
++    .expect("load default config");
++
++    assert_eq!(
++        cfg.tui_session_picker_provider_filter,
++        SessionPickerProviderFilter::Current
++    );
++
++    let cfg = Config::load_from_base_config_with_overrides(
++        ConfigToml {
++            tui: Some(Tui {
++                session_picker_provider_filter: Some(SessionPickerProviderFilter::All),
++                ..Default::default()
++            }),
++            ..Default::default()
++        },
++        ConfigOverrides::default(),
++        tempdir().expect("tempdir").abs(),
++    )
++    .await
++    .expect("load root override config");
++
++    assert_eq!(
++        cfg.tui_session_picker_provider_filter,
++        SessionPickerProviderFilter::All
++    );
++
++    let cfg_toml = toml::from_str::<ConfigToml>(
++        r#"profile = "work"
++
++[tui]
++session_picker_provider_filter = "current"
++
++[profiles.work.tui]
++session_picker_provider_filter = "all"
++"#,
++    )
++    .expect("parse profile scoped tui config");
++
++    let cfg = Config::load_from_base_config_with_overrides(
++        cfg_toml,
++        ConfigOverrides::default(),
++        tempdir().expect("tempdir").abs(),
++    )
++    .await
++    .expect("load profile override config");
++
++    assert_eq!(
++        cfg.tui_session_picker_provider_filter,
++        SessionPickerProviderFilter::All
++    );
++}
++
+ #[tokio::test]
+ async fn test_sandbox_config_parsing() {
+     let sandbox_full_access = r#"
+@@ -8256,6 +8353,7 @@ async fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
+             check_for_update_on_startup: true,
+             disable_paste_burst: false,
+             tui_notifications: Default::default(),
++            notify_service: NotifyServiceSettings::default(),
+             animations: true,
+             show_tooltips: true,
+             tui_vim_mode_default: false,
+@@ -8274,6 +8372,7 @@ async fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
+             tui_pet: None,
+             tui_pet_anchor: TuiPetAnchor::Composer,
+             tui_session_picker_view: SessionPickerViewMode::Dense,
++            tui_session_picker_provider_filter: SessionPickerProviderFilter::Current,
+             otel: OtelConfig::default(),
+         },
+         o3_profile_config
+@@ -8735,6 +8834,7 @@ async fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
+         check_for_update_on_startup: true,
+         disable_paste_burst: false,
+         tui_notifications: Default::default(),
++        notify_service: NotifyServiceSettings::default(),
+         animations: true,
+         show_tooltips: true,
+         tui_vim_mode_default: false,
+@@ -8753,6 +8853,7 @@ async fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
+         tui_pet: None,
+         tui_pet_anchor: TuiPetAnchor::Composer,
+         tui_session_picker_view: SessionPickerViewMode::Dense,
++        tui_session_picker_provider_filter: SessionPickerProviderFilter::Current,
+         otel: OtelConfig::default(),
+     };
+ 
+@@ -8903,6 +9004,7 @@ async fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
+         check_for_update_on_startup: true,
+         disable_paste_burst: false,
+         tui_notifications: Default::default(),
++        notify_service: NotifyServiceSettings::default(),
+         animations: true,
+         show_tooltips: true,
+         tui_vim_mode_default: false,
+@@ -8921,6 +9023,7 @@ async fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
+         tui_pet: None,
+         tui_pet_anchor: TuiPetAnchor::Composer,
+         tui_session_picker_view: SessionPickerViewMode::Dense,
++        tui_session_picker_provider_filter: SessionPickerProviderFilter::Current,
+         otel: OtelConfig::default(),
+     };
+ 
+@@ -9056,6 +9159,7 @@ async fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
+         check_for_update_on_startup: true,
+         disable_paste_burst: false,
+         tui_notifications: Default::default(),
++        notify_service: NotifyServiceSettings::default(),
+         animations: true,
+         show_tooltips: true,
+         tui_vim_mode_default: false,
+@@ -9074,6 +9178,7 @@ async fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
+         tui_pet: None,
+         tui_pet_anchor: TuiPetAnchor::Composer,
+         tui_session_picker_view: SessionPickerViewMode::Dense,
++        tui_session_picker_provider_filter: SessionPickerProviderFilter::Current,
+         otel: OtelConfig::default(),
+     };
+ 
+diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
+index 3172e4abf9..37fb92cde4 100644
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -48,6 +48,7 @@ use codex_config::types::Notice;
+ use codex_config::types::NotifyServiceEvent;
+ use codex_config::types::NotifyServiceUserMessageContent;
+ use codex_config::types::OAuthCredentialsStoreMode;
++use codex_config::types::SessionPickerProviderFilter;
+ use codex_config::types::SessionPickerViewMode;
+ use codex_config::types::ToolSuggestConfig;
+ use codex_config::types::ToolSuggestDisabledTool;
+@@ -804,6 +805,9 @@ pub struct Config {
+     /// Preferred layout for resume/fork session picker results.
+     pub tui_session_picker_view: SessionPickerViewMode,
+ 
++    /// Provider filter scope for resume/fork session lookup.
++    pub tui_session_picker_provider_filter: SessionPickerProviderFilter,
++
+     /// Terminal resize-reflow tuning knobs.
+     pub terminal_resize_reflow: TerminalResizeReflowConfig,
+ 
+@@ -3820,6 +3824,16 @@ impl Config {
+                 .and_then(|t| t.session_picker_view)
+                 .or_else(|| cfg.tui.as_ref().and_then(|t| t.session_picker_view))
+                 .unwrap_or_default(),
++            tui_session_picker_provider_filter: config_profile
++                .tui
++                .as_ref()
++                .and_then(|t| t.session_picker_provider_filter)
++                .or_else(|| {
++                    cfg.tui
++                        .as_ref()
++                        .and_then(|t| t.session_picker_provider_filter)
++                })
++                .unwrap_or_default(),
+             terminal_resize_reflow,
+             tui_keymap: cfg
+                 .tui
+diff --git a/codex-rs/exec/src/lib.rs b/codex-rs/exec/src/lib.rs
+index 3db7a51576..0136b8b291 100644
+--- a/codex-rs/exec/src/lib.rs
++++ b/codex-rs/exec/src/lib.rs
+@@ -56,6 +56,7 @@ use codex_config::ConfigLoadError;
+ use codex_config::ConfigLoadOptions;
+ use codex_config::LoaderOverrides;
+ use codex_config::format_config_error_with_source;
++use codex_config::types::SessionPickerProviderFilter;
+ use codex_core::StateDbHandle;
+ use codex_core::check_execpolicy_for_warnings;
+ use codex_core::config::Config;
+@@ -1462,10 +1463,15 @@ fn resume_lookup_model_providers(
+     config: &Config,
+     args: &crate::cli::ResumeArgs,
+ ) -> Option<Vec<String>> {
+-    if args.last {
++    if args.last
++        && matches!(
++            config.tui_session_picker_provider_filter,
++            SessionPickerProviderFilter::Current
++        )
++    {
+         Some(vec![config.model_provider_id.clone()])
+     } else {
+-        None
++        Some(Vec::new())
+     }
+ }
+ 
+diff --git a/codex-rs/exec/src/lib_tests.rs b/codex-rs/exec/src/lib_tests.rs
+index 79d07a0b76..3c22afdd1a 100644
+--- a/codex-rs/exec/src/lib_tests.rs
++++ b/codex-rs/exec/src/lib_tests.rs
+@@ -298,7 +298,16 @@ async fn resume_lookup_model_providers_filters_only_last_lookup() {
+         resume_lookup_model_providers(&config, &last_args),
+         Some(vec!["test-provider".to_string()])
+     );
+-    assert_eq!(resume_lookup_model_providers(&config, &named_args), None);
++    assert_eq!(
++        resume_lookup_model_providers(&config, &named_args),
++        Some(Vec::new())
++    );
++
++    config.tui_session_picker_provider_filter = SessionPickerProviderFilter::All;
++    assert_eq!(
++        resume_lookup_model_providers(&config, &last_args),
++        Some(Vec::new())
++    );
+ }
+ 
+ #[test]
+diff --git a/codex-rs/thread-manager-sample/src/main.rs b/codex-rs/thread-manager-sample/src/main.rs
+index 9fdd6db90f..47769cd9b6 100644
+--- a/codex-rs/thread-manager-sample/src/main.rs
++++ b/codex-rs/thread-manager-sample/src/main.rs
+@@ -31,6 +31,7 @@ use codex_core_api::ModelAvailabilityNuxConfig;
+ use codex_core_api::MultiAgentV2Config;
+ use codex_core_api::NewThread;
+ use codex_core_api::Notice;
++use codex_core_api::NotifyServiceSettings;
+ use codex_core_api::OAuthCredentialsStoreMode;
+ use codex_core_api::OPENAI_PROVIDER_ID;
+ use codex_core_api::Op;
+@@ -40,6 +41,7 @@ use codex_core_api::Permissions;
+ use codex_core_api::ProjectConfig;
+ use codex_core_api::RealtimeAudioConfig;
+ use codex_core_api::RealtimeConfig;
++use codex_core_api::SessionPickerProviderFilter;
+ use codex_core_api::SessionPickerViewMode;
+ use codex_core_api::SessionSource;
+ use codex_core_api::TerminalResizeReflowConfig;
+@@ -196,6 +198,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
+         compact_prompt: None,
+         notify: None,
+         tui_notifications: TuiNotificationSettings::default(),
++        notify_service: NotifyServiceSettings::default(),
+         animations: true,
+         show_tooltips: true,
+         model_availability_nux: ModelAvailabilityNuxConfig::default(),
+@@ -210,6 +213,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
+         terminal_resize_reflow: TerminalResizeReflowConfig::default(),
+         tui_keymap: TuiKeymap::default(),
+         tui_session_picker_view: SessionPickerViewMode::Dense,
++        tui_session_picker_provider_filter: SessionPickerProviderFilter::Current,
+         tui_vim_mode_default: false,
+         cwd: cwd.clone(),
+         workspace_roots: vec![cwd],
+diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
+index b415ada782..f23d34a1de 100644
+--- a/codex-rs/tui/src/lib.rs
++++ b/codex-rs/tui/src/lib.rs
+@@ -42,6 +42,7 @@ use codex_config::CloudRequirementsLoader;
+ use codex_config::ConfigLoadError;
+ use codex_config::LoaderOverrides;
+ use codex_config::format_config_error_with_source;
++use codex_config::types::SessionPickerProviderFilter;
+ use codex_exec_server::EnvironmentManager;
+ use codex_exec_server::ExecServerRuntimePaths;
+ use codex_login::AuthConfig;
+@@ -657,7 +658,7 @@ async fn lookup_session_target_by_name_with_app_server(
+                 limit: Some(100),
+                 sort_key: Some(AppServerThreadSortKey::UpdatedAt),
+                 sort_direction: None,
+-                model_providers: None,
++                model_providers: Some(Vec::new()),
+                 source_kinds: Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode]),
+                 archived: Some(false),
+                 cwd: None,
+@@ -745,11 +746,11 @@ fn latest_session_lookup_params(
+         limit: Some(1),
+         sort_key: Some(AppServerThreadSortKey::UpdatedAt),
+         sort_direction: None,
+-        model_providers: if uses_remote_workspace {
+-            None
+-        } else {
+-            Some(vec![config.model_provider_id.clone()])
+-        },
++        model_providers: session_lookup_model_providers(
++            config.tui_session_picker_provider_filter,
++            uses_remote_workspace,
++            &config.model_provider_id,
++        ),
+         source_kinds: (!include_non_interactive)
+             .then_some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode]),
+         archived: Some(false),
+@@ -759,6 +760,18 @@ fn latest_session_lookup_params(
+     }
+ }
+ 
++fn session_lookup_model_providers(
++    provider_filter: SessionPickerProviderFilter,
++    uses_remote_workspace: bool,
++    model_provider_id: &str,
++) -> Option<Vec<String>> {
++    if uses_remote_workspace || matches!(provider_filter, SessionPickerProviderFilter::All) {
++        Some(Vec::new())
++    } else {
++        Some(vec![model_provider_id.to_string()])
++    }
++}
++
+ fn config_cwd_for_app_server_target(
+     cwd: Option<&Path>,
+     app_server_target: &AppServerTarget,
+@@ -2236,6 +2249,28 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[tokio::test]
++    async fn latest_session_lookup_params_can_include_all_local_providers() -> std::io::Result<()> {
++        let temp_dir = TempDir::new()?;
++        let mut config = build_config(&temp_dir).await?;
++        config.tui_session_picker_provider_filter = SessionPickerProviderFilter::All;
++        let cwd = temp_dir.path().join("project");
++
++        let params = latest_session_lookup_params(
++            /*uses_remote_workspace*/ false,
++            &config,
++            Some(cwd.as_path()),
++            /*include_non_interactive*/ false,
++        );
++
++        assert_eq!(params.model_providers, Some(Vec::new()));
++        assert_eq!(
++            params.cwd,
++            Some(ThreadListCwdFilter::One(cwd.to_string_lossy().to_string()))
++        );
++        Ok(())
++    }
++
+     #[tokio::test]
+     async fn latest_session_lookup_params_omit_local_filters_for_remote_sessions()
+     -> std::io::Result<()> {
+@@ -2247,7 +2282,7 @@ mod tests {
+             /*include_non_interactive*/ false,
+         );
+ 
+-        assert_eq!(params.model_providers, None);
++        assert_eq!(params.model_providers, Some(Vec::new()));
+         assert_eq!(params.cwd, None);
+         Ok(())
+     }
+@@ -2266,7 +2301,7 @@ mod tests {
+             /*include_non_interactive*/ false,
+         );
+ 
+-        assert_eq!(params.model_providers, None);
++        assert_eq!(params.model_providers, Some(Vec::new()));
+         assert_eq!(
+             params.cwd,
+             Some(ThreadListCwdFilter::One(String::from("repo/on/server")))
+diff --git a/codex-rs/tui/src/resume_picker.rs b/codex-rs/tui/src/resume_picker.rs
+index 3dbc2c3da6..35d2f3deeb 100644
+--- a/codex-rs/tui/src/resume_picker.rs
++++ b/codex-rs/tui/src/resume_picker.rs
+@@ -37,6 +37,7 @@ use codex_app_server_protocol::ThreadListCwdFilter;
+ use codex_app_server_protocol::ThreadListParams;
+ use codex_app_server_protocol::ThreadSortKey;
+ use codex_app_server_protocol::ThreadSourceKind;
++use codex_config::types::SessionPickerProviderFilter;
+ use codex_config::types::SessionPickerViewMode;
+ use codex_protocol::ThreadId;
+ use codex_utils_path as path_utils;
+@@ -525,7 +526,12 @@ fn local_picker_cwd_filter(
+ }
+ 
+ fn picker_provider_filter(config: &Config, uses_remote_workspace: bool) -> ProviderFilter {
+-    if uses_remote_workspace {
++    if uses_remote_workspace
++        || matches!(
++            config.tui_session_picker_provider_filter,
++            SessionPickerProviderFilter::All
++        )
++    {
+         ProviderFilter::Any
+     } else {
+         ProviderFilter::MatchDefault(config.model_provider_id.to_string())
+@@ -1830,7 +1836,7 @@ fn thread_list_params(
+         sort_key: Some(sort_key),
+         sort_direction: None,
+         model_providers: match provider_filter {
+-            ProviderFilter::Any => None,
++            ProviderFilter::Any => Some(Vec::new()),
+             ProviderFilter::MatchDefault(default_provider) => Some(vec![default_provider]),
+         },
+         source_kinds: (!include_non_interactive)
+@@ -3543,7 +3549,7 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn remote_thread_list_params_omit_provider_filter() {
++    fn remote_thread_list_params_request_any_provider() {
+         let params = thread_list_params(
+             Some(String::from("cursor-1")),
+             Some(Path::new("repo/on/server")),
+@@ -3553,7 +3559,7 @@ mod tests {
+         );
+ 
+         assert_eq!(params.cursor, Some(String::from("cursor-1")));
+-        assert_eq!(params.model_providers, None);
++        assert_eq!(params.model_providers, Some(Vec::new()));
+         assert_eq!(
+             params.source_kinds,
+             Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode])
+@@ -3575,10 +3581,35 @@ mod tests {
+         );
+ 
+         assert_eq!(params.cursor, Some(String::from("cursor-1")));
+-        assert_eq!(params.model_providers, None);
++        assert_eq!(params.model_providers, Some(Vec::new()));
+         assert_eq!(params.source_kinds, None);
+     }
+ 
++    #[tokio::test]
++    async fn picker_provider_filter_can_include_all_local_providers() {
++        let codex_home = tempdir().expect("create temp codex home");
++        let mut config = crate::legacy_core::config::ConfigBuilder::default()
++            .codex_home(codex_home.path().to_path_buf())
++            .build()
++            .await
++            .expect("build config");
++        config.model_provider_id = "custom-provider".to_string();
++
++        match picker_provider_filter(&config, /*uses_remote_workspace*/ false) {
++            ProviderFilter::MatchDefault(provider) => assert_eq!(provider, "custom-provider"),
++            ProviderFilter::Any => panic!("default local picker should match current provider"),
++        }
++
++        config.tui_session_picker_provider_filter = SessionPickerProviderFilter::All;
++
++        match picker_provider_filter(&config, /*uses_remote_workspace*/ false) {
++            ProviderFilter::Any => {}
++            ProviderFilter::MatchDefault(provider) => {
++                panic!("all-provider picker should not filter by {provider}")
++            }
++        }
++    }
++
+     #[test]
+     fn remote_picker_sends_cwd_filter_without_local_post_filtering() {
+         let recorded_requests: Arc<Mutex<Vec<PageLoadRequest>>> = Arc::new(Mutex::new(Vec::new()));

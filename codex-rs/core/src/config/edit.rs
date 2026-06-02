@@ -689,7 +689,8 @@ fn write_skill_config_selector(table: &mut TomlTable, selector: &SkillConfigSele
 
 /// Persist edits using a blocking strategy.
 pub fn apply_blocking(codex_home: &Path, edits: &[ConfigEdit]) -> anyhow::Result<()> {
-    let config_path = codex_home.join(CONFIG_TOML_FILE);
+    let config_path = super::resolve_user_config_path(codex_home)
+        .unwrap_or_else(|_| codex_home.join(CONFIG_TOML_FILE));
     apply_blocking_to_resolved_file(&config_path, edits)
 }
 

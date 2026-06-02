@@ -35,7 +35,6 @@ use codex_utils_approval_presets::ApprovalPreset;
 use crate::app_command::AppCommand;
 use crate::app_server_session::AppServerStartedThread;
 use crate::bottom_pane::ApprovalRequest;
-use crate::bottom_pane::StatusLineItem;
 use crate::bottom_pane::TerminalTitleItem;
 use crate::chatwidget::UserMessage;
 use codex_app_server_protocol::AskForApproval;
@@ -151,6 +150,16 @@ pub(crate) enum AppEvent {
     SubmitThreadOp {
         thread_id: ThreadId,
         op: AppCommand,
+    },
+
+    /// Fire the notify-service idle timer for the current chat widget generation.
+    IdleNotifyTimerFired {
+        generation: u64,
+    },
+
+    /// Fire the startup-idle notify-service timer for the current chat widget generation.
+    SessionStartupIdleTimerFired {
+        generation: u64,
     },
 
     /// Deliver a synthetic history lookup response to a specific thread channel.
@@ -948,7 +957,7 @@ pub(crate) enum AppEvent {
     },
     /// Apply a user-confirmed status-line item ordering/selection.
     StatusLineSetup {
-        items: Vec<StatusLineItem>,
+        ids: Vec<String>,
         use_theme_colors: bool,
     },
     /// Dismiss the status-line setup UI without changing config.

@@ -1,0 +1,149 @@
+diff --git a/codex-rs/core/src/config/edit.rs b/codex-rs/core/src/config/edit.rs
+index 80b54aeaf0..b83ec01876 100644
+--- a/codex-rs/core/src/config/edit.rs
++++ b/codex-rs/core/src/config/edit.rs
+@@ -1010,7 +1010,8 @@ pub fn apply_blocking(
+         return Ok(());
+     }
+ 
+-    let config_path = codex_home.join(CONFIG_TOML_FILE);
++    let config_path = super::resolve_user_config_path(codex_home)
++        .unwrap_or_else(|_| codex_home.join(CONFIG_TOML_FILE));
+     let write_paths = resolve_symlink_write_paths(&config_path)?;
+     let serialized = match write_paths.read_path {
+         Some(path) => match std::fs::read_to_string(&path) {
+diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
+index c5965d389e..290be6dc3b 100644
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -172,6 +172,18 @@ const LOCAL_DEV_BUILD_VERSION: &str = "0.0.0";
+ 
+ pub const CONFIG_TOML_FILE: &str = "config.toml";
+ 
++const CODEX_CONFIG_FILE_ENV: &str = "CODEX_CONFIG_FILE";
++
++pub fn resolve_user_config_path(codex_home: &Path) -> anyhow::Result<PathBuf> {
++    if let Ok(val) = std::env::var(CODEX_CONFIG_FILE_ENV) {
++        let trimmed = val.trim();
++        if !trimmed.is_empty() {
++            return Ok(PathBuf::from(trimmed));
++        }
++    }
++    Ok(codex_home.join(CONFIG_TOML_FILE))
++}
++
+ fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<PathBuf> {
+     let raw = std::env::var(codex_state::SQLITE_HOME_ENV).ok()?;
+     let trimmed = raw.trim();
+@@ -498,6 +510,9 @@ pub struct Config {
+     /// TUI notification settings, including enabled events, delivery method, and focus condition.
+     pub tui_notifications: TuiNotificationSettings,
+ 
++    /// HTTP idle notification service settings.
++    pub notify_service: codex_config::types::NotifyServiceSettings,
++
+     /// Enable ASCII animations and shimmer effects in the TUI.
+     pub animations: bool,
+ 
+@@ -2976,6 +2991,40 @@ impl Config {
+                 .as_ref()
+                 .map(|t| t.notification_settings.clone())
+                 .unwrap_or_default(),
++            notify_service: {
++                let mut ns = cfg
++                    .tui
++                    .as_ref()
++                    .map(|t| t.notify_service_settings.clone())
++                    .unwrap_or_default();
++                if let Ok(url) = std::env::var("CODEX_NOTIFY_SERVICE_URL") {
++                    ns.notify_service_url = Some(url).filter(|u| !u.is_empty());
++                }
++                if let Ok(token) = std::env::var("CODEX_NOTIFY_SERVICE_TOKEN") {
++                    ns.notify_service_token = Some(token).filter(|t| !t.is_empty());
++                }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_IDLE_TIMEOUT") {
++                    if let Ok(secs) = val.parse::<u64>() {
++                        ns.notify_service_idle_timeout_secs = secs;
++                    }
++                }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_COMPOSER_IDLE_TIMEOUT") {
++                    if let Ok(secs) = val.parse::<u64>() {
++                        ns.notify_service_composer_idle_timeout_secs = secs;
++                    }
++                }
++                if let Ok(name) = std::env::var("CODEX_NOTIFY_AGENT_NAME") {
++                    if !name.is_empty() {
++                        ns.notify_service_agent_name = name;
++                    }
++                }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_MIN_TOKENS") {
++                    if let Ok(v) = val.parse::<i64>() {
++                        ns.notify_service_min_tokens = v;
++                    }
++                }
++                ns
++            },
+             animations: cfg.tui.as_ref().map(|t| t.animations).unwrap_or(true),
+             show_tooltips: cfg.tui.as_ref().map(|t| t.show_tooltips).unwrap_or(true),
+             model_availability_nux: cfg
+diff --git a/codex-rs/core/src/session/mod.rs b/codex-rs/core/src/session/mod.rs
+index e45db20848..2e47c4332c 100644
+--- a/codex-rs/core/src/session/mod.rs
++++ b/codex-rs/core/src/session/mod.rs
+@@ -1386,10 +1386,22 @@ impl Session {
+         // settings remain session-static.
+         let config_toml_path = {
+             let state = self.state.lock().await;
+-            state
+-                .session_configuration
+-                .codex_home
+-                .join(CONFIG_TOML_FILE)
++            let codex_home = &state.session_configuration.codex_home;
++            match std::env::var("CODEX_CONFIG_FILE") {
++                Ok(val) if !val.trim().is_empty() => {
++                    let p = std::path::Path::new(val.trim());
++                    if p.is_absolute() {
++                        codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(p)
++                            .unwrap_or_else(|_| codex_home.join(CONFIG_TOML_FILE))
++                    } else {
++                        codex_utils_absolute_path::AbsolutePathBuf::resolve_path_against_base(
++                            val.trim(),
++                            codex_home,
++                        )
++                    }
++                }
++                _ => codex_home.join(CONFIG_TOML_FILE),
++            }
+         };
+ 
+         let user_config = match std::fs::read_to_string(&config_toml_path) {
+diff --git a/codex-rs/login/src/auth/storage.rs b/codex-rs/login/src/auth/storage.rs
+index 3a1c8ae6aa..7f2fa6785b 100644
+--- a/codex-rs/login/src/auth/storage.rs
++++ b/codex-rs/login/src/auth/storage.rs
+@@ -82,6 +82,12 @@ impl From<AgentIdentityJwtClaims> for AgentIdentityAuthRecord {
+ }
+ 
+ pub(super) fn get_auth_file(codex_home: &Path) -> PathBuf {
++    if let Ok(val) = std::env::var("CODEX_AUTH_FILE") {
++        let trimmed = val.trim();
++        if !trimmed.is_empty() {
++            return PathBuf::from(trimmed);
++        }
++    }
+     codex_home.join("auth.json")
+ }
+ 
+@@ -161,9 +167,10 @@ const KEYRING_SERVICE: &str = "Codex Auth";
+ 
+ // turns codex_home path into a stable, short key string
+ fn compute_store_key(codex_home: &Path) -> std::io::Result<String> {
+-    let canonical = codex_home
++    let auth_file = get_auth_file(codex_home);
++    let canonical = auth_file
+         .canonicalize()
+-        .unwrap_or_else(|_| codex_home.to_path_buf());
++        .unwrap_or_else(|_| auth_file.clone());
+     let path_str = canonical.to_string_lossy();
+     let mut hasher = Sha256::new();
+     hasher.update(path_str.as_bytes());

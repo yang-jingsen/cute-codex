@@ -1,6 +1,8 @@
 //! Session headers, onboarding guidance, and transcript cards.
 
 use super::*;
+use crate::version::CODEX_CLI_DISPLAY_NAME;
+use crate::version::display_version_label;
 
 pub(crate) const SESSION_HEADER_MAX_INNER_WIDTH: usize = 56; // Just an eyeballed value
 
@@ -337,12 +339,12 @@ impl HistoryCell for SessionHeaderHistoryCell {
 
         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
 
-        // Title line rendered inside the box: ">_ OpenAI Codex (vX)"
+        // Title line rendered inside the box: ">_ cute-codex (vX)"
         let title_spans: Vec<Span<'static>> = vec![
             Span::from(">_ ").dim(),
-            Span::from("OpenAI Codex").bold(),
+            Span::from(CODEX_CLI_DISPLAY_NAME).bold(),
             Span::from(" ").dim(),
-            Span::from(format!("(v{})", self.version)).dim(),
+            Span::from(format!("({})", display_version_label(self.version))).dim(),
         ];
 
         const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
@@ -407,7 +409,10 @@ impl HistoryCell for SessionHeaderHistoryCell {
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
         let mut lines = vec![
-            Line::from(format!("OpenAI Codex (v{})", self.version)),
+            Line::from(format!(
+                "{CODEX_CLI_DISPLAY_NAME} ({})",
+                display_version_label(self.version)
+            )),
             Line::from(format!(
                 "model: {}{}",
                 self.model,

@@ -2137,6 +2137,83 @@ async fn status_line_fast_mode_renders_on_and_off() {
     assert_eq!(status_line_text(&chat), Some("Fast on".to_string()));
 }
 
+struct EnvVarGuard {
+    key: &'static str,
+    original: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let original = std::env::var_os(key);
+        unsafe { std::env::set_var(key, value) };
+        Self { key, original }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match self.original.as_ref() {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn status_line_launch_profile_and_runtime_render_when_set() {
+    let _profile = EnvVarGuard::set("CODEX_LAUNCH_PROFILE", "sample-profile");
+    let _runtime = EnvVarGuard::set("CODEX_LAUNCH_RUNTIME", "docker");
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.tui_status_line = Some(vec![
+        "launch-profile".to_string(),
+        "launch-runtime".to_string(),
+    ]);
+
+    chat.refresh_status_line();
+
+    assert_eq!(
+        status_line_text(&chat),
+        Some("Profile sample-profile · Runtime docker".to_string())
+    );
+}
+
+#[tokio::test]
+async fn status_line_custom_catalog_item_renders_when_selected() {
+    let tempdir = tempdir().expect("tempdir");
+    let catalog_path = tempdir.path().join("custom-status-items.json");
+    std::fs::write(
+        &catalog_path,
+        r##"{
+  "items": [
+    {
+      "id": "custom:profile",
+      "title": "Profile",
+      "description": "Launcher profile label",
+      "source": { "kind": "launch_profile" },
+      "render": { "kind": "label_value", "label": "Profile" },
+      "style": { "fg": "#F6A3C8", "bold": true }
+    }
+  ]
+}"##,
+    )
+    .expect("write catalog");
+
+    let _catalog = EnvVarGuard::set(
+        "CODEX_CUSTOM_STATUS_ITEMS_FILE",
+        catalog_path.to_string_lossy().as_ref(),
+    );
+    let _profile = EnvVarGuard::set("CODEX_LAUNCH_PROFILE", "sample-profile");
+
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.config.tui_status_line = Some(vec!["custom:profile".to_string()]);
+
+    chat.refresh_status_line();
+
+    assert_eq!(status_line_text(&chat), Some("Profile sample-profile".to_string()));
+}
+
 #[tokio::test]
 async fn status_line_fast_mode_footer_snapshot() {
     use ratatui::Terminal;

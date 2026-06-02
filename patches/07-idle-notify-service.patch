@@ -1,0 +1,2107 @@
+diff --git a/codex-rs/config/src/types.rs b/codex-rs/config/src/types.rs
+index c9ec732a02..30a6dfd3f4 100644
+--- a/codex-rs/config/src/types.rs
++++ b/codex-rs/config/src/types.rs
+@@ -581,6 +581,121 @@ pub struct TuiNotificationSettings {
+     pub condition: NotificationCondition,
+ }
+ 
++#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema)]
++#[serde(rename_all = "snake_case")]
++pub enum NotifyServiceEvent {
++    TaskCompleted,
++    ThinkingTooLong,
++    WaitingApproval,
++    ConnectionError,
++    SessionExit,
++    SessionStarted,
++    UserMessageSent,
++    TurnStarted,
++    TurnCompleted,
++    TurnInterrupted,
++    TurnFailed,
++    ApprovalRequested,
++    HookStarted,
++    HookCompleted,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema)]
++#[serde(rename_all = "snake_case")]
++pub enum NotifyServiceUserMessageContent {
++    #[default]
++    None,
++    Preview,
++    Full,
++}
++
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
++pub struct NotifyServiceSettings {
++    /// HTTP endpoint for idle notifications. Empty or unset = disabled.
++    #[serde(default)]
++    pub notify_service_url: Option<String>,
++
++    /// Bearer token for the notification endpoint.
++    #[serde(default)]
++    pub notify_service_token: Option<String>,
++
++    /// Seconds of idle before notification fires. Default 60.
++    #[serde(default = "default_idle_timeout_secs")]
++    pub notify_service_idle_timeout_secs: u64,
++
++    /// Seconds of unchanged composer draft before notification fires. Default 600.
++    #[serde(default = "default_composer_idle_timeout_secs")]
++    pub notify_service_composer_idle_timeout_secs: u64,
++
++    /// Seconds to wait before notifying about an approval prompt. Default 30.
++    #[serde(default = "default_approval_timeout_secs")]
++    pub notify_service_approval_timeout_secs: u64,
++
++    /// Agent name in the notification payload. Default "codex".
++    #[serde(default = "default_notify_agent_name")]
++    pub notify_service_agent_name: String,
++
++    /// Minimum total tokens consumed before session_exit notification fires.
++    #[serde(default = "default_notify_min_tokens")]
++    pub notify_service_min_tokens: i64,
++
++    /// Notify event allowlist. Defaults preserve the original idle/exit behavior.
++    #[serde(default = "default_notify_events")]
++    pub notify_service_events: Vec<NotifyServiceEvent>,
++
++    /// How much user message content to include in user_message_sent payloads.
++    #[serde(default)]
++    pub notify_service_user_message_content: NotifyServiceUserMessageContent,
++
++    /// Maximum chars in user_message_sent text_preview. Default 200.
++    #[serde(default = "default_notify_user_message_preview_chars")]
++    pub notify_service_user_message_preview_chars: usize,
++}
++
++fn default_idle_timeout_secs() -> u64 {
++    60
++}
++fn default_composer_idle_timeout_secs() -> u64 {
++    600
++}
++fn default_approval_timeout_secs() -> u64 {
++    30
++}
++fn default_notify_agent_name() -> String {
++    "codex".to_string()
++}
++fn default_notify_min_tokens() -> i64 {
++    100
++}
++fn default_notify_events() -> Vec<NotifyServiceEvent> {
++    vec![
++        NotifyServiceEvent::TaskCompleted,
++        NotifyServiceEvent::ThinkingTooLong,
++        NotifyServiceEvent::WaitingApproval,
++        NotifyServiceEvent::SessionExit,
++    ]
++}
++fn default_notify_user_message_preview_chars() -> usize {
++    200
++}
++
++impl Default for NotifyServiceSettings {
++    fn default() -> Self {
++        Self {
++            notify_service_url: None,
++            notify_service_token: None,
++            notify_service_idle_timeout_secs: default_idle_timeout_secs(),
++            notify_service_composer_idle_timeout_secs: default_composer_idle_timeout_secs(),
++            notify_service_approval_timeout_secs: default_approval_timeout_secs(),
++            notify_service_agent_name: default_notify_agent_name(),
++            notify_service_min_tokens: default_notify_min_tokens(),
++            notify_service_events: default_notify_events(),
++            notify_service_user_message_content: NotifyServiceUserMessageContent::default(),
++            notify_service_user_message_preview_chars: default_notify_user_message_preview_chars(),
++        }
++    }
++}
++
+ #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
+ #[schemars(deny_unknown_fields)]
+ pub struct ModelAvailabilityNuxConfig {
+@@ -599,6 +714,9 @@ pub struct Tui {
+     #[serde(default, flatten)]
+     pub notification_settings: TuiNotificationSettings,
+ 
++    #[serde(default, flatten)]
++    pub notify_service_settings: NotifyServiceSettings,
++
+     /// Enable animations (welcome screen, shimmer effects, spinners).
+     /// Defaults to `true`.
+     #[serde(default = "default_true")]
+diff --git a/codex-rs/core/src/config/mod.rs b/codex-rs/core/src/config/mod.rs
+index 290be6dc3b..2f5be0122e 100644
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -43,6 +43,8 @@ use codex_config::types::McpServerTransportConfig;
+ use codex_config::types::MemoriesConfig;
+ use codex_config::types::ModelAvailabilityNuxConfig;
+ use codex_config::types::Notice;
++use codex_config::types::NotifyServiceEvent;
++use codex_config::types::NotifyServiceUserMessageContent;
+ use codex_config::types::OAuthCredentialsStoreMode;
+ use codex_config::types::OtelConfig;
+ use codex_config::types::OtelConfigToml;
+@@ -198,6 +200,53 @@ fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<PathBuf> {
+     }
+ }
+ 
++fn parse_notify_service_event(value: &str) -> Option<NotifyServiceEvent> {
++    match value.trim().replace('-', "_").as_str() {
++        "task_completed" => Some(NotifyServiceEvent::TaskCompleted),
++        "thinking_too_long" => Some(NotifyServiceEvent::ThinkingTooLong),
++        "waiting_approval" => Some(NotifyServiceEvent::WaitingApproval),
++        "connection_error" => Some(NotifyServiceEvent::ConnectionError),
++        "session_exit" => Some(NotifyServiceEvent::SessionExit),
++        "session_started" => Some(NotifyServiceEvent::SessionStarted),
++        "user_message_sent" => Some(NotifyServiceEvent::UserMessageSent),
++        "turn_started" => Some(NotifyServiceEvent::TurnStarted),
++        "turn_completed" => Some(NotifyServiceEvent::TurnCompleted),
++        "turn_interrupted" => Some(NotifyServiceEvent::TurnInterrupted),
++        "turn_failed" => Some(NotifyServiceEvent::TurnFailed),
++        "approval_requested" => Some(NotifyServiceEvent::ApprovalRequested),
++        "hook_started" => Some(NotifyServiceEvent::HookStarted),
++        "hook_completed" => Some(NotifyServiceEvent::HookCompleted),
++        "" => None,
++        other => {
++            tracing::warn!(event = other, "ignoring unknown CODEX_NOTIFY_EVENTS entry");
++            None
++        }
++    }
++}
++
++fn parse_notify_service_events(value: &str) -> Vec<NotifyServiceEvent> {
++    value
++        .split(',')
++        .filter_map(parse_notify_service_event)
++        .collect()
++}
++
++fn parse_notify_user_message_content(value: &str) -> Option<NotifyServiceUserMessageContent> {
++    match value.trim().replace('-', "_").as_str() {
++        "none" => Some(NotifyServiceUserMessageContent::None),
++        "preview" => Some(NotifyServiceUserMessageContent::Preview),
++        "full" => Some(NotifyServiceUserMessageContent::Full),
++        "" => None,
++        other => {
++            tracing::warn!(
++                mode = other,
++                "ignoring unknown CODEX_NOTIFY_USER_MESSAGE_CONTENT value"
++            );
++            None
++        }
++    }
++}
++
+ fn resolve_cli_auth_credentials_store_mode(
+     configured: AuthCredentialsStoreMode,
+     package_version: &str,
+@@ -3013,6 +3062,11 @@ impl Config {
+                         ns.notify_service_composer_idle_timeout_secs = secs;
+                     }
+                 }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_APPROVAL_TIMEOUT") {
++                    if let Ok(secs) = val.parse::<u64>() {
++                        ns.notify_service_approval_timeout_secs = secs;
++                    }
++                }
+                 if let Ok(name) = std::env::var("CODEX_NOTIFY_AGENT_NAME") {
+                     if !name.is_empty() {
+                         ns.notify_service_agent_name = name;
+@@ -3023,6 +3077,19 @@ impl Config {
+                         ns.notify_service_min_tokens = v;
+                     }
+                 }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_EVENTS") {
++                    ns.notify_service_events = parse_notify_service_events(&val);
++                }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_USER_MESSAGE_CONTENT")
++                    && let Some(mode) = parse_notify_user_message_content(&val)
++                {
++                    ns.notify_service_user_message_content = mode;
++                }
++                if let Ok(val) = std::env::var("CODEX_NOTIFY_USER_MESSAGE_PREVIEW_CHARS")
++                    && let Ok(chars) = val.parse::<usize>()
++                {
++                    ns.notify_service_user_message_preview_chars = chars;
++                }
+                 ns
+             },
+             animations: cfg.tui.as_ref().map(|t| t.animations).unwrap_or(true),
+diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
+index 86e40ac5e9..a2406fd097 100644
+--- a/codex-rs/tui/src/app.rs
++++ b/codex-rs/tui/src/app.rs
+@@ -1099,6 +1099,48 @@ See the Codex keymap documentation for supported actions and examples."
+             app.chat_widget.thread_name(),
+             app.chat_widget.rollout_path().as_deref(),
+         );
++        // Fire session-exit idle notification if configured and session was substantial.
++        {
++            let ns = &app.config.notify_service;
++            let usage = app.chat_widget.token_usage();
++            if ns
++                .notify_service_url
++                .as_ref()
++                .is_some_and(|u: &String| !u.is_empty())
++                && usage.total_tokens >= ns.notify_service_min_tokens
++                && crate::notify_service::event_enabled(
++                    ns,
++                    crate::notify_service::IdleNotifyStatus::SessionExit,
++                )
++            {
++                let cwd = app.config.cwd.to_path_buf();
++                let payload = crate::notify_service::build_payload_with_details(
++                    crate::notify_service::IdleNotifyStatus::SessionExit,
++                    &cwd,
++                    &ns.notify_service_agent_name,
++                    app.chat_widget.thread_name().as_deref(),
++                    app.chat_widget.thread_id().map(|id| id.to_string()),
++                    app.chat_widget.session_started_at(),
++                    None,
++                    &usage,
++                    0,
++                    None,
++                );
++                if tokio::time::timeout(
++                    std::time::Duration::from_secs(2),
++                    crate::notify_service::send_idle_notification_once(
++                        ns.notify_service_url.clone().unwrap_or_default(),
++                        ns.notify_service_token.clone(),
++                        payload,
++                    ),
++                )
++                .await
++                .is_err()
++                {
++                    tracing::warn!("timed out sending session-exit idle notification");
++                }
++            }
++        }
+         Ok(AppExitInfo {
+             token_usage: app.token_usage(),
+             thread_id: resumable_thread.as_ref().map(|thread| thread.thread_id),
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index bb87f3cd21..e3a368c45e 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -51,6 +51,9 @@ impl App {
+                 )
+                 .await;
+             }
++            AppEvent::IdleNotifyTimerFired { generation } => {
++                self.chat_widget.handle_idle_notify_timer_fired(generation);
++            }
+             AppEvent::OpenResumePicker => {
+                 let picker_app_server = match crate::start_app_server_for_picker(
+                     &self.config,
+@@ -320,6 +323,13 @@ impl App {
+                     .approve_recent_auto_review_denial(thread_id, id);
+             }
+             AppEvent::SubmitThreadOp { thread_id, op } => {
++                if matches!(
++                    op,
++                    AppCommand::ExecApproval { .. } | AppCommand::PatchApproval { .. }
++                ) {
++                    self.chat_widget
++                        .clear_waiting_approval_idle_state_for_thread(thread_id);
++                }
+                 self.submit_thread_op(app_server, thread_id, op).await?;
+             }
+             AppEvent::ThreadHistoryEntryResponse { thread_id, event } => {
+@@ -1931,6 +1941,7 @@ impl App {
+         app_server: &mut AppServerSession,
+         mode: ExitMode,
+     ) -> AppRunControl {
++        self.chat_widget.clear_idle_state_for_exit();
+         match mode {
+             ExitMode::ShutdownFirst => {
+                 // Mark the thread we are explicitly shutting down for exit so
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 81aabd2042..f1a8c0257e 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -134,6 +134,11 @@ pub(crate) enum AppEvent {
+         op: AppCommand,
+     },
+ 
++    /// Fire the notify-service idle timer for the current chat widget generation.
++    IdleNotifyTimerFired {
++        generation: u64,
++    },
++
+     /// Deliver a synthetic history lookup response to a specific thread channel.
+     ThreadHistoryEntryResponse {
+         thread_id: ThreadId,
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index 8e9e7ab58a..7e93b8c85f 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -116,6 +116,8 @@ use codex_chatgpt::connectors;
+ use codex_config::ConfigLayerStackOrdering;
+ use codex_config::types::ApprovalsReviewer;
+ use codex_config::types::Notifications;
++use codex_config::types::NotifyServiceEvent;
++use codex_config::types::NotifyServiceUserMessageContent;
+ use codex_config::types::WindowsSandboxModeToml;
+ use codex_core_skills::model::SkillMetadata;
+ use codex_features::FEATURES;
+@@ -995,8 +997,12 @@ pub(crate) struct ChatWidget {
+     idle_entered_at: Option<Instant>,
+     idle_notification_status: Option<crate::notify_service::IdleNotifyStatus>,
+     idle_composer_activity_generation: Option<u64>,
++    idle_turn_duration_seconds: Option<u64>,
+     idle_notification_sent: bool,
++    idle_notification_generation: u64,
++    idle_timer_due_at: Option<Instant>,
+     session_started_at: Option<Instant>,
++    notify_service_session_started_sent_for: Option<ThreadId>,
+     /// When `Some`, the user has pressed a quit shortcut and the second press
+     /// must occur before `quit_shortcut_expires_at`.
+     quit_shortcut_expires_at: Option<Instant>,
+@@ -1158,10 +1164,17 @@ enum ShellEscapePolicy {
+     Disallow,
+ }
+ 
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
++enum UserMessageNotifyDisposition {
++    Emit,
++    AlreadyEmitted,
++}
++
+ #[derive(Debug, Clone, PartialEq)]
+ struct QueuedUserMessage {
+     user_message: UserMessage,
+     action: QueuedInputAction,
++    notify_sent: bool,
+ }
+ 
+ impl QueuedUserMessage {
+@@ -1169,12 +1182,29 @@ impl QueuedUserMessage {
+         Self {
+             user_message,
+             action,
++            notify_sent: false,
++        }
++    }
++
++    fn new_with_notify_sent(
++        user_message: UserMessage,
++        action: QueuedInputAction,
++        notify_sent: bool,
++    ) -> Self {
++        Self {
++            user_message,
++            action,
++            notify_sent,
+         }
+     }
+ 
+     fn into_user_message(self) -> UserMessage {
+         self.user_message
+     }
++
++    fn into_parts(self) -> (UserMessage, QueuedInputAction, bool) {
++        (self.user_message, self.action, self.notify_sent)
++    }
+ }
+ 
+ impl From<UserMessage> for QueuedUserMessage {
+@@ -2379,6 +2409,7 @@ impl ChatWidget {
+         self.current_cwd = Some(event.cwd.to_path_buf());
+         self.config.cwd = event.cwd.clone();
+         self.effective_service_tier = event.service_tier;
++        self.maybe_emit_session_started_notification(&event, display, previous_thread_id);
+         if let Err(err) = self
+             .config
+             .permissions
+@@ -2773,6 +2804,7 @@ impl ChatWidget {
+         self.plan_stream_controller = None;
+         self.turn_runtime_metrics = RuntimeMetricsSummary::default();
+         self.session_telemetry.reset_runtime_metrics();
++        self.idle_turn_duration_seconds = None;
+         self.bottom_pane.clear_quit_shortcut_hint();
+         self.quit_shortcut_expires_at = None;
+         self.quit_shortcut_key = None;
+@@ -2837,6 +2869,14 @@ impl ChatWidget {
+             }
+         }
+         self.flush_unified_exec_wait_streak();
++        let turn_duration_seconds = duration_ms
++            .and_then(|duration_ms| u64::try_from(duration_ms).ok())
++            .map(|duration_ms| duration_ms / 1_000)
++            .or_else(|| {
++                self.bottom_pane
++                    .status_widget()
++                    .map(super::status_indicator_widget::StatusIndicatorWidget::elapsed_seconds)
++            });
+         if !from_replay {
+             self.collect_runtime_metrics_delta();
+             let runtime_metrics =
+@@ -2844,18 +2884,9 @@ impl ChatWidget {
+             let show_work_separator = self.had_work_activity
+                 && (self.needs_final_message_separator || runtime_metrics.is_some());
+             if show_work_separator || runtime_metrics.is_some() {
+-                let elapsed_seconds = if show_work_separator {
+-                    duration_ms
+-                        .and_then(|duration_ms| u64::try_from(duration_ms).ok())
+-                        .map(|duration_ms| duration_ms / 1_000)
+-                        .or_else(|| {
+-                            self.bottom_pane
+-                                .status_widget()
+-                                .map(super::status_indicator_widget::StatusIndicatorWidget::elapsed_seconds)
+-                        })
+-                } else {
+-                    None
+-                };
++                let elapsed_seconds = show_work_separator
++                    .then_some(turn_duration_seconds)
++                    .flatten();
+                 self.add_to_history(history_cell::FinalMessageSeparator::new(
+                     elapsed_seconds,
+                     runtime_metrics,
+@@ -2897,6 +2928,19 @@ impl ChatWidget {
+             .current_goal_status
+             .as_ref()
+             .is_some_and(GoalStatusState::is_active);
++        if !from_replay {
++            self.post_notify_service_event(
++                NotifyServiceEvent::TurnCompleted,
++                turn_duration_seconds,
++                0,
++                Some(serde_json::json!({
++                    "turn": {
++                        "follow_up_started": follow_up_started,
++                        "active_goal_continuing": active_goal_continuing
++                    }
++                })),
++            );
++        }
+         // Emit a notification when the agent is truly waiting for the user.
+         // Queued follow-up input and active goal continuation both start the
+         // next turn immediately, so notifying at that boundary would feel like
+@@ -2905,7 +2949,10 @@ impl ChatWidget {
+             self.notify(Notification::AgentTurnComplete {
+                 response: notification_response,
+             });
+-            self.enter_idle_state(crate::notify_service::IdleNotifyStatus::TaskCompleted);
++            self.enter_idle_state(
++                crate::notify_service::IdleNotifyStatus::TaskCompleted,
++                turn_duration_seconds,
++            );
+         }
+ 
+         self.maybe_show_pending_rate_limit_prompt();
+@@ -3325,6 +3372,32 @@ impl ChatWidget {
+         }
+         self.refresh_status_line();
+     }
++    fn emit_turn_failed_notification(&self, message: &str) {
++        self.post_notify_service_event(
++            NotifyServiceEvent::TurnFailed,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "turn": {
++                    "error_message": message
++                }
++            })),
++        );
++    }
++
++    fn emit_turn_interrupted_notification(&self, reason: &TurnAbortReason) {
++        self.post_notify_service_event(
++            NotifyServiceEvent::TurnInterrupted,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "turn": {
++                    "reason": format!("{reason:?}")
++                }
++            })),
++        );
++    }
++
+     /// Finalize any active exec as failed and stop/clear agent-turn UI state.
+     ///
+     /// This does not clear MCP startup tracking, because MCP startup can overlap with turn cleanup
+@@ -3353,6 +3426,7 @@ impl ChatWidget {
+ 
+     fn on_server_overloaded_error(&mut self, message: String) {
+         self.submit_pending_steers_after_interrupt = false;
++        self.emit_turn_failed_notification(&message);
+         self.finalize_turn();
+ 
+         let message = if message.trim().is_empty() {
+@@ -3368,6 +3442,7 @@ impl ChatWidget {
+ 
+     fn on_error(&mut self, message: String) {
+         self.submit_pending_steers_after_interrupt = false;
++        self.emit_turn_failed_notification(&message);
+         self.finalize_turn();
+         self.add_to_history(history_cell::new_error_event(message));
+         self.request_redraw();
+@@ -3378,6 +3453,7 @@ impl ChatWidget {
+ 
+     fn on_cyber_policy_error(&mut self) {
+         self.submit_pending_steers_after_interrupt = false;
++        self.emit_turn_failed_notification("cyber policy blocked the request");
+         self.finalize_turn();
+         self.add_to_history(history_cell::new_cyber_policy_error_event());
+         self.request_redraw();
+@@ -3495,6 +3571,7 @@ impl ChatWidget {
+     /// separated by newlines rather than auto‑submitting the next one.
+     fn on_interrupted_turn(&mut self, reason: TurnAbortReason) {
+         // Finalize, log a gentle prompt, and clear running state.
++        self.emit_turn_interrupted_notification(&reason);
+         self.finalize_turn();
+         let send_pending_steers_immediately = self.submit_pending_steers_after_interrupt;
+         self.submit_pending_steers_after_interrupt = false;
+@@ -4024,6 +4101,7 @@ impl ChatWidget {
+ 
+     fn on_exec_command_begin(&mut self, ev: ExecCommandBeginEvent) {
+         self.flush_answer_stream_with_separator();
++        self.clear_waiting_approval_idle_state();
+         if is_unified_exec_source(ev.source) {
+             self.track_unified_exec_process_begin(&ev);
+             if !self.bottom_pane.is_task_running() {
+@@ -4114,6 +4192,7 @@ impl ChatWidget {
+     }
+ 
+     fn on_patch_apply_begin(&mut self, event: PatchApplyBeginEvent) {
++        self.clear_waiting_approval_idle_state();
+         self.add_to_history(history_cell::new_patch_event(
+             event.changes,
+             &self.config.cwd,
+@@ -4546,6 +4625,20 @@ impl ChatWidget {
+     }
+ 
+     fn on_hook_started(&mut self, event: codex_protocol::protocol::HookStartedEvent) {
++        self.post_notify_service_event(
++            NotifyServiceEvent::HookStarted,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "hook": {
++                    "id": event.run.id.clone(),
++                    "event_name": event.run.event_name,
++                    "handler_type": event.run.handler_type,
++                    "execution_mode": event.run.execution_mode,
++                    "scope": event.run.scope
++                }
++            })),
++        );
+         self.flush_answer_stream_with_separator();
+         self.flush_completed_hook_output();
+         match self.active_hook_cell.as_mut() {
+@@ -4565,6 +4658,22 @@ impl ChatWidget {
+     }
+ 
+     fn on_hook_completed(&mut self, event: codex_protocol::protocol::HookCompletedEvent) {
++        self.post_notify_service_event(
++            NotifyServiceEvent::HookCompleted,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "hook": {
++                    "id": event.run.id.clone(),
++                    "event_name": event.run.event_name,
++                    "handler_type": event.run.handler_type,
++                    "execution_mode": event.run.execution_mode,
++                    "scope": event.run.scope,
++                    "status": event.run.status,
++                    "duration_ms": event.run.duration_ms
++                }
++            })),
++        );
+         let completed = event.run;
+         let completed_existing_run = self
+             .active_hook_cell
+@@ -5012,7 +5121,22 @@ impl ChatWidget {
+         let command = shlex::try_join(ev.command.iter().map(String::as_str))
+             .unwrap_or_else(|_| ev.command.join(" "));
+         self.notify(Notification::ExecApprovalRequested { command });
+-        self.enter_idle_state(crate::notify_service::IdleNotifyStatus::WaitingApproval);
++        self.post_notify_service_event(
++            NotifyServiceEvent::ApprovalRequested,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "approval": {
++                    "kind": "exec",
++                    "command": shlex::try_join(ev.command.iter().map(String::as_str))
++                        .unwrap_or_else(|_| ev.command.join(" "))
++                }
++            })),
++        );
++        self.enter_idle_state(
++            crate::notify_service::IdleNotifyStatus::WaitingApproval,
++            None,
++        );
+ 
+         let available_decisions = ev.effective_available_decisions();
+         let request = ApprovalRequest::Exec {
+@@ -5048,7 +5172,21 @@ impl ChatWidget {
+             cwd: self.config.cwd.to_path_buf(),
+             changes: ev.changes.keys().cloned().collect(),
+         });
+-        self.enter_idle_state(crate::notify_service::IdleNotifyStatus::WaitingApproval);
++        self.post_notify_service_event(
++            NotifyServiceEvent::ApprovalRequested,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "approval": {
++                    "kind": "patch",
++                    "change_count": ev.changes.len()
++                }
++            })),
++        );
++        self.enter_idle_state(
++            crate::notify_service::IdleNotifyStatus::WaitingApproval,
++            None,
++        );
+     }
+ 
+     pub(crate) fn handle_elicitation_request_now(&mut self, ev: ElicitationRequestEvent) {
+@@ -5057,6 +5195,17 @@ impl ChatWidget {
+         self.notify(Notification::ElicitationRequested {
+             server_name: ev.server_name.clone(),
+         });
++        self.post_notify_service_event(
++            NotifyServiceEvent::ApprovalRequested,
++            self.current_turn_duration_seconds(),
++            0,
++            Some(serde_json::json!({
++                "approval": {
++                    "kind": "elicitation",
++                    "server_name": ev.server_name.clone()
++                }
++            })),
++        );
+ 
+         let thread_id = self.thread_id.unwrap_or_default();
+         if let Some(request) = McpServerElicitationFormRequest::from_event(thread_id, ev.clone()) {
+@@ -5418,8 +5567,12 @@ impl ChatWidget {
+             idle_entered_at: None,
+             idle_notification_status: None,
+             idle_composer_activity_generation: None,
++            idle_turn_duration_seconds: None,
+             idle_notification_sent: false,
++            idle_notification_generation: 0,
++            idle_timer_due_at: None,
+             session_started_at: None,
++            notify_service_session_started_sent_for: None,
+             quit_shortcut_expires_at: None,
+             quit_shortcut_key: None,
+             is_review_mode: false,
+@@ -5512,7 +5665,9 @@ impl ChatWidget {
+                 } if modifiers.contains(KeyModifiers::CONTROL) && c.eq_ignore_ascii_case(&'c')
+             )
+         {
++            let previous_activity_generation = self.bottom_pane.composer_activity_generation();
+             self.bottom_pane.handle_key_event(key_event);
++            self.schedule_idle_notification_after_composer_activity(previous_activity_generation);
+             if self.bottom_pane.no_modal_or_popup_active() {
+                 self.maybe_send_next_queued_input();
+             }
+@@ -5642,6 +5797,7 @@ impl ChatWidget {
+             }
+             _ => {
+                 let had_modal_or_popup = !self.bottom_pane.no_modal_or_popup_active();
++                let previous_activity_generation = self.bottom_pane.composer_activity_generation();
+                 match self.bottom_pane.handle_key_event(key_event) {
+                     InputResult::Submitted {
+                         text,
+@@ -5713,6 +5869,9 @@ impl ChatWidget {
+                     }
+                     InputResult::None => {}
+                 }
++                self.schedule_idle_notification_after_composer_activity(
++                    previous_activity_generation,
++                );
+                 if had_modal_or_popup && self.bottom_pane.no_modal_or_popup_active() {
+                     self.maybe_send_next_queued_input();
+                 }
+@@ -5743,7 +5902,9 @@ impl ChatWidget {
+     }
+ 
+     pub(crate) fn apply_external_edit(&mut self, text: String) {
++        let previous_activity_generation = self.bottom_pane.composer_activity_generation();
+         self.bottom_pane.apply_external_edit(text);
++        self.schedule_idle_notification_after_composer_activity(previous_activity_generation);
+         self.refresh_plan_mode_nudge();
+         self.request_redraw();
+     }
+@@ -5754,6 +5915,7 @@ impl ChatWidget {
+ 
+     pub(crate) fn set_external_editor_state(&mut self, state: ExternalEditorState) {
+         self.external_editor_state = state;
++        self.schedule_next_idle_notification_timer();
+     }
+ 
+     pub(crate) fn set_footer_hint_override(&mut self, items: Option<Vec<(String, String)>>) {
+@@ -5885,7 +6047,9 @@ impl ChatWidget {
+     }
+ 
+     pub(crate) fn handle_paste(&mut self, text: String) {
++        let previous_activity_generation = self.bottom_pane.composer_activity_generation();
+         self.bottom_pane.handle_paste(text);
++        self.schedule_idle_notification_after_composer_activity(previous_activity_generation);
+         self.refresh_plan_mode_nudge();
+     }
+ 
+@@ -5946,8 +6110,13 @@ impl ChatWidget {
+         action: QueuedInputAction,
+     ) {
+         if !self.is_session_configured() || self.is_user_turn_pending_or_running() {
++            let notify_sent = self.emit_user_message_sent_notification(&user_message);
+             self.queued_user_messages
+-                .push_back(QueuedUserMessage::new(user_message, action));
++                .push_back(QueuedUserMessage::new_with_notify_sent(
++                    user_message,
++                    action,
++                    notify_sent,
++                ));
+             self.queued_user_message_history_records
+                 .push_back(UserMessageHistoryRecord::UserMessageText);
+             self.refresh_pending_input_preview();
+@@ -5986,14 +6155,26 @@ impl ChatWidget {
+         drain
+     }
+ 
+-    fn submit_queued_shell_prompt(&mut self, user_message: UserMessage) -> QueueDrain {
++    fn submit_queued_shell_prompt(
++        &mut self,
++        user_message: UserMessage,
++        notify_disposition: UserMessageNotifyDisposition,
++    ) -> QueueDrain {
+         match user_message.text.strip_prefix('!') {
+             Some(command) => {
++                if notify_disposition == UserMessageNotifyDisposition::Emit {
++                    self.emit_user_message_sent_notification(&user_message);
++                }
+                 let history_text = user_message.text.clone();
+                 self.submit_shell_command_with_history(command, &history_text)
+             }
+             None => {
+-                self.submit_user_message(user_message);
++                self.submit_user_message_with_history_and_shell_escape_policy_inner(
++                    user_message,
++                    UserMessageHistoryRecord::UserMessageText,
++                    ShellEscapePolicy::Allow,
++                    notify_disposition,
++                );
+                 QueueDrain::Stop
+             }
+         }
+@@ -6037,11 +6218,30 @@ impl ChatWidget {
+         user_message: UserMessage,
+         history_record: UserMessageHistoryRecord,
+         shell_escape_policy: ShellEscapePolicy,
++    ) -> (bool, Option<AppCommand>) {
++        self.submit_user_message_with_history_and_shell_escape_policy_inner(
++            user_message,
++            history_record,
++            shell_escape_policy,
++            UserMessageNotifyDisposition::Emit,
++        )
++    }
++
++    fn submit_user_message_with_history_and_shell_escape_policy_inner(
++        &mut self,
++        user_message: UserMessage,
++        history_record: UserMessageHistoryRecord,
++        shell_escape_policy: ShellEscapePolicy,
++        notify_disposition: UserMessageNotifyDisposition,
+     ) -> (bool, Option<AppCommand>) {
+         if !self.is_session_configured() {
+             tracing::warn!("cannot submit user message before session is configured; queueing");
+             self.queued_user_messages
+-                .push_front(QueuedUserMessage::from(user_message));
++                .push_front(QueuedUserMessage::new_with_notify_sent(
++                    user_message,
++                    QueuedInputAction::Plain,
++                    notify_disposition == UserMessageNotifyDisposition::AlreadyEmitted,
++                ));
+             self.queued_user_message_history_records
+                 .push_front(history_record);
+             self.refresh_pending_input_preview();
+@@ -6072,6 +6272,9 @@ impl ChatWidget {
+             );
+             return (false, None);
+         }
++        if notify_disposition == UserMessageNotifyDisposition::Emit {
++            self.emit_user_message_sent_notification(&user_message);
++        }
+         let UserMessage {
+             text,
+             local_images,
+@@ -6836,10 +7039,19 @@ impl ChatWidget {
+                 self.on_thread_goal_cleared(notification.thread_id.as_str());
+             }
+             ServerNotification::TurnStarted(notification) => {
+-                self.last_turn_id = Some(notification.turn.id);
++                let turn_id = notification.turn.id;
++                self.last_turn_id = Some(turn_id.clone());
+                 self.last_non_retry_error = None;
+                 if !matches!(replay_kind, Some(ReplayKind::ResumeInitialMessages)) {
+                     self.on_task_started();
++                    if replay_kind.is_none() {
++                        self.post_notify_service_event(
++                            NotifyServiceEvent::TurnStarted,
++                            None,
++                            0,
++                            Some(serde_json::json!({ "turn": { "turn_id": turn_id } })),
++                        );
++                    }
+                 }
+             }
+             ServerNotification::TurnCompleted(notification) => {
+@@ -7136,6 +7348,7 @@ impl ChatWidget {
+                     }
+                 } else {
+                     self.last_non_retry_error = None;
++                    self.emit_turn_failed_notification("turn failed without error details");
+                     self.finalize_turn();
+                     self.request_redraw();
+                     self.maybe_send_next_queued_input();
+@@ -7455,10 +7668,18 @@ impl ChatWidget {
+             EventMsg::TurnStarted(event) => {
+                 let turn_id = event.turn_id;
+                 let model_context_window = event.model_context_window;
+-                self.last_turn_id = Some(turn_id);
++                self.last_turn_id = Some(turn_id.clone());
+                 if !is_resume_initial_replay {
+                     self.apply_turn_started_context_window(model_context_window);
+                     self.on_task_started();
++                    if !from_replay {
++                        self.post_notify_service_event(
++                            NotifyServiceEvent::TurnStarted,
++                            None,
++                            0,
++                            Some(serde_json::json!({ "turn": { "turn_id": turn_id } })),
++                        );
++                    }
+                 }
+             }
+             EventMsg::TurnComplete(TurnCompleteEvent {
+@@ -7869,66 +8090,256 @@ impl ChatWidget {
+             .is_some_and(|url| !url.is_empty())
+     }
+ 
+-    fn enter_idle_state(&mut self, status: crate::notify_service::IdleNotifyStatus) {
++    fn notify_service_event_enabled(&self, status: NotifyServiceEvent) -> bool {
++        self.notify_service_enabled()
++            && crate::notify_service::event_enabled(&self.config.notify_service, status)
++    }
++
++    fn notify_service_should_track_idle(&self, status: NotifyServiceEvent) -> bool {
+         if !self.notify_service_enabled() {
+-            return;
++            return false;
++        }
++        match status {
++            NotifyServiceEvent::TaskCompleted => {
++                self.notify_service_event_enabled(NotifyServiceEvent::TaskCompleted)
++                    || self.notify_service_event_enabled(NotifyServiceEvent::ThinkingTooLong)
++            }
++            other => self.notify_service_event_enabled(other),
+         }
+-        self.idle_entered_at = Some(Instant::now());
+-        self.idle_notification_status = Some(status);
+-        self.idle_composer_activity_generation =
+-            Some(self.bottom_pane.composer_activity_generation());
+-        self.idle_notification_sent = false;
+-        let timeout = std::time::Duration::from_secs(
+-            self.config.notify_service.notify_service_idle_timeout_secs,
+-        );
+-        self.frame_requester.schedule_frame_in(timeout);
+     }
+ 
+-    fn clear_idle_state(&mut self) {
+-        self.idle_entered_at = None;
+-        self.idle_notification_status = None;
+-        self.idle_composer_activity_generation = None;
+-        self.idle_notification_sent = false;
++    fn current_turn_duration_seconds(&self) -> Option<u64> {
++        self.bottom_pane
++            .status_widget()
++            .map(super::status_indicator_widget::StatusIndicatorWidget::elapsed_seconds)
+     }
+ 
+-    fn fire_idle_notification(
+-        &mut self,
+-        status: crate::notify_service::IdleNotifyStatus,
++    fn post_notify_service_event(
++        &self,
++        status: NotifyServiceEvent,
++        turn_duration_seconds: Option<u64>,
+         idle_seconds: u64,
+-    ) {
++        event_details: Option<serde_json::Value>,
++    ) -> bool {
+         let ns = &self.config.notify_service;
+         let Some(url) = ns.notify_service_url.as_ref().filter(|u| !u.is_empty()) else {
+-            return;
++            return false;
+         };
++        if !crate::notify_service::event_enabled(ns, status) {
++            return false;
++        }
++
+         let cwd = self
+             .current_cwd
+             .clone()
+             .unwrap_or_else(|| self.config.cwd.as_path().to_path_buf());
+         let usage = self.token_usage();
+-        let payload = crate::notify_service::build_payload(
++        let payload = crate::notify_service::build_payload_with_details(
+             status,
+             &cwd,
+             &ns.notify_service_agent_name,
+             self.thread_name.as_deref(),
++            self.thread_id.map(|id| id.to_string()),
+             self.session_started_at,
++            turn_duration_seconds,
+             &usage,
+             idle_seconds,
++            event_details,
+         );
+         crate::notify_service::send_idle_notification(
+             url.clone(),
+             ns.notify_service_token.clone(),
+             payload,
+         );
+-        self.idle_notification_sent = true;
++        true
++    }
++
++    fn user_message_notify_details(&self, user_message: &UserMessage) -> serde_json::Value {
++        let text_chars = user_message.text.chars().count();
++        let mut details = serde_json::json!({
++            "user_message": {
++                "has_text": !user_message.text.is_empty(),
++                "text_chars": text_chars,
++                "local_image_count": user_message.local_images.len(),
++                "remote_image_count": user_message.remote_image_urls.len(),
++                "mention_count": user_message.mention_bindings.len()
++            }
++        });
++
++        let Some(user_message_details) = details
++            .as_object_mut()
++            .and_then(|root| root.get_mut("user_message"))
++            .and_then(serde_json::Value::as_object_mut)
++        else {
++            return details;
++        };
++
++        match self
++            .config
++            .notify_service
++            .notify_service_user_message_content
++        {
++            NotifyServiceUserMessageContent::None => {}
++            NotifyServiceUserMessageContent::Preview => {
++                let preview_chars = self
++                    .config
++                    .notify_service
++                    .notify_service_user_message_preview_chars;
++                let preview = user_message
++                    .text
++                    .chars()
++                    .take(preview_chars)
++                    .collect::<String>();
++                user_message_details.insert(
++                    "text_preview".to_string(),
++                    serde_json::Value::String(preview),
++                );
++                user_message_details.insert(
++                    "text_truncated".to_string(),
++                    serde_json::Value::Bool(text_chars > preview_chars),
++                );
++            }
++            NotifyServiceUserMessageContent::Full => {
++                user_message_details.insert(
++                    "text".to_string(),
++                    serde_json::Value::String(user_message.text.clone()),
++                );
++            }
++        }
++
++        details
++    }
++
++    fn emit_user_message_sent_notification(&mut self, user_message: &UserMessage) -> bool {
++        self.clear_idle_state();
++        let details = self.user_message_notify_details(user_message);
++        self.post_notify_service_event(NotifyServiceEvent::UserMessageSent, None, 0, Some(details))
++    }
++
++    fn maybe_emit_session_started_notification(
++        &mut self,
++        event: &codex_protocol::protocol::SessionConfiguredEvent,
++        display: SessionConfiguredDisplay,
++        previous_thread_id: Option<ThreadId>,
++    ) {
++        if display != SessionConfiguredDisplay::Normal {
++            return;
++        }
++        if previous_thread_id == Some(event.session_id)
++            || self.notify_service_session_started_sent_for == Some(event.session_id)
++        {
++            return;
++        }
++        let details = serde_json::json!({
++            "session": {
++                "model": event.model.clone(),
++                "model_provider_id": event.model_provider_id.clone(),
++                "resumed": event.initial_messages.is_some(),
++                "forked_from_id": event.forked_from_id.map(|id| id.to_string())
++            }
++        });
++        if self.post_notify_service_event(
++            NotifyServiceEvent::SessionStarted,
++            None,
++            0,
++            Some(details),
++        ) {
++            self.notify_service_session_started_sent_for = Some(event.session_id);
++        }
++    }
++
++    fn enter_idle_state(
++        &mut self,
++        status: crate::notify_service::IdleNotifyStatus,
++        turn_duration_seconds: Option<u64>,
++    ) {
++        if !self.notify_service_should_track_idle(status) {
++            return;
++        }
++        self.idle_entered_at = Some(Instant::now());
++        self.idle_notification_status = Some(status);
++        self.idle_composer_activity_generation =
++            Some(self.bottom_pane.composer_activity_generation());
++        self.idle_turn_duration_seconds = turn_duration_seconds;
++        self.idle_notification_sent = false;
++        self.idle_notification_generation = self.idle_notification_generation.wrapping_add(1);
++        self.idle_timer_due_at = None;
++        self.schedule_next_idle_notification_timer();
++    }
++
++    fn clear_idle_state(&mut self) {
++        self.idle_entered_at = None;
++        self.idle_notification_status = None;
++        self.idle_composer_activity_generation = None;
++        self.idle_turn_duration_seconds = None;
++        self.idle_notification_sent = false;
++        self.idle_notification_generation = self.idle_notification_generation.wrapping_add(1);
++        self.idle_timer_due_at = None;
++    }
++
++    fn clear_waiting_approval_idle_state(&mut self) {
++        if matches!(
++            self.idle_notification_status,
++            Some(crate::notify_service::IdleNotifyStatus::WaitingApproval)
++        ) {
++            self.clear_idle_state();
++        }
++    }
++
++    pub(crate) fn clear_waiting_approval_idle_state_for_thread(&mut self, thread_id: ThreadId) {
++        if self.thread_id == Some(thread_id)
++            || (self.thread_id.is_none() && thread_id == ThreadId::default())
++        {
++            self.clear_waiting_approval_idle_state();
++        }
++    }
++
++    pub(crate) fn clear_idle_state_for_exit(&mut self) {
++        self.clear_idle_state();
++    }
++
++    fn fire_idle_notification(
++        &mut self,
++        status: crate::notify_service::IdleNotifyStatus,
++        idle_seconds: u64,
++    ) {
++        self.idle_notification_sent = self.post_notify_service_event(
++            status,
++            self.idle_turn_duration_seconds,
++            idle_seconds,
++            None,
++        );
++        self.idle_timer_due_at = None;
++    }
++
++    fn idle_timeout_for_status(&self, status: crate::notify_service::IdleNotifyStatus) -> Duration {
++        match status {
++            crate::notify_service::IdleNotifyStatus::WaitingApproval => Duration::from_secs(
++                self.config
++                    .notify_service
++                    .notify_service_approval_timeout_secs,
++            ),
++            _ => Duration::from_secs(self.config.notify_service.notify_service_idle_timeout_secs),
++        }
++    }
++
++    fn idle_task_completed_composer_changed(&self) -> bool {
++        self.idle_composer_activity_generation
++            .is_some_and(|generation| generation != self.bottom_pane.composer_activity_generation())
++            || self.external_editor_state != ExternalEditorState::Closed
++    }
++
++    fn idle_task_completed_composer_idle_started_at(&self, entered_at: Instant) -> Instant {
++        self.bottom_pane
++            .last_composer_activity_at()
++            .filter(|last_activity_at| *last_activity_at > entered_at)
++            .unwrap_or(entered_at)
+     }
+ 
+     fn idle_notification_due_at(
+         &self,
+         now: Instant,
+     ) -> Option<(crate::notify_service::IdleNotifyStatus, u64)> {
+-        let short_timeout = std::time::Duration::from_secs(
+-            self.config.notify_service.notify_service_idle_timeout_secs,
+-        );
+         let entered_at = self.idle_entered_at?;
+         let status = self.idle_notification_status.clone()?;
+         let elapsed = now.checked_duration_since(entered_at)?;
+@@ -7936,37 +8347,35 @@ impl ChatWidget {
+             status,
+             crate::notify_service::IdleNotifyStatus::TaskCompleted
+         ) {
+-            if elapsed >= short_timeout {
++            let timeout = self.idle_timeout_for_status(status);
++            if elapsed >= timeout {
+                 return Some((status, elapsed.as_secs()));
+             }
+             return None;
+         }
+ 
+-        let composer_changed = self
+-            .idle_composer_activity_generation
+-            .is_some_and(|generation| {
+-                generation != self.bottom_pane.composer_activity_generation()
+-            })
+-            || self.external_editor_state != ExternalEditorState::Closed;
+-        if !composer_changed {
+-            if elapsed >= short_timeout {
++        if !self.idle_task_completed_composer_changed() {
++            let short_timeout =
++                Duration::from_secs(self.config.notify_service.notify_service_idle_timeout_secs);
++            if elapsed >= short_timeout
++                && self.notify_service_event_enabled(NotifyServiceEvent::TaskCompleted)
++            {
+                 return Some((status, elapsed.as_secs()));
+             }
+             return None;
+         }
+ 
+-        let long_timeout = std::time::Duration::from_secs(
++        let long_timeout = Duration::from_secs(
+             self.config
+                 .notify_service
+                 .notify_service_composer_idle_timeout_secs,
+         );
+-        let composer_idle_started_at = self
+-            .bottom_pane
+-            .last_composer_activity_at()
+-            .filter(|last_activity_at| *last_activity_at > entered_at)
+-            .unwrap_or(entered_at);
++        let composer_idle_started_at =
++            self.idle_task_completed_composer_idle_started_at(entered_at);
+         let composer_elapsed = now.checked_duration_since(composer_idle_started_at)?;
+-        if composer_elapsed >= long_timeout {
++        if composer_elapsed >= long_timeout
++            && self.notify_service_event_enabled(NotifyServiceEvent::ThinkingTooLong)
++        {
+             return Some((
+                 crate::notify_service::IdleNotifyStatus::ThinkingTooLong,
+                 composer_elapsed.as_secs(),
+@@ -7975,6 +8384,70 @@ impl ChatWidget {
+         None
+     }
+ 
++    fn idle_notification_next_due_at(&self, now: Instant) -> Option<Instant> {
++        if self.idle_notification_sent {
++            return None;
++        }
++        let entered_at = self.idle_entered_at?;
++        let status = self.idle_notification_status.clone()?;
++        if matches!(
++            status,
++            crate::notify_service::IdleNotifyStatus::TaskCompleted
++        ) && self.idle_task_completed_composer_changed()
++        {
++            if !self.notify_service_event_enabled(NotifyServiceEvent::ThinkingTooLong) {
++                return None;
++            }
++            let long_timeout = Duration::from_secs(
++                self.config
++                    .notify_service
++                    .notify_service_composer_idle_timeout_secs,
++            );
++            let started_at = self.idle_task_completed_composer_idle_started_at(entered_at);
++            return started_at.checked_add(long_timeout).or(Some(now));
++        }
++
++        if !self.notify_service_event_enabled(status) {
++            return None;
++        }
++        entered_at
++            .checked_add(self.idle_timeout_for_status(status))
++            .or(Some(now))
++    }
++
++    fn schedule_next_idle_notification_timer(&mut self) {
++        let now = Instant::now();
++        let Some(due_at) = self.idle_notification_next_due_at(now) else {
++            return;
++        };
++        if self
++            .idle_timer_due_at
++            .is_some_and(|scheduled_at| scheduled_at <= due_at && scheduled_at > now)
++        {
++            return;
++        }
++
++        self.idle_timer_due_at = Some(due_at);
++        let delay = due_at.saturating_duration_since(now);
++        let generation = self.idle_notification_generation;
++        let app_event_tx = self.app_event_tx.clone();
++        tokio::spawn(async move {
++            if !delay.is_zero() {
++                tokio::time::sleep(delay).await;
++            }
++            app_event_tx.send(AppEvent::IdleNotifyTimerFired { generation });
++        });
++    }
++
++    fn schedule_idle_notification_after_composer_activity(
++        &mut self,
++        previous_activity_generation: u64,
++    ) {
++        if previous_activity_generation != self.bottom_pane.composer_activity_generation() {
++            self.schedule_next_idle_notification_timer();
++        }
++    }
++
+     fn check_idle_notification_timer(&mut self) {
+         if self.idle_notification_sent {
+             return;
+@@ -7982,43 +8455,17 @@ impl ChatWidget {
+         let now = Instant::now();
+         if let Some((status, idle_seconds)) = self.idle_notification_due_at(now) {
+             self.fire_idle_notification(status, idle_seconds);
+-            return;
++        } else {
++            self.schedule_next_idle_notification_timer();
+         }
++    }
+ 
+-        if !matches!(
+-            self.idle_notification_status,
+-            Some(crate::notify_service::IdleNotifyStatus::TaskCompleted)
+-        ) {
++    pub(crate) fn handle_idle_notify_timer_fired(&mut self, generation: u64) {
++        if generation != self.idle_notification_generation {
+             return;
+         }
+-        let Some(entered_at) = self.idle_entered_at else {
+-            return;
+-        };
+-        let composer_changed = self
+-            .idle_composer_activity_generation
+-            .is_some_and(|generation| {
+-                generation != self.bottom_pane.composer_activity_generation()
+-            })
+-            || self.external_editor_state != ExternalEditorState::Closed;
+-        if !composer_changed {
+-            return;
+-        }
+-        let composer_idle_started_at = self
+-            .bottom_pane
+-            .last_composer_activity_at()
+-            .filter(|last_activity_at| *last_activity_at > entered_at)
+-            .unwrap_or(entered_at);
+-        let long_timeout = std::time::Duration::from_secs(
+-            self.config
+-                .notify_service
+-                .notify_service_composer_idle_timeout_secs,
+-        );
+-        if let Some(elapsed) = now.checked_duration_since(composer_idle_started_at)
+-            && let Some(remaining) = long_timeout.checked_sub(elapsed)
+-            && !remaining.is_zero()
+-        {
+-            self.frame_requester.schedule_frame_in(remaining);
+-        }
++        self.idle_timer_due_at = None;
++        self.check_idle_notification_timer();
+     }
+ 
+     pub(crate) fn session_started_at(&self) -> Option<Instant> {
+@@ -8051,23 +8498,33 @@ impl ChatWidget {
+             let Some((queued_message, history_record)) = self.pop_next_queued_user_message() else {
+                 break;
+             };
+-            match queued_message.action {
++            let (user_message, action, notify_sent) = queued_message.into_parts();
++            let notify_disposition = if notify_sent {
++                UserMessageNotifyDisposition::AlreadyEmitted
++            } else {
++                UserMessageNotifyDisposition::Emit
++            };
++            match action {
+                 QueuedInputAction::Plain => {
+-                    submitted_follow_up = self.submit_user_message_with_history_record(
+-                        queued_message.into_user_message(),
+-                        history_record,
+-                    );
++                    submitted_follow_up = self
++                        .submit_user_message_with_history_and_shell_escape_policy_inner(
++                            user_message,
++                            history_record,
++                            ShellEscapePolicy::Allow,
++                            notify_disposition,
++                        )
++                        .0;
+                     break;
+                 }
+                 QueuedInputAction::ParseSlash => {
+-                    let drain = self.submit_queued_slash_prompt(queued_message.into_user_message());
++                    let drain = self.submit_queued_slash_prompt(user_message, notify_disposition);
+                     if drain == QueueDrain::Stop {
+                         submitted_follow_up = self.is_user_turn_pending_or_running();
+                         break;
+                     }
+                 }
+                 QueuedInputAction::RunShell => {
+-                    let drain = self.submit_queued_shell_prompt(queued_message.into_user_message());
++                    let drain = self.submit_queued_shell_prompt(user_message, notify_disposition);
+                     if drain == QueueDrain::Stop {
+                         submitted_follow_up = self.is_user_turn_pending_or_running();
+                         break;
+diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+index 82f366fbb7..5cec14a134 100644
+--- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
++++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+@@ -725,7 +725,15 @@ impl ChatWidget {
+         }
+     }
+ 
+-    pub(super) fn submit_queued_slash_prompt(&mut self, user_message: UserMessage) -> QueueDrain {
++    pub(super) fn submit_queued_slash_prompt(
++        &mut self,
++        user_message: UserMessage,
++        mut notify_disposition: UserMessageNotifyDisposition,
++    ) -> QueueDrain {
++        if notify_disposition == UserMessageNotifyDisposition::Emit {
++            self.emit_user_message_sent_notification(&user_message);
++            notify_disposition = UserMessageNotifyDisposition::AlreadyEmitted;
++        }
+         let UserMessage {
+             text,
+             local_images,
+@@ -734,24 +742,34 @@ impl ChatWidget {
+             mention_bindings,
+         } = user_message;
+         let Some((name, rest, rest_offset)) = parse_slash_name(&text) else {
+-            self.submit_user_message(UserMessage {
+-                text,
+-                local_images,
+-                remote_image_urls,
+-                text_elements,
+-                mention_bindings,
+-            });
++            self.submit_user_message_with_history_and_shell_escape_policy_inner(
++                UserMessage {
++                    text,
++                    local_images,
++                    remote_image_urls,
++                    text_elements,
++                    mention_bindings,
++                },
++                UserMessageHistoryRecord::UserMessageText,
++                ShellEscapePolicy::Allow,
++                notify_disposition,
++            );
+             return QueueDrain::Stop;
+         };
+ 
+         if name.contains('/') {
+-            self.submit_user_message(UserMessage {
+-                text,
+-                local_images,
+-                remote_image_urls,
+-                text_elements,
+-                mention_bindings,
+-            });
++            self.submit_user_message_with_history_and_shell_escape_policy_inner(
++                UserMessage {
++                    text,
++                    local_images,
++                    remote_image_urls,
++                    text_elements,
++                    mention_bindings,
++                },
++                UserMessageHistoryRecord::UserMessageText,
++                ShellEscapePolicy::Allow,
++                notify_disposition,
++            );
+             return QueueDrain::Stop;
+         }
+ 
+@@ -772,13 +790,18 @@ impl ChatWidget {
+         }
+ 
+         if !cmd.supports_inline_args() {
+-            self.submit_user_message(UserMessage {
+-                text,
+-                local_images,
+-                remote_image_urls,
+-                text_elements,
+-                mention_bindings,
+-            });
++            self.submit_user_message_with_history_and_shell_escape_policy_inner(
++                UserMessage {
++                    text,
++                    local_images,
++                    remote_image_urls,
++                    text_elements,
++                    mention_bindings,
++                },
++                UserMessageHistoryRecord::UserMessageText,
++                ShellEscapePolicy::Allow,
++                notify_disposition,
++            );
+             return QueueDrain::Stop;
+         }
+ 
+diff --git a/codex-rs/tui/src/chatwidget/tests.rs b/codex-rs/tui/src/chatwidget/tests.rs
+index 0748cebf1b..3eb455006c 100644
+--- a/codex-rs/tui/src/chatwidget/tests.rs
++++ b/codex-rs/tui/src/chatwidget/tests.rs
+@@ -271,6 +271,7 @@ mod goal_menu;
+ mod guardian;
+ mod helpers;
+ mod history_replay;
++mod idle_notify;
+ mod mcp_startup;
+ mod permissions;
+ mod plan_mode;
+diff --git a/codex-rs/tui/src/chatwidget/tests/helpers.rs b/codex-rs/tui/src/chatwidget/tests/helpers.rs
+index 74b8a429e2..95cc682524 100644
+--- a/codex-rs/tui/src/chatwidget/tests/helpers.rs
++++ b/codex-rs/tui/src/chatwidget/tests/helpers.rs
+@@ -280,8 +280,12 @@ pub(super) async fn make_chatwidget_manual(
+         idle_entered_at: None,
+         idle_notification_status: None,
+         idle_composer_activity_generation: None,
++        idle_turn_duration_seconds: None,
+         idle_notification_sent: false,
++        idle_notification_generation: 0,
++        idle_timer_due_at: None,
+         session_started_at: None,
++        notify_service_session_started_sent_for: None,
+         quit_shortcut_expires_at: None,
+         quit_shortcut_key: None,
+         is_review_mode: false,
+diff --git a/codex-rs/tui/src/chatwidget/tests/idle_notify.rs b/codex-rs/tui/src/chatwidget/tests/idle_notify.rs
+new file mode 100644
+index 0000000000..a9bada494b
+--- /dev/null
++++ b/codex-rs/tui/src/chatwidget/tests/idle_notify.rs
+@@ -0,0 +1,374 @@
++use super::*;
++use std::collections::HashMap;
++use std::path::PathBuf;
++use std::time::Duration;
++use std::time::Instant;
++
++fn enable_notify_service(chat: &mut ChatWidget) {
++    chat.config.notify_service.notify_service_url = Some("http://127.0.0.1:9/notify".to_string());
++    chat.config.notify_service.notify_service_idle_timeout_secs = 60;
++    chat.config
++        .notify_service
++        .notify_service_composer_idle_timeout_secs = 600;
++    chat.config
++        .notify_service
++        .notify_service_approval_timeout_secs = 30;
++}
++
++fn enter_task_completed_idle(chat: &mut ChatWidget, entered_at: Instant) {
++    chat.idle_entered_at = Some(entered_at);
++    chat.idle_notification_status = Some(crate::notify_service::IdleNotifyStatus::TaskCompleted);
++    chat.idle_composer_activity_generation = Some(chat.bottom_pane.composer_activity_generation());
++    chat.idle_turn_duration_seconds = Some(7);
++    chat.idle_notification_sent = false;
++}
++
++fn enter_waiting_approval_idle(chat: &mut ChatWidget, entered_at: Instant) {
++    chat.idle_entered_at = Some(entered_at);
++    chat.idle_notification_status = Some(crate::notify_service::IdleNotifyStatus::WaitingApproval);
++    chat.idle_composer_activity_generation = Some(chat.bottom_pane.composer_activity_generation());
++    chat.idle_turn_duration_seconds = None;
++    chat.idle_notification_sent = false;
++}
++
++#[tokio::test]
++async fn unchanged_composer_uses_short_idle_notification() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    let entered_at = Instant::now();
++    enter_task_completed_idle(&mut chat, entered_at);
++
++    assert_eq!(
++        chat.idle_notification_due_at(entered_at + Duration::from_secs(60)),
++        Some((crate::notify_service::IdleNotifyStatus::TaskCompleted, 60))
++    );
++}
++
++#[tokio::test]
++async fn edited_then_empty_composer_skips_short_idle_notification() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    let entered_at = Instant::now();
++    enter_task_completed_idle(&mut chat, entered_at);
++
++    chat.bottom_pane.insert_str("x");
++    let _ = chat
++        .bottom_pane
++        .handle_key_event(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
++
++    assert!(chat.bottom_pane.composer_is_empty());
++    assert_eq!(
++        chat.idle_notification_due_at(entered_at + Duration::from_secs(60)),
++        None
++    );
++}
++
++#[tokio::test]
++async fn changed_composer_uses_long_thinking_notification() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    let entered_at = Instant::now();
++    enter_task_completed_idle(&mut chat, entered_at);
++
++    chat.bottom_pane.insert_str("draft");
++    let last_activity = chat
++        .bottom_pane
++        .last_composer_activity_at()
++        .expect("composer activity recorded");
++
++    assert_eq!(
++        chat.idle_notification_due_at(last_activity + Duration::from_secs(600)),
++        Some((
++            crate::notify_service::IdleNotifyStatus::ThinkingTooLong,
++            600
++        ))
++    );
++}
++
++#[tokio::test]
++async fn approval_idle_uses_approval_notification_timeout() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    let entered_at = Instant::now();
++    enter_waiting_approval_idle(&mut chat, entered_at);
++
++    chat.bottom_pane.insert_str("y");
++
++    assert_eq!(
++        chat.idle_notification_due_at(entered_at + Duration::from_secs(29)),
++        None
++    );
++    assert_eq!(
++        chat.idle_notification_due_at(entered_at + Duration::from_secs(30)),
++        Some((crate::notify_service::IdleNotifyStatus::WaitingApproval, 30))
++    );
++}
++
++#[tokio::test]
++async fn approval_response_clears_waiting_approval_idle_timer() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    let thread_id = ThreadId::new();
++    chat.thread_id = Some(thread_id);
++    enter_waiting_approval_idle(&mut chat, Instant::now());
++    let pending_generation = chat.idle_notification_generation;
++
++    chat.clear_waiting_approval_idle_state_for_thread(thread_id);
++
++    assert_eq!(chat.idle_notification_status, None);
++    assert_ne!(chat.idle_notification_generation, pending_generation);
++    chat.handle_idle_notify_timer_fired(pending_generation);
++    assert!(!chat.idle_notification_sent);
++}
++
++#[tokio::test]
++async fn exec_begin_clears_waiting_approval_idle() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    enter_waiting_approval_idle(&mut chat, Instant::now());
++
++    begin_exec(&mut chat, "call-1", "echo ok");
++
++    assert_eq!(chat.idle_notification_status, None);
++}
++
++#[tokio::test]
++async fn patch_apply_begin_clears_waiting_approval_idle() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    enter_waiting_approval_idle(&mut chat, Instant::now());
++
++    let mut changes = HashMap::new();
++    changes.insert(
++        PathBuf::from("foo.txt"),
++        FileChange::Add {
++            content: "hello\n".to_string(),
++        },
++    );
++    chat.handle_codex_event(Event {
++        id: "patch-1".to_string(),
++        msg: EventMsg::PatchApplyBegin(PatchApplyBeginEvent {
++            call_id: "patch-1".to_string(),
++            turn_id: "turn-1".to_string(),
++            auto_approved: true,
++            changes,
++        }),
++    });
++
++    assert_eq!(chat.idle_notification_status, None);
++}
++
++#[tokio::test]
++async fn exit_clear_invalidates_pending_idle_timer() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    enter_task_completed_idle(&mut chat, Instant::now());
++    let pending_generation = chat.idle_notification_generation;
++
++    chat.clear_idle_state_for_exit();
++
++    assert_eq!(chat.idle_notification_status, None);
++    assert_ne!(chat.idle_notification_generation, pending_generation);
++    chat.handle_idle_notify_timer_fired(pending_generation);
++    assert!(!chat.idle_notification_sent);
++}
++
++#[tokio::test]
++async fn idle_state_schedules_app_event_timer_without_draw_tick() {
++    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++    chat.config.notify_service.notify_service_idle_timeout_secs = 0;
++
++    chat.enter_idle_state(
++        crate::notify_service::IdleNotifyStatus::TaskCompleted,
++        Some(7),
++    );
++    let expected_generation = chat.idle_notification_generation;
++
++    let event = tokio::time::timeout(Duration::from_secs(1), rx.recv())
++        .await
++        .expect("idle timer event")
++        .expect("event channel open");
++    match event {
++        AppEvent::IdleNotifyTimerFired { generation } => {
++            assert_eq!(generation, expected_generation);
++        }
++        other => panic!("unexpected event: {other:?}"),
++    }
++}
++
++#[test]
++fn notify_service_defaults_are_real_timeouts() {
++    let defaults = codex_config::types::NotifyServiceSettings::default();
++    assert_eq!(defaults.notify_service_idle_timeout_secs, 60);
++    assert_eq!(defaults.notify_service_composer_idle_timeout_secs, 600);
++    assert_eq!(defaults.notify_service_approval_timeout_secs, 30);
++    assert!(
++        defaults
++            .notify_service_events
++            .contains(&codex_config::types::NotifyServiceEvent::TaskCompleted)
++    );
++    assert!(
++        defaults
++            .notify_service_events
++            .contains(&codex_config::types::NotifyServiceEvent::ThinkingTooLong)
++    );
++    assert!(
++        defaults
++            .notify_service_events
++            .contains(&codex_config::types::NotifyServiceEvent::WaitingApproval)
++    );
++    assert!(
++        defaults
++            .notify_service_events
++            .contains(&codex_config::types::NotifyServiceEvent::SessionExit)
++    );
++    assert!(
++        !defaults
++            .notify_service_events
++            .contains(&codex_config::types::NotifyServiceEvent::UserMessageSent)
++    );
++}
++
++#[test]
++fn payload_includes_turn_and_session_durations() {
++    let cwd = std::path::Path::new("/tmp/cutex-test");
++    let session_started_at = Instant::now() - Duration::from_secs(123);
++
++    let payload = crate::notify_service::build_payload_with_details(
++        crate::notify_service::IdleNotifyStatus::TaskCompleted,
++        cwd,
++        "codex",
++        Some("thread"),
++        None,
++        Some(session_started_at),
++        Some(7),
++        &codex_protocol::protocol::TokenUsage::default(),
++        60,
++        None,
++    );
++
++    assert_eq!(payload.duration_seconds, 7);
++    assert_eq!(payload.turn_duration_seconds, Some(7));
++    assert!(payload.session_duration_seconds >= 123);
++}
++
++#[test]
++fn payload_can_include_thread_id_and_event_details() {
++    let payload = crate::notify_service::build_payload_with_details(
++        crate::notify_service::IdleNotifyStatus::SessionStarted,
++        std::path::Path::new("/tmp/cutex-test"),
++        "codex",
++        Some("thread"),
++        Some("thread-id".to_string()),
++        None,
++        None,
++        &codex_protocol::protocol::TokenUsage::default(),
++        0,
++        Some(serde_json::json!({"session": {"resumed": false}})),
++    );
++
++    assert_eq!(payload.thread_id.as_deref(), Some("thread-id"));
++    assert_eq!(
++        payload
++            .event_details
++            .as_ref()
++            .and_then(|details| details.pointer("/session/resumed"))
++            .and_then(serde_json::Value::as_bool),
++        Some(false)
++    );
++}
++
++#[tokio::test]
++async fn user_message_content_defaults_to_metadata_only() {
++    let (chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    let user_message = UserMessage::from("sample prompt");
++
++    let details = chat.user_message_notify_details(&user_message);
++    let user_message_details = details
++        .pointer("/user_message")
++        .expect("user message details");
++
++    assert_eq!(
++        user_message_details
++            .get("text_chars")
++            .and_then(serde_json::Value::as_u64),
++        Some(13)
++    );
++    assert!(user_message_details.get("text").is_none());
++    assert!(user_message_details.get("text_preview").is_none());
++}
++
++#[tokio::test]
++async fn user_message_content_preview_is_truncated() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    chat.config
++        .notify_service
++        .notify_service_user_message_content =
++        codex_config::types::NotifyServiceUserMessageContent::Preview;
++    chat.config
++        .notify_service
++        .notify_service_user_message_preview_chars = 6;
++    let user_message = UserMessage::from("sample prompt");
++
++    let details = chat.user_message_notify_details(&user_message);
++
++    assert_eq!(
++        details
++            .pointer("/user_message/text_preview")
++            .and_then(serde_json::Value::as_str),
++        Some("sample-token")
++    );
++    assert_eq!(
++        details
++            .pointer("/user_message/text_truncated")
++            .and_then(serde_json::Value::as_bool),
++        Some(true)
++    );
++}
++
++#[tokio::test]
++async fn user_message_content_full_includes_text() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    chat.config
++        .notify_service
++        .notify_service_user_message_content =
++        codex_config::types::NotifyServiceUserMessageContent::Full;
++    let user_message = UserMessage::from("sample prompt");
++
++    let details = chat.user_message_notify_details(&user_message);
++
++    assert_eq!(
++        details
++            .pointer("/user_message/text")
++            .and_then(serde_json::Value::as_str),
++        Some("sample prompt")
++    );
++    assert!(details.pointer("/user_message/text_preview").is_none());
++}
++
++#[tokio::test]
++async fn user_message_sent_is_opt_in_and_marks_queued_message_once() {
++    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
++    enable_notify_service(&mut chat);
++
++    chat.queue_user_message(UserMessage::from("queued"));
++    assert!(
++        !chat
++            .queued_user_messages
++            .front()
++            .expect("queued message")
++            .notify_sent
++    );
++
++    chat.queued_user_messages.clear();
++    chat.config.notify_service.notify_service_events =
++        vec![codex_config::types::NotifyServiceEvent::UserMessageSent];
++    chat.queue_user_message(UserMessage::from("queued"));
++    assert!(
++        chat.queued_user_messages
++            .front()
++            .expect("queued message")
++            .notify_sent
++    );
++}
+diff --git a/codex-rs/tui/src/notify_service.rs b/codex-rs/tui/src/notify_service.rs
+new file mode 100644
+index 0000000000..1150a4bbf9
+--- /dev/null
++++ b/codex-rs/tui/src/notify_service.rs
+@@ -0,0 +1,205 @@
++use chrono::Utc;
++use codex_config::types::NotifyServiceEvent;
++use codex_config::types::NotifyServiceSettings;
++use serde::Serialize;
++use serde_json::Value;
++use std::path::Path;
++use std::time::{Duration, Instant};
++
++pub(crate) type IdleNotifyStatus = NotifyServiceEvent;
++
++#[derive(Debug, Clone, Serialize)]
++pub(crate) struct IdleNotifyPayload {
++    pub status: IdleNotifyStatus,
++    pub project_name: String,
++    pub agent_name: String,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub session_name: Option<String>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub thread_id: Option<String>,
++    pub cwd: String,
++    pub host_name: String,
++    pub duration_seconds: u64,
++    pub session_duration_seconds: u64,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub turn_duration_seconds: Option<u64>,
++    pub total_tokens: i64,
++    pub input_tokens: i64,
++    pub output_tokens: i64,
++    pub cached_input_tokens: i64,
++    pub reasoning_output_tokens: i64,
++    pub idle_seconds: u64,
++    pub completed_at: String,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub event_details: Option<Value>,
++}
++
++#[allow(clippy::too_many_arguments)]
++pub(crate) fn build_payload_with_details(
++    status: IdleNotifyStatus,
++    cwd: &Path,
++    agent_name: &str,
++    thread_name: Option<&str>,
++    thread_id: Option<String>,
++    session_started_at: Option<Instant>,
++    turn_duration_seconds: Option<u64>,
++    usage: &codex_protocol::protocol::TokenUsage,
++    idle_seconds: u64,
++    event_details: Option<Value>,
++) -> IdleNotifyPayload {
++    let project_name = cwd
++        .file_name()
++        .and_then(|n| n.to_str())
++        .unwrap_or("unknown")
++        .to_string();
++    let host_name = gethostname::gethostname().to_string_lossy().to_string();
++    let session_duration_seconds = session_started_at
++        .map(|s| s.elapsed().as_secs())
++        .unwrap_or(0);
++    let duration_seconds = turn_duration_seconds.unwrap_or(session_duration_seconds);
++    IdleNotifyPayload {
++        status,
++        project_name,
++        agent_name: agent_name.to_string(),
++        session_name: thread_name.map(String::from),
++        thread_id,
++        cwd: cwd.display().to_string(),
++        host_name,
++        duration_seconds,
++        session_duration_seconds,
++        turn_duration_seconds,
++        total_tokens: usage.total_tokens,
++        input_tokens: usage.input_tokens,
++        output_tokens: usage.output_tokens,
++        cached_input_tokens: usage.cached_input_tokens,
++        reasoning_output_tokens: usage.reasoning_output_tokens,
++        idle_seconds,
++        completed_at: Utc::now().to_rfc3339(),
++        event_details,
++    }
++}
++
++pub(crate) fn event_enabled(settings: &NotifyServiceSettings, status: IdleNotifyStatus) -> bool {
++    settings.notify_service_events.contains(&status)
++}
++
++pub(crate) fn send_idle_notification(
++    url: String,
++    token: Option<String>,
++    payload: IdleNotifyPayload,
++) {
++    tokio::spawn(async move {
++        send_idle_notification_once(url, token, payload).await;
++    });
++}
++
++pub(crate) async fn send_idle_notification_once(
++    url: String,
++    token: Option<String>,
++    payload: IdleNotifyPayload,
++) {
++    let client = match reqwest::Client::builder()
++        .timeout(Duration::from_secs(10))
++        .build()
++    {
++        Ok(c) => c,
++        Err(err) => {
++            tracing::warn!(error = %err, "failed to build reqwest client for idle notification");
++            return;
++        }
++    };
++    let mut request = client.post(&url).json(&payload);
++    if let Some(ref token) = token {
++        request = request.bearer_auth(token);
++    }
++    match request.send().await {
++        Ok(resp) if !resp.status().is_success() => {
++            tracing::warn!(
++                status = %resp.status(),
++                url = %url,
++                "idle notification POST returned non-success"
++            );
++        }
++        Err(err) => {
++            tracing::warn!(error = %err, url = %url, "idle notification POST failed");
++        }
++        _ => {}
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::time::Instant;
++    use tokio::io::AsyncReadExt;
++    use tokio::io::AsyncWriteExt;
++    use tokio::net::TcpListener;
++
++    #[tokio::test]
++    async fn idle_notify_awaited_sender_posts_json() {
++        let listener = TcpListener::bind("127.0.0.1:0")
++            .await
++            .expect("bind test listener");
++        let addr = listener.local_addr().expect("listener addr");
++        let request_task = tokio::spawn(async move {
++            let (mut stream, _) = listener.accept().await.expect("accept request");
++            let mut buf = Vec::new();
++            let header_end = loop {
++                let mut chunk = [0_u8; 1024];
++                let n = stream.read(&mut chunk).await.expect("read request");
++                assert!(n > 0, "connection closed before headers");
++                buf.extend_from_slice(&chunk[..n]);
++                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
++                    break pos + 4;
++                }
++            };
++            let headers = String::from_utf8_lossy(&buf[..header_end]).to_string();
++            let content_length = headers
++                .lines()
++                .find_map(|line| {
++                    line.strip_prefix("content-length:")
++                        .or_else(|| line.strip_prefix("Content-Length:"))
++                        .and_then(|value| value.trim().parse::<usize>().ok())
++                })
++                .expect("content-length header");
++            while buf.len() < header_end + content_length {
++                let mut chunk = [0_u8; 1024];
++                let n = stream.read(&mut chunk).await.expect("read body");
++                assert!(n > 0, "connection closed before body");
++                buf.extend_from_slice(&chunk[..n]);
++            }
++            stream
++                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
++                .await
++                .expect("write response");
++            String::from_utf8_lossy(&buf).to_string()
++        });
++
++        let payload = build_payload_with_details(
++            IdleNotifyStatus::SessionExit,
++            std::path::Path::new("/tmp/cutex-notify"),
++            "codex",
++            Some("thread"),
++            None,
++            Some(Instant::now()),
++            None,
++            &codex_protocol::protocol::TokenUsage::default(),
++            0,
++            None,
++        );
++        send_idle_notification_once(
++            format!("http://{addr}/api/agent-notify/push"),
++            Some("sample-token".to_string()),
++            payload,
++        )
++        .await;
++
++        let request = tokio::time::timeout(Duration::from_secs(1), request_task)
++            .await
++            .expect("request received")
++            .expect("request task");
++        assert!(request.starts_with("POST /api/agent-notify/push "));
++        assert!(request.contains("authorization: Bearer sample-token"));
++        assert!(request.contains("\"status\":\"session_exit\""));
++    }
++}

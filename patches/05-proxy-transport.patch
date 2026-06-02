@@ -1,0 +1,99 @@
+diff --git a/codex-rs/Cargo.toml b/codex-rs/Cargo.toml
+index 79d932c8be..a384eb2505 100644
+--- a/codex-rs/Cargo.toml
++++ b/codex-rs/Cargo.toml
+@@ -322,7 +322,7 @@ ratatui = "0.29.0"
+ ratatui-macros = "0.6.0"
+ regex = "1.12.3"
+ regex-lite = "0.1.8"
+-reqwest = { version = "0.12", features = ["cookies"] }
++reqwest = { version = "0.12", features = ["cookies", "socks"] }
+ rmcp = { version = "0.15.0", default-features = false }
+ runfiles = { git = "https://github.com/dzbarsky/rules_rust", rev = "b56cbaa8465e74127f1ea216f813cd377295ad81" }
+ rustls = { version = "0.23", default-features = false, features = [
+diff --git a/codex-rs/backend-client/Cargo.toml b/codex-rs/backend-client/Cargo.toml
+index d2e374ae2a..353a66f4a1 100644
+--- a/codex-rs/backend-client/Cargo.toml
++++ b/codex-rs/backend-client/Cargo.toml
+@@ -15,7 +15,7 @@ workspace = true
+ anyhow = "1"
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
+-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
++reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks"] }
+ codex-backend-openapi-models = { path = "../codex-backend-openapi-models" }
+ codex-api = { workspace = true }
+ codex-client = { workspace = true }
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+index ba81b451a7..b8b8167cfa 100644
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -109,6 +109,7 @@ use crate::client_common::ResponseEvent;
+ use crate::client_common::ResponseStream;
+ use crate::flags::CODEX_RS_SSE_FIXTURE;
+ use crate::util::emit_feedback_auth_recovery_tags;
++use crate::util::force_http_transport_enabled;
+ use codex_api::map_api_error;
+ use codex_feedback::FeedbackRequestTags;
+ use codex_feedback::emit_feedback_request_tags_with_auth_env;
+@@ -663,7 +664,8 @@ impl ModelClient {
+     ///
+     /// WebSocket use is controlled by provider capability and session-scoped fallback state.
+     pub fn responses_websocket_enabled(&self) -> bool {
+-        if !self.state.provider.info().supports_websockets
++        if force_http_transport_enabled()
++            || !self.state.provider.info().supports_websockets
+             || self.state.disable_websockets.load(Ordering::Relaxed)
+             || (*CODEX_RS_SSE_FIXTURE).is_some()
+         {
+diff --git a/codex-rs/core/src/realtime_conversation.rs b/codex-rs/core/src/realtime_conversation.rs
+index 0ca7c1c169..d7d4b4f844 100644
+--- a/codex-rs/core/src/realtime_conversation.rs
++++ b/codex-rs/core/src/realtime_conversation.rs
+@@ -2,6 +2,8 @@ use crate::client::ModelClient;
+ use crate::realtime_context::build_realtime_startup_context;
+ use crate::realtime_prompt::prepare_realtime_backend_prompt;
+ use crate::session::session::Session;
++use crate::util::CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR;
++use crate::util::force_http_transport_enabled;
+ use anyhow::Context;
+ use async_channel::Receiver;
+ use async_channel::RecvError;
+@@ -600,6 +602,12 @@ async fn prepare_realtime_start(
+     sess: &Arc<Session>,
+     params: ConversationStartParams,
+ ) -> CodexResult<PreparedRealtimeConversationStart> {
++    if force_http_transport_enabled() {
++        return Err(CodexErr::InvalidRequest(format!(
++            "realtime transport is unavailable while {}=1 is active",
++            CUTE_CODEX_FORCE_HTTP_TRANSPORT_ENV_VAR
++        )));
++    }
+     let provider = sess.provider().await;
+     let auth_manager = sess
+         .services
+diff --git a/codex-rs/lmstudio/Cargo.toml b/codex-rs/lmstudio/Cargo.toml
+index 66ae4dc5f5..1b13d9350e 100644
+--- a/codex-rs/lmstudio/Cargo.toml
++++ b/codex-rs/lmstudio/Cargo.toml
+@@ -12,7 +12,7 @@ path = "src/lib.rs"
+ [dependencies]
+ codex-core = { path = "../core" }
+ codex-model-provider-info = { path = "../model-provider-info" }
+-reqwest = { version = "0.12", features = ["json", "stream"] }
++reqwest = { version = "0.12", features = ["json", "stream", "socks"] }
+ serde_json = "1"
+ tokio = { version = "1", features = ["rt"] }
+ tracing = { version = "0.1.44", features = ["log"] }
+diff --git a/codex-rs/rmcp-client/Cargo.toml b/codex-rs/rmcp-client/Cargo.toml
+index c4f0568927..cccacdce35 100644
+--- a/codex-rs/rmcp-client/Cargo.toml
++++ b/codex-rs/rmcp-client/Cargo.toml
+@@ -29,6 +29,7 @@ reqwest = { version = "0.12", default-features = false, features = [
+     "json",
+     "stream",
+     "rustls-tls",
++    "socks",
+ ] }
+ rmcp = { workspace = true, default-features = false, features = [
+     "auth",

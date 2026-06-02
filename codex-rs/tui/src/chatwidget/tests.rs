@@ -225,6 +225,7 @@ mod goal_validation;
 mod guardian;
 mod helpers;
 mod history_replay;
+mod idle_notify;
 mod mcp_startup;
 mod permissions;
 mod plan_mode;

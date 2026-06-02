@@ -7,6 +7,7 @@ use crate::config_toml::ToolsToml;
 use crate::types::AnalyticsConfigToml;
 use crate::types::ApprovalsReviewer;
 use crate::types::Personality;
+use crate::types::SessionPickerProviderFilter;
 use crate::types::SessionPickerViewMode;
 use crate::types::WindowsToml;
 use codex_features::FeaturesToml;
@@ -78,4 +79,7 @@ pub struct ProfileTui {
     /// Preferred layout for resume/fork session picker results.
     #[serde(default)]
     pub session_picker_view: Option<SessionPickerViewMode>,
+    /// Whether resume/fork session lookup is limited to the current provider.
+    #[serde(default)]
+    pub session_picker_provider_filter: Option<SessionPickerProviderFilter>,
 }

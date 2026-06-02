@@ -82,6 +82,32 @@ impl fmt::Display for SessionPickerViewMode {
     }
 }
 
+/// Provider filter scope for resume/fork session lookup.
+#[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum SessionPickerProviderFilter {
+    /// Only show sessions created with the current model provider.
+    #[default]
+    Current,
+    /// Show sessions across all model providers that share the same CODEX_HOME.
+    All,
+}
+
+impl SessionPickerProviderFilter {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::All => "all",
+        }
+    }
+}
+
+impl fmt::Display for SessionPickerProviderFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Determine where Codex should store CLI auth credentials.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -634,6 +660,148 @@ pub struct TuiNotificationSettings {
     pub condition: NotificationCondition,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NotifyServiceEvent {
+    TaskCompleted,
+    ThinkingTooLong,
+    WaitingApproval,
+    ConnectionError,
+    SessionExit,
+    SessionStarted,
+    SessionStartupIdle,
+    UserMessageSent,
+    UserMessageDispatched,
+    TurnStarted,
+    TurnCompleted,
+    TurnInterrupted,
+    TurnFailed,
+    ApprovalRequested,
+    ApprovalResolved,
+    ThreadClosed,
+    ContextCompacted,
+    RateLimitWarning,
+    RateLimitPromptShown,
+    CommandExecutionStarted,
+    CommandExecutionCompleted,
+    PatchApplyStarted,
+    PatchApplyCompleted,
+    McpToolCallStarted,
+    McpToolCallCompleted,
+    WebSearchStarted,
+    WebSearchCompleted,
+    ImageGenerationStarted,
+    ImageGenerationCompleted,
+    ReviewStarted,
+    ReviewCompleted,
+    HookStarted,
+    HookCompleted,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NotifyServiceUserMessageContent {
+    #[default]
+    None,
+    Preview,
+    Full,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+pub struct NotifyServiceSettings {
+    /// HTTP endpoint for idle notifications. Empty or unset = disabled.
+    #[serde(default)]
+    pub notify_service_url: Option<String>,
+
+    /// Bearer token for the notification endpoint.
+    #[serde(default)]
+    pub notify_service_token: Option<String>,
+
+    /// Seconds of idle before notification fires. Default 60.
+    #[serde(default = "default_idle_timeout_secs")]
+    pub notify_service_idle_timeout_secs: u64,
+
+    /// Seconds of unchanged composer draft before notification fires. Default 600.
+    #[serde(default = "default_composer_idle_timeout_secs")]
+    pub notify_service_composer_idle_timeout_secs: u64,
+
+    /// Seconds to wait before notifying about an approval prompt. Default 30.
+    #[serde(default = "default_approval_timeout_secs")]
+    pub notify_service_approval_timeout_secs: u64,
+
+    /// Seconds to wait before notifying that a new session received no first user message.
+    #[serde(default = "default_startup_idle_timeout_secs")]
+    pub notify_service_startup_idle_timeout_secs: u64,
+
+    /// Agent name in the notification payload. Default "codex".
+    #[serde(default = "default_notify_agent_name")]
+    pub notify_service_agent_name: String,
+
+    /// Minimum total tokens consumed before session_exit notification fires.
+    #[serde(default = "default_notify_min_tokens")]
+    pub notify_service_min_tokens: i64,
+
+    /// Notify event allowlist. Defaults preserve the original idle/exit behavior.
+    #[serde(default = "default_notify_events")]
+    pub notify_service_events: Vec<NotifyServiceEvent>,
+
+    /// How much user message content to include in user_message_sent payloads.
+    #[serde(default)]
+    pub notify_service_user_message_content: NotifyServiceUserMessageContent,
+
+    /// Maximum chars in user_message_sent text_preview. Default 200.
+    #[serde(default = "default_notify_user_message_preview_chars")]
+    pub notify_service_user_message_preview_chars: usize,
+}
+
+fn default_idle_timeout_secs() -> u64 {
+    60
+}
+fn default_composer_idle_timeout_secs() -> u64 {
+    600
+}
+fn default_approval_timeout_secs() -> u64 {
+    30
+}
+fn default_startup_idle_timeout_secs() -> u64 {
+    180
+}
+fn default_notify_agent_name() -> String {
+    "codex".to_string()
+}
+fn default_notify_min_tokens() -> i64 {
+    100
+}
+fn default_notify_events() -> Vec<NotifyServiceEvent> {
+    vec![
+        NotifyServiceEvent::TaskCompleted,
+        NotifyServiceEvent::ThinkingTooLong,
+        NotifyServiceEvent::WaitingApproval,
+        NotifyServiceEvent::SessionExit,
+    ]
+}
+fn default_notify_user_message_preview_chars() -> usize {
+    200
+}
+
+impl Default for NotifyServiceSettings {
+    fn default() -> Self {
+        Self {
+            notify_service_url: None,
+            notify_service_token: None,
+            notify_service_idle_timeout_secs: default_idle_timeout_secs(),
+            notify_service_composer_idle_timeout_secs: default_composer_idle_timeout_secs(),
+            notify_service_approval_timeout_secs: default_approval_timeout_secs(),
+            notify_service_startup_idle_timeout_secs: default_startup_idle_timeout_secs(),
+            notify_service_agent_name: default_notify_agent_name(),
+            notify_service_min_tokens: default_notify_min_tokens(),
+            notify_service_events: default_notify_events(),
+            notify_service_user_message_content: NotifyServiceUserMessageContent::default(),
+            notify_service_user_message_preview_chars: default_notify_user_message_preview_chars(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelAvailabilityNuxConfig {
@@ -651,6 +819,9 @@ pub const DEFAULT_TERMINAL_RESIZE_REFLOW_FALLBACK_MAX_ROWS: usize = 1_000;
 pub struct Tui {
     #[serde(default, flatten)]
     pub notification_settings: TuiNotificationSettings,
+
+    #[serde(default, flatten)]
+    pub notify_service_settings: NotifyServiceSettings,
 
     /// Enable animations (welcome screen, shimmer effects, spinners).
     /// Defaults to `true`.
@@ -723,6 +894,10 @@ pub struct Tui {
     /// Preferred layout for resume/fork session picker results.
     #[serde(default)]
     pub session_picker_view: Option<SessionPickerViewMode>,
+
+    /// Provider filter scope for resume/fork session lookup.
+    #[serde(default)]
+    pub session_picker_provider_filter: Option<SessionPickerProviderFilter>,
 
     /// Keybinding overrides for the TUI.
     ///

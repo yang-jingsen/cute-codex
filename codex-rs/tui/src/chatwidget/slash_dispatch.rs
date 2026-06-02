@@ -827,7 +827,15 @@ impl ChatWidget {
         }
     }
 
-    pub(super) fn submit_queued_slash_prompt(&mut self, user_message: UserMessage) -> QueueDrain {
+    pub(super) fn submit_queued_slash_prompt(
+        &mut self,
+        user_message: UserMessage,
+        mut notify_disposition: UserMessageNotifyDisposition,
+    ) -> QueueDrain {
+        if notify_disposition == UserMessageNotifyDisposition::Emit {
+            self.emit_user_message_sent_notification(&user_message);
+            notify_disposition = UserMessageNotifyDisposition::AlreadyEmitted;
+        }
         let UserMessage {
             text,
             local_images,
@@ -836,24 +844,34 @@ impl ChatWidget {
             mention_bindings,
         } = user_message;
         let Some((name, rest, rest_offset)) = parse_slash_name(&text) else {
-            self.submit_user_message(UserMessage {
-                text,
-                local_images,
-                remote_image_urls,
-                text_elements,
-                mention_bindings,
-            });
+            self.submit_user_message_with_history_and_shell_escape_policy_inner(
+                UserMessage {
+                    text,
+                    local_images,
+                    remote_image_urls,
+                    text_elements,
+                    mention_bindings,
+                },
+                UserMessageHistoryRecord::UserMessageText,
+                ShellEscapePolicy::Allow,
+                notify_disposition,
+            );
             return QueueDrain::Stop;
         };
 
         if name.contains('/') {
-            self.submit_user_message(UserMessage {
-                text,
-                local_images,
-                remote_image_urls,
-                text_elements,
-                mention_bindings,
-            });
+            self.submit_user_message_with_history_and_shell_escape_policy_inner(
+                UserMessage {
+                    text,
+                    local_images,
+                    remote_image_urls,
+                    text_elements,
+                    mention_bindings,
+                },
+                UserMessageHistoryRecord::UserMessageText,
+                ShellEscapePolicy::Allow,
+                notify_disposition,
+            );
             return QueueDrain::Stop;
         }
 
@@ -884,23 +902,33 @@ impl ChatWidget {
         }
 
         if !command.supports_inline_args() {
-            self.submit_user_message(UserMessage {
-                text,
-                local_images,
-                remote_image_urls,
-                text_elements,
-                mention_bindings,
-            });
+            self.submit_user_message_with_history_and_shell_escape_policy_inner(
+                UserMessage {
+                    text,
+                    local_images,
+                    remote_image_urls,
+                    text_elements,
+                    mention_bindings,
+                },
+                UserMessageHistoryRecord::UserMessageText,
+                ShellEscapePolicy::Allow,
+                notify_disposition,
+            );
             return QueueDrain::Stop;
         }
         let SlashCommandItem::Builtin(cmd) = command else {
-            self.submit_user_message(UserMessage {
-                text,
-                local_images,
-                remote_image_urls,
-                text_elements,
-                mention_bindings,
-            });
+            self.submit_user_message_with_history_and_shell_escape_policy_inner(
+                UserMessage {
+                    text,
+                    local_images,
+                    remote_image_urls,
+                    text_elements,
+                    mention_bindings,
+                },
+                UserMessageHistoryRecord::UserMessageText,
+                ShellEscapePolicy::Allow,
+                notify_disposition,
+            );
             return QueueDrain::Stop;
         };
 

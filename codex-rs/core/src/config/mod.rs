@@ -44,7 +44,10 @@ use codex_config::types::McpServerTransportConfig;
 use codex_config::types::MemoriesConfig;
 use codex_config::types::ModelAvailabilityNuxConfig;
 use codex_config::types::Notice;
+use codex_config::types::NotifyServiceEvent;
+use codex_config::types::NotifyServiceUserMessageContent;
 use codex_config::types::OAuthCredentialsStoreMode;
+use codex_config::types::SessionPickerProviderFilter;
 use codex_config::types::SessionPickerViewMode;
 use codex_config::types::ToolSuggestConfig;
 use codex_config::types::ToolSuggestDisabledTool;
@@ -199,6 +202,18 @@ const LOCAL_DEV_BUILD_VERSION: &str = "0.0.0";
 pub const CONFIG_TOML_FILE: &str = "config.toml";
 const CONFIG_PROFILE_V2_SUFFIX: &str = ".config.toml";
 
+const CODEX_CONFIG_FILE_ENV: &str = "CODEX_CONFIG_FILE";
+
+pub fn resolve_user_config_path(codex_home: &Path) -> anyhow::Result<PathBuf> {
+    if let Ok(val) = std::env::var(CODEX_CONFIG_FILE_ENV) {
+        let trimmed = val.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+    Ok(codex_home.join(CONFIG_TOML_FILE))
+}
+
 fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<PathBuf> {
     let raw = std::env::var(codex_state::SQLITE_HOME_ENV).ok()?;
     let trimmed = raw.trim();
@@ -210,6 +225,72 @@ fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<PathBuf> {
         Some(path)
     } else {
         Some(resolved_cwd.join(path))
+    }
+}
+
+fn parse_notify_service_event(value: &str) -> Option<NotifyServiceEvent> {
+    match value.trim().replace('-', "_").as_str() {
+        "task_completed" => Some(NotifyServiceEvent::TaskCompleted),
+        "thinking_too_long" => Some(NotifyServiceEvent::ThinkingTooLong),
+        "waiting_approval" => Some(NotifyServiceEvent::WaitingApproval),
+        "connection_error" => Some(NotifyServiceEvent::ConnectionError),
+        "session_exit" => Some(NotifyServiceEvent::SessionExit),
+        "session_started" => Some(NotifyServiceEvent::SessionStarted),
+        "session_startup_idle" => Some(NotifyServiceEvent::SessionStartupIdle),
+        "user_message_sent" => Some(NotifyServiceEvent::UserMessageSent),
+        "user_message_dispatched" => Some(NotifyServiceEvent::UserMessageDispatched),
+        "turn_started" => Some(NotifyServiceEvent::TurnStarted),
+        "turn_completed" => Some(NotifyServiceEvent::TurnCompleted),
+        "turn_interrupted" => Some(NotifyServiceEvent::TurnInterrupted),
+        "turn_failed" => Some(NotifyServiceEvent::TurnFailed),
+        "approval_requested" => Some(NotifyServiceEvent::ApprovalRequested),
+        "approval_resolved" => Some(NotifyServiceEvent::ApprovalResolved),
+        "thread_closed" => Some(NotifyServiceEvent::ThreadClosed),
+        "context_compacted" => Some(NotifyServiceEvent::ContextCompacted),
+        "rate_limit_warning" => Some(NotifyServiceEvent::RateLimitWarning),
+        "rate_limit_prompt_shown" => Some(NotifyServiceEvent::RateLimitPromptShown),
+        "command_execution_started" => Some(NotifyServiceEvent::CommandExecutionStarted),
+        "command_execution_completed" => Some(NotifyServiceEvent::CommandExecutionCompleted),
+        "patch_apply_started" => Some(NotifyServiceEvent::PatchApplyStarted),
+        "patch_apply_completed" => Some(NotifyServiceEvent::PatchApplyCompleted),
+        "mcp_tool_call_started" => Some(NotifyServiceEvent::McpToolCallStarted),
+        "mcp_tool_call_completed" => Some(NotifyServiceEvent::McpToolCallCompleted),
+        "web_search_started" => Some(NotifyServiceEvent::WebSearchStarted),
+        "web_search_completed" => Some(NotifyServiceEvent::WebSearchCompleted),
+        "image_generation_started" => Some(NotifyServiceEvent::ImageGenerationStarted),
+        "image_generation_completed" => Some(NotifyServiceEvent::ImageGenerationCompleted),
+        "review_started" => Some(NotifyServiceEvent::ReviewStarted),
+        "review_completed" => Some(NotifyServiceEvent::ReviewCompleted),
+        "hook_started" => Some(NotifyServiceEvent::HookStarted),
+        "hook_completed" => Some(NotifyServiceEvent::HookCompleted),
+        "" => None,
+        other => {
+            tracing::warn!(event = other, "ignoring unknown CODEX_NOTIFY_EVENTS entry");
+            None
+        }
+    }
+}
+
+fn parse_notify_service_events(value: &str) -> Vec<NotifyServiceEvent> {
+    value
+        .split(',')
+        .filter_map(parse_notify_service_event)
+        .collect()
+}
+
+fn parse_notify_user_message_content(value: &str) -> Option<NotifyServiceUserMessageContent> {
+    match value.trim().replace('-', "_").as_str() {
+        "none" => Some(NotifyServiceUserMessageContent::None),
+        "preview" => Some(NotifyServiceUserMessageContent::Preview),
+        "full" => Some(NotifyServiceUserMessageContent::Full),
+        "" => None,
+        other => {
+            tracing::warn!(
+                mode = other,
+                "ignoring unknown CODEX_NOTIFY_USER_MESSAGE_CONTENT value"
+            );
+            None
+        }
     }
 }
 
@@ -666,6 +747,9 @@ pub struct Config {
     /// TUI notification settings, including enabled events, delivery method, and focus condition.
     pub tui_notifications: TuiNotificationSettings,
 
+    /// HTTP idle notification service settings.
+    pub notify_service: codex_config::types::NotifyServiceSettings,
+
     /// Enable ASCII animations and shimmer effects in the TUI.
     pub animations: bool,
 
@@ -716,6 +800,9 @@ pub struct Config {
 
     /// Preferred layout for resume/fork session picker results.
     pub tui_session_picker_view: SessionPickerViewMode,
+
+    /// Provider filter scope for resume/fork session lookup.
+    pub tui_session_picker_provider_filter: SessionPickerProviderFilter,
 
     /// Terminal resize-reflow tuning knobs.
     pub terminal_resize_reflow: TerminalResizeReflowConfig,
@@ -3510,6 +3597,63 @@ impl Config {
                 .as_ref()
                 .map(|t| t.notification_settings.clone())
                 .unwrap_or_default(),
+            notify_service: {
+                let mut ns = cfg
+                    .tui
+                    .as_ref()
+                    .map(|t| t.notify_service_settings.clone())
+                    .unwrap_or_default();
+                if let Ok(url) = std::env::var("CODEX_NOTIFY_SERVICE_URL") {
+                    ns.notify_service_url = Some(url).filter(|u| !u.is_empty());
+                }
+                if let Ok(token) = std::env::var("CODEX_NOTIFY_SERVICE_TOKEN") {
+                    ns.notify_service_token = Some(token).filter(|t| !t.is_empty());
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_IDLE_TIMEOUT") {
+                    if let Ok(secs) = val.parse::<u64>() {
+                        ns.notify_service_idle_timeout_secs = secs;
+                    }
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_COMPOSER_IDLE_TIMEOUT") {
+                    if let Ok(secs) = val.parse::<u64>() {
+                        ns.notify_service_composer_idle_timeout_secs = secs;
+                    }
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_APPROVAL_TIMEOUT") {
+                    if let Ok(secs) = val.parse::<u64>() {
+                        ns.notify_service_approval_timeout_secs = secs;
+                    }
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_STARTUP_IDLE_TIMEOUT") {
+                    if let Ok(secs) = val.parse::<u64>() {
+                        ns.notify_service_startup_idle_timeout_secs = secs;
+                    }
+                }
+                if let Ok(name) = std::env::var("CODEX_NOTIFY_AGENT_NAME") {
+                    if !name.is_empty() {
+                        ns.notify_service_agent_name = name;
+                    }
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_MIN_TOKENS") {
+                    if let Ok(v) = val.parse::<i64>() {
+                        ns.notify_service_min_tokens = v;
+                    }
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_EVENTS") {
+                    ns.notify_service_events = parse_notify_service_events(&val);
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_USER_MESSAGE_CONTENT")
+                    && let Some(mode) = parse_notify_user_message_content(&val)
+                {
+                    ns.notify_service_user_message_content = mode;
+                }
+                if let Ok(val) = std::env::var("CODEX_NOTIFY_USER_MESSAGE_PREVIEW_CHARS")
+                    && let Ok(chars) = val.parse::<usize>()
+                {
+                    ns.notify_service_user_message_preview_chars = chars;
+                }
+                ns
+            },
             animations: cfg.tui.as_ref().map(|t| t.animations).unwrap_or(true),
             show_tooltips: cfg.tui.as_ref().map(|t| t.show_tooltips).unwrap_or(true),
             model_availability_nux: cfg
@@ -3550,6 +3694,11 @@ impl Config {
                 .tui
                 .as_ref()
                 .and_then(|t| t.session_picker_view)
+                .unwrap_or_default(),
+            tui_session_picker_provider_filter: cfg
+                .tui
+                .as_ref()
+                .and_then(|t| t.session_picker_provider_filter)
                 .unwrap_or_default(),
             terminal_resize_reflow,
             tui_keymap: cfg

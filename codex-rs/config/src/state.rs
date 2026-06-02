@@ -16,6 +16,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use toml::Value as TomlValue;
 
+const CODEX_CONFIG_FILE_ENV: &str = "CODEX_CONFIG_FILE";
+
 /// User-facing config loading behavior that is not part of the config document.
 #[derive(Debug, Default, Clone)]
 pub struct ConfigLoadOptions {
@@ -85,10 +87,18 @@ impl LoaderOverrides {
     pub fn user_config_path(&self, codex_home: &Path) -> std::io::Result<AbsolutePathBuf> {
         match self.user_config_path.as_ref() {
             Some(path) => Ok(path.clone()),
-            None => Ok(AbsolutePathBuf::resolve_path_against_base(
-                crate::CONFIG_TOML_FILE,
-                codex_home,
-            )),
+            None => {
+                if let Ok(value) = std::env::var(CODEX_CONFIG_FILE_ENV) {
+                    let trimmed = value.trim();
+                    if !trimmed.is_empty() {
+                        return AbsolutePathBuf::from_absolute_path(trimmed);
+                    }
+                }
+                Ok(AbsolutePathBuf::resolve_path_against_base(
+                    crate::CONFIG_TOML_FILE,
+                    codex_home,
+                ))
+            }
         }
     }
 }

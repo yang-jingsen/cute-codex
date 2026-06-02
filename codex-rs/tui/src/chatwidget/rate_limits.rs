@@ -240,6 +240,17 @@ impl ChatWidget {
                 .insert(limit_id, display);
 
             if !warnings.is_empty() {
+                self.post_notify_service_event(
+                    NotifyServiceEvent::RateLimitWarning,
+                    self.current_turn_duration_seconds(),
+                    0,
+                    Some(serde_json::json!({
+                        "rate_limit": {
+                            "limit_id": "codex",
+                            "warning_count": warnings.len()
+                        }
+                    })),
+                );
                 for warning in warnings {
                     self.add_to_history(history_cell::new_warning_event(warning));
                 }
@@ -292,6 +303,16 @@ impl ChatWidget {
         }
         if let Some(preset) = self.lower_cost_preset() {
             self.open_rate_limit_switch_prompt(preset);
+            self.post_notify_service_event(
+                NotifyServiceEvent::RateLimitPromptShown,
+                self.current_turn_duration_seconds(),
+                0,
+                Some(serde_json::json!({
+                    "rate_limit": {
+                        "suggested_model": NUDGE_MODEL_SLUG
+                    }
+                })),
+            );
             self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Shown;
         } else {
             self.rate_limit_switch_prompt = RateLimitSwitchPromptState::Idle;

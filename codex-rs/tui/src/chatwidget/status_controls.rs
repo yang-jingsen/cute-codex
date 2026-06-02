@@ -107,11 +107,10 @@ impl ChatWidget {
     /// Applies status-line item selection from the setup view to in-memory config.
     ///
     /// An empty selection persists as an explicit empty list.
-    pub(crate) fn setup_status_line(&mut self, items: Vec<StatusLineItem>, use_theme_colors: bool) {
+    pub(crate) fn setup_status_line(&mut self, ids: Vec<String>, use_theme_colors: bool) {
         tracing::info!(
-            "status line setup confirmed with items: {items:#?}, use_theme_colors: {use_theme_colors}"
+            "status line setup confirmed with items: {ids:#?}, use_theme_colors: {use_theme_colors}"
         );
-        let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
         self.config.tui_status_line = Some(ids);
         self.config.tui_status_line_use_colors = use_theme_colors;
         self.refresh_status_line();
@@ -276,10 +275,13 @@ impl ChatWidget {
 
     pub(super) fn open_status_line_setup(&mut self) {
         let configured_status_line_items = self.configured_status_line_items();
+        let choices = self.available_status_line_choices();
+        let preview_data = self.status_line_preview_data(&choices);
         let view = StatusLineSetupView::new(
             Some(configured_status_line_items.as_slice()),
             self.config.tui_status_line_use_colors,
-            self.status_surface_preview_data(),
+            &choices,
+            preview_data,
             self.app_event_tx.clone(),
             self.bottom_pane.list_keymap(),
         );
@@ -318,6 +320,16 @@ impl ChatWidget {
         }
 
         preview_data
+    }
+
+    pub(super) fn status_line_preview_data(
+        &mut self,
+        choices: &[StatusLineChoice],
+    ) -> StatusLinePreviewData {
+        StatusLinePreviewData::from_iter(choices.iter().filter_map(|choice| {
+            self.status_line_preview_line_for_id(&choice.id)
+                .map(|line| (choice.id.clone(), line))
+        }))
     }
 
     pub(super) fn terminal_title_preview_data(&mut self) -> StatusSurfacePreviewData {

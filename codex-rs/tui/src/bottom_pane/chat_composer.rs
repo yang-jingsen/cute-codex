@@ -206,6 +206,16 @@ use crate::render::RectExt;
 use crate::render::renderable::Renderable;
 use crate::slash_command::SlashCommand;
 use crate::style::user_message_style;
+use crate::terminal_sideband::COMPOSER_NEWLINE_INPUT_TOKEN;
+use crate::terminal_sideband::ComposerSidebandState;
+use crate::terminal_sideband::KeymapSidebandState;
+use crate::terminal_sideband::PointSidebandState;
+use crate::terminal_sideband::PromptSidebandState;
+use crate::terminal_sideband::RegionSidebandState;
+use crate::terminal_sideband::SelectionSidebandState;
+use crate::terminal_sideband::WrapSidebandState;
+use crate::terminal_sideband::protocol_enabled_from_env;
+use crate::terminal_sideband::utf16_index_for_byte_index;
 use codex_protocol::ThreadId;
 use codex_protocol::user_input::ByteRange;
 use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
@@ -261,11 +271,26 @@ use ratatui::style::Color;
 /// If the pasted content exceeds this number of characters, replace it with a
 /// placeholder in the UI.
 const LARGE_PASTE_CHAR_THRESHOLD: usize = 1000;
+const TERMINAL_SIDEBAND_NEWLINE_TOKEN_TIMEOUT: Duration = Duration::from_millis(100);
 
 fn user_input_too_large_message(actual_chars: usize) -> String {
     format!(
         "Message exceeds the maximum length of {MAX_USER_INPUT_TEXT_CHARS} characters ({actual_chars} provided)."
     )
+}
+
+fn longest_suffix_that_is_token_prefix(candidate: &str, token: &str) -> usize {
+    let max_len = candidate.len().min(token.len().saturating_sub(1));
+    for len in (1..=max_len).rev() {
+        let start = candidate.len() - len;
+        if candidate.is_char_boundary(start)
+            && token.is_char_boundary(len)
+            && token.starts_with(&candidate[start..])
+        {
+            return len;
+        }
+    }
+    0
 }
 
 /// Result returned when the user interacts with the text area.
@@ -385,6 +410,9 @@ pub(crate) struct ChatComposer {
     history_search_next_keys: Vec<KeyBinding>,
     editor_keymap: EditorKeymap,
     vim_normal_keymap: VimNormalKeymap,
+    terminal_sideband_newline_token_enabled: bool,
+    terminal_sideband_newline_token_prefix: String,
+    terminal_sideband_newline_token_updated_at: Option<Instant>,
 }
 
 #[derive(Clone, Debug)]
@@ -556,6 +584,9 @@ impl ChatComposer {
             history_search_next_keys: default_keymap.composer.history_search_next.clone(),
             editor_keymap: default_editor_keymap,
             vim_normal_keymap: default_vim_normal_keymap,
+            terminal_sideband_newline_token_enabled: protocol_enabled_from_env(),
+            terminal_sideband_newline_token_prefix: String::new(),
+            terminal_sideband_newline_token_updated_at: None,
         };
         // Apply configuration via the setter to keep side-effects centralized.
         this.set_disable_paste_burst(disable_paste_burst);
@@ -812,6 +843,76 @@ impl ChatComposer {
             .textarea
             .cursor_pos_with_state(textarea_rect, state)
     }
+
+    pub(crate) fn terminal_sideband_composer_state(
+        &self,
+        area: Rect,
+        input_ready: bool,
+    ) -> ComposerSidebandState {
+        let [composer_rect, _, textarea_rect, _] = self.layout_areas(area);
+        let text = self.current_text();
+        let cursor = self.current_cursor().min(text.len());
+        let cursor_index = utf16_index_for_byte_index(&text, cursor);
+        let state = *self.draft.textarea_state.borrow();
+        let caret = self
+            .cursor_pos(area)
+            .map(|(column, row)| PointSidebandState::new(row, column));
+        let visible_rows = self.draft.textarea.desired_height(textarea_rect.width);
+        let prompt_text = if self.draft.is_bash_mode {
+            "! "
+        } else {
+            "› "
+        };
+
+        ComposerSidebandState {
+            visible: true,
+            focused: self.draft.input_enabled && input_ready,
+            text,
+            cursor_index,
+            selection: SelectionSidebandState {
+                start: cursor_index,
+                end: cursor_index,
+            },
+            multiline: visible_rows > 1 || self.draft.textarea.text().contains('\n'),
+            region: RegionSidebandState::from_rect(composer_rect),
+            prompt: (!textarea_rect.is_empty()).then(|| PromptSidebandState {
+                row: textarea_rect.y,
+                column: textarea_rect.x.saturating_sub(LIVE_PREFIX_COLS),
+                text: prompt_text.to_string(),
+            }),
+            caret,
+            ime_anchor: caret,
+            wrap: (!textarea_rect.is_empty()).then(|| WrapSidebandState {
+                width: textarea_rect.width,
+                first_line_column: textarea_rect.x,
+                continuation_column: textarea_rect.x,
+                visible_start_row: state.scroll(),
+                rows: visible_rows,
+            }),
+        }
+    }
+
+    pub(crate) fn terminal_sideband_mode(&self, base_mode: &'static str) -> &'static str {
+        if self.draft.textarea.is_vim_normal_mode() {
+            if self.draft.textarea.is_vim_operator_pending() {
+                "vim_operator"
+            } else {
+                "vim_normal"
+            }
+        } else {
+            base_mode
+        }
+    }
+
+    pub(crate) fn terminal_sideband_keymap_state(&self, mode: &'static str) -> KeymapSidebandState {
+        KeymapSidebandState::for_composer_bindings(
+            mode,
+            &self.submit_keys,
+            &self.queue_keys,
+            &self.editor_keymap.insert_newline,
+        )
+    }
+
     /// Returns true if the composer currently contains no user-entered input.
     pub(crate) fn is_empty(&self) -> bool {
         self.draft.textarea.is_empty() && !self.draft.is_bash_mode && self.attachments.is_empty()
@@ -1517,7 +1618,10 @@ impl ChatComposer {
     /// This also allows a single "held" ASCII char to render even when it turns out not to be part
     /// of a paste burst.
     pub(crate) fn flush_paste_burst_if_due(&mut self) -> bool {
-        self.handle_paste_burst_flush(Instant::now())
+        let now = Instant::now();
+        let token_flushed = self.flush_terminal_sideband_newline_token_prefix_if_due(now);
+        let paste_flushed = self.handle_paste_burst_flush(now);
+        token_flushed || paste_flushed
     }
 
     /// Returns whether the composer is currently in any paste-burst related transient state.
@@ -1622,6 +1726,78 @@ impl ChatComposer {
         self.draft.textarea.insert_str(text);
         self.sync_bash_mode_from_text();
         self.sync_popups();
+    }
+
+    fn flush_terminal_sideband_newline_token_prefix(&mut self) -> bool {
+        if self.terminal_sideband_newline_token_prefix.is_empty() {
+            return false;
+        }
+
+        let prefix = std::mem::take(&mut self.terminal_sideband_newline_token_prefix);
+        self.terminal_sideband_newline_token_updated_at = None;
+        self.insert_str(&prefix);
+        true
+    }
+
+    fn flush_terminal_sideband_newline_token_prefix_if_due(&mut self, now: Instant) -> bool {
+        let Some(updated_at) = self.terminal_sideband_newline_token_updated_at else {
+            return false;
+        };
+        if now.duration_since(updated_at) < TERMINAL_SIDEBAND_NEWLINE_TOKEN_TIMEOUT {
+            return false;
+        }
+        self.flush_terminal_sideband_newline_token_prefix()
+    }
+
+    fn handle_terminal_sideband_newline_token_char(
+        &mut self,
+        ch: char,
+        now: Instant,
+    ) -> Option<(InputResult, bool)> {
+        if !self.terminal_sideband_newline_token_enabled {
+            return None;
+        }
+
+        let token = COMPOSER_NEWLINE_INPUT_TOKEN;
+        let Some(first) = token.as_bytes().first().copied() else {
+            return None;
+        };
+
+        if self.terminal_sideband_newline_token_prefix.is_empty()
+            && (!ch.is_ascii() || ch as u8 != first)
+        {
+            return None;
+        }
+
+        if !ch.is_ascii() {
+            self.flush_terminal_sideband_newline_token_prefix();
+            return None;
+        }
+
+        let mut candidate = std::mem::take(&mut self.terminal_sideband_newline_token_prefix);
+        candidate.push(ch);
+
+        if candidate == token {
+            self.terminal_sideband_newline_token_updated_at = None;
+            self.insert_str("\n");
+            return Some((InputResult::None, true));
+        }
+
+        let keep_len = longest_suffix_that_is_token_prefix(&candidate, token);
+        let visible_len = candidate.len().saturating_sub(keep_len);
+        if visible_len > 0 {
+            self.insert_str(&candidate[..visible_len]);
+        }
+
+        self.terminal_sideband_newline_token_prefix = candidate[visible_len..].to_string();
+        self.terminal_sideband_newline_token_updated_at =
+            if self.terminal_sideband_newline_token_prefix.is_empty() {
+                None
+            } else {
+                Some(now)
+            };
+
+        Some((InputResult::None, true))
     }
 
     /// Handle a key event coming from the main UI.
@@ -3201,6 +3377,8 @@ impl ChatComposer {
         input: KeyEvent,
         now: Instant,
     ) -> (InputResult, bool) {
+        self.flush_terminal_sideband_newline_token_prefix_if_due(now);
+
         // If we have a buffered non-bracketed paste burst and enough time has
         // elapsed since the last char, flush it before handling a new input.
         self.handle_paste_burst_flush(now);
@@ -3230,6 +3408,11 @@ impl ChatComposer {
         } = input
         {
             let has_ctrl_or_alt = has_ctrl_or_alt(modifiers);
+            if !has_ctrl_or_alt
+                && let Some(result) = self.handle_terminal_sideband_newline_token_char(ch, now)
+            {
+                return result;
+            }
             if !has_ctrl_or_alt
                 && !self.draft.disable_paste_burst
                 && self.draft.textarea.allows_paste_burst()
@@ -3292,6 +3475,9 @@ impl ChatComposer {
             && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
         {
             self.handle_paste(pasted);
+        }
+        if !matches!(input.code, KeyCode::Char(_)) {
+            self.flush_terminal_sideband_newline_token_prefix();
         }
         // For non-char inputs (or after flushing), handle normally.
         // Track element removals so we can drop any corresponding placeholders without scanning

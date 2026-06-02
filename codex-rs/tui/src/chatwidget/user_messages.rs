@@ -55,10 +55,17 @@ pub(super) enum ShellEscapePolicy {
     Disallow,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum UserMessageNotifyDisposition {
+    Emit,
+    AlreadyEmitted,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct QueuedUserMessage {
     pub(super) user_message: UserMessage,
     pub(super) action: QueuedInputAction,
+    pub(super) notify_sent: bool,
 }
 
 impl QueuedUserMessage {
@@ -66,11 +73,28 @@ impl QueuedUserMessage {
         Self {
             user_message,
             action,
+            notify_sent: false,
+        }
+    }
+
+    pub(super) fn new_with_notify_sent(
+        user_message: UserMessage,
+        action: QueuedInputAction,
+        notify_sent: bool,
+    ) -> Self {
+        Self {
+            user_message,
+            action,
+            notify_sent,
         }
     }
 
     pub(super) fn into_user_message(self) -> UserMessage {
         self.user_message
+    }
+
+    pub(super) fn into_parts(self) -> (UserMessage, QueuedInputAction, bool) {
+        (self.user_message, self.action, self.notify_sent)
     }
 }
 

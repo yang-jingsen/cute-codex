@@ -212,6 +212,7 @@ impl StatusSurfacePreviewData {
             .map(|value| value.text.as_str())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn status_line_for_items<I>(
         &self,
         items: I,

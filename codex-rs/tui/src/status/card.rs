@@ -6,7 +6,9 @@ use crate::history_cell::with_border_with_inner_width;
 use crate::legacy_core::config::Config;
 use crate::token_usage::TokenUsage;
 use crate::token_usage::TokenUsageInfo;
+use crate::version::CODEX_CLI_DISPLAY_NAME;
 use crate::version::CODEX_CLI_VERSION;
+use crate::version::display_version_label;
 use chrono::DateTime;
 use chrono::Local;
 use codex_app_server_protocol::AskForApproval;
@@ -697,9 +699,9 @@ impl HistoryCell for StatusHistoryCell {
         let mut lines: Vec<Line<'static>> = Vec::new();
         lines.push(Line::from(vec![
             Span::from(format!("{}>_ ", FieldFormatter::INDENT)).dim(),
-            Span::from("OpenAI Codex").bold(),
+            Span::from(CODEX_CLI_DISPLAY_NAME).bold(),
             Span::from(" ").dim(),
-            Span::from(format!("(v{CODEX_CLI_VERSION})")).dim(),
+            Span::from(format!("({})", display_version_label(CODEX_CLI_VERSION))).dim(),
         ]));
 
         let available_inner_width = usize::from(width.saturating_sub(4));
@@ -715,7 +717,7 @@ impl HistoryCell for StatusHistoryCell {
                 (None, None) => "ChatGPT".to_string(),
             },
             StatusAccountDisplay::ApiKey => {
-                "API key configured (run codex login to use ChatGPT)".to_string()
+                "API key configured (run cute-codex login to use ChatGPT)".to_string()
             }
         });
 
