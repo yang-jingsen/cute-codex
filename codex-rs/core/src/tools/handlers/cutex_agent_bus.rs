@@ -292,11 +292,53 @@ async fn post_message(
             "cutex agent bus returned {status}: {text}"
         )));
     }
-    serde_json::from_str::<AgentBusSendResponse>(&text).map_err(|err| {
+    let value = serde_json::from_str::<Value>(&text).map_err(|err| {
+        FunctionCallError::RespondToModel(format!(
+            "failed to parse cutex agent send JSON response: {err}"
+        ))
+    })?;
+    parse_agent_bus_send_response(value).map_err(|err| {
         FunctionCallError::RespondToModel(format!(
             "failed to parse cutex agent send response: {err}"
         ))
     })
+}
+
+fn parse_agent_bus_send_response(value: Value) -> Result<AgentBusSendResponse, String> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| "expected JSON object".to_string())?;
+    Ok(AgentBusSendResponse {
+        id: required_string_field(obj, "id")?,
+        from: optional_string_field(obj, "from"),
+        to: required_string_field(obj, "to")?,
+        to_name: optional_string_field(obj, "to_name")
+            .or_else(|| optional_string_field(obj, "toName")),
+        trigger_turn: optional_bool_field(obj, "trigger_turn")
+            .or_else(|| optional_bool_field(obj, "triggerTurn"))
+            .ok_or_else(|| "missing boolean field trigger_turn".to_string())?,
+        queued: optional_bool_field(obj, "queued")
+            .ok_or_else(|| "missing boolean field queued".to_string())?,
+        deduplicated: optional_bool_field(obj, "deduplicated").unwrap_or(false),
+    })
+}
+
+fn required_string_field(
+    obj: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<String, String> {
+    optional_string_field(obj, field).ok_or_else(|| format!("missing string field {field}"))
+}
+
+fn optional_string_field(obj: &serde_json::Map<String, Value>, field: &str) -> Option<String> {
+    obj.get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn optional_bool_field(obj: &serde_json::Map<String, Value>, field: &str) -> Option<bool> {
+    obj.get(field).and_then(Value::as_bool)
 }
 
 async fn http_get_json(
@@ -399,12 +441,17 @@ fn build_send_result(sender: &str, response: AgentBusSendResponse) -> CutexAgent
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(sender)
         .to_string();
+    let mode = if response.trigger_turn {
+        "trigger-turn"
+    } else {
+        "queue-only"
+    };
     let summary = format!(
         "Sent message {} from {} to {} ({}) queued={} trigger_turn={} deduplicated={}",
         response.id,
         actual_sender,
         target,
-        response.to,
+        mode,
         response.queued,
         response.trigger_turn,
         response.deduplicated
@@ -624,5 +671,25 @@ mod tests {
         assert_eq!(response.to_name.as_deref(), Some("worker.abc1234"));
         assert!(response.trigger_turn);
         assert!(!response.deduplicated);
+    }
+
+    #[test]
+    fn send_response_parser_tolerates_duplicate_legacy_case_fields() {
+        let response = parse_agent_bus_send_response(serde_json::json!({
+            "id": "message-1",
+            "from": "leader",
+            "to": "agent-2",
+            "to_name": "worker.abc1234",
+            "toName": "worker.abc1234",
+            "trigger_turn": false,
+            "triggerTurn": false,
+            "queued": true,
+            "deduplicated": false
+        }))
+        .expect("legacy mixed-case response should parse");
+
+        assert_eq!(response.to_name.as_deref(), Some("worker.abc1234"));
+        assert!(!response.trigger_turn);
+        assert!(response.queued);
     }
 }

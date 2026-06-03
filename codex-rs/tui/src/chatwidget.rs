@@ -522,6 +522,7 @@ pub(crate) enum ExternalEditorState {
 struct PendingCutexAgentSend {
     to: String,
     message: String,
+    queue_only: bool,
 }
 
 /// Maintains the per-session UI state and interaction state machines for the chat screen.

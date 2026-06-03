@@ -84,7 +84,7 @@ impl HistoryCell for FinalMessageSeparator {
                 spans.push(" • ".dim());
             }
             if is_timestamp {
-                spans.push(part.cyan().bold());
+                spans.push(Span::styled(part, completed_at_style()));
             } else {
                 spans.push(part.dim());
             }
@@ -123,6 +123,10 @@ fn format_completed_at_label() -> String {
         .format("%H:%M:%S %a %Y-%m-%d")
         .to_string()
         .to_ascii_uppercase()
+}
+
+fn completed_at_style() -> Style {
+    Style::default().fg(Color::Rgb(255, 180, 229)).bold()
 }
 
 pub(crate) fn runtime_metrics_label(summary: RuntimeMetricsSummary) -> Option<String> {

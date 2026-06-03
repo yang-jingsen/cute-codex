@@ -423,6 +423,7 @@ impl ChatWidget {
                         PendingCutexAgentSend {
                             to: args.to,
                             message: args.message,
+                            queue_only: args.queue_only,
                         },
                     );
                 }
@@ -462,8 +463,21 @@ impl ChatWidget {
         } else {
             "CUTEX AGENT SENT"
         };
+        let trigger_turn = result
+            .as_ref()
+            .and_then(|result| result.trigger_turn)
+            .unwrap_or(!call.queue_only);
+        let mode = cutex_agent_message_mode_label(trigger_turn);
+        let mode_span = if trigger_turn {
+            mode.green().bold()
+        } else {
+            mode.yellow().bold()
+        };
         let mut lines = vec![Line::from(vec![
             header.green().bold(),
+            " [".dim(),
+            mode_span,
+            "]".dim(),
             " to ".dim(),
             target.cyan().bold(),
         ])];
@@ -486,9 +500,7 @@ impl ChatWidget {
         if let Some(queued) = result.as_ref().and_then(|result| result.queued) {
             meta.push(format!("queued={queued}"));
         }
-        if let Some(trigger_turn) = result.as_ref().and_then(|result| result.trigger_turn) {
-            meta.push(format!("trigger_turn={trigger_turn}"));
-        }
+        meta.push(format!("mode={mode}"));
         if let Some(deduplicated) = result.as_ref().and_then(|result| result.deduplicated) {
             meta.push(format!("deduplicated={deduplicated}"));
         }
@@ -510,6 +522,8 @@ impl ChatWidget {
 struct CutexAgentSendArgsForUi {
     to: String,
     message: String,
+    #[serde(default, alias = "queueOnly")]
+    queue_only: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -530,4 +544,12 @@ struct CutexAgentSendOutputForUi {
     trigger_turn: Option<bool>,
     #[serde(default)]
     deduplicated: Option<bool>,
+}
+
+fn cutex_agent_message_mode_label(trigger_turn: bool) -> &'static str {
+    if trigger_turn {
+        "trigger-turn"
+    } else {
+        "queue-only"
+    }
 }

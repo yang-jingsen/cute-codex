@@ -595,7 +595,7 @@ fn final_message_separator_completion_time_is_display_only() {
         .iter()
         .find(|span| span.content.as_ref() == timestamp)
         .expect("timestamp span");
-    assert_eq!(timestamp_span.style.fg, Some(Color::Cyan));
+    assert_eq!(timestamp_span.style.fg, Some(Color::Rgb(255, 180, 229)));
     assert!(timestamp_span.style.add_modifier.contains(Modifier::BOLD));
 }
 

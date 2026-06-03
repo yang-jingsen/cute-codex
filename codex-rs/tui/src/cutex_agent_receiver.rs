@@ -334,9 +334,18 @@ fn deliver_message(app_event_tx: &AppEventSender, message: CutexAgentMessage) {
 
 fn visible_agent_message_cell(message: &CutexAgentMessage) -> PlainHistoryCell {
     let reply_command = format!("cutex agent send {} \"message\"", message.from);
+    let mode = agent_message_mode_label(message.trigger_turn);
+    let mode_span = if message.trigger_turn {
+        mode.green().bold()
+    } else {
+        mode.yellow().bold()
+    };
     let mut lines = vec![
         Line::from(vec![
             "CUTEX AGENT MESSAGE".magenta().bold(),
+            " [".dim(),
+            mode_span,
+            "]".dim(),
             " from ".dim(),
             message.from.clone().cyan().bold(),
         ]),
@@ -347,6 +356,14 @@ fn visible_agent_message_cell(message: &CutexAgentMessage) -> PlainHistoryCell {
         lines.push(Line::from(format!("  {line}")));
     }
     PlainHistoryCell::new(lines)
+}
+
+fn agent_message_mode_label(trigger_turn: bool) -> &'static str {
+    if trigger_turn {
+        "trigger-turn"
+    } else {
+        "queue-only"
+    }
 }
 
 fn agent_path_for_label(label: &str) -> AgentPath {
