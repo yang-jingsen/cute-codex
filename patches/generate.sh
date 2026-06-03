@@ -21,6 +21,13 @@ INTENT_TO_ADD_FILES=(
   codex-rs/tui/src/notify_service.rs
   codex-rs/tui/src/chatwidget/notify_service_events.rs
   codex-rs/tui/src/terminal_sideband.rs
+  codex-rs/tui/src/cutex_agent_receiver.rs
+  codex-rs/core/src/tools/handlers/cutex_agent_bus.rs
+  codex-rs/core/src/tools/handlers/cutex_agent_bus_spec.rs
+  codex-rs/app-server-protocol/schema/json/v2/ThreadInterAgentMessageParams.json
+  codex-rs/app-server-protocol/schema/json/v2/ThreadInterAgentMessageResponse.json
+  codex-rs/app-server-protocol/schema/typescript/v2/ThreadInterAgentMessageParams.ts
+  codex-rs/app-server-protocol/schema/typescript/v2/ThreadInterAgentMessageResponse.ts
 )
 
 for file in "${INTENT_TO_ADD_FILES[@]}"; do

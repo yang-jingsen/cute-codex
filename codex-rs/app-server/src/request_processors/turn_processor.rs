@@ -129,6 +129,15 @@ impl TurnRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn thread_inter_agent_message(
+        &self,
+        params: ThreadInterAgentMessageParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.thread_inter_agent_message_response_inner(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn thread_settings_update(
         &self,
         request_id: &ConnectionRequestId,
@@ -725,6 +734,22 @@ impl TurnRequestProcessor {
                 err => internal_error(format!("failed to inject response items: {err}")),
             })?;
         Ok(ThreadInjectItemsResponse {})
+    }
+
+    async fn thread_inter_agent_message_response_inner(
+        &self,
+        params: ThreadInterAgentMessageParams,
+    ) -> Result<ThreadInterAgentMessageResponse, JSONRPCErrorError> {
+        let (_, thread) = self.load_thread(&params.thread_id).await?;
+        let communication = params.to_core_communication().map_err(invalid_request)?;
+        let submission_id = thread
+            .submit(Op::InterAgentCommunication { communication })
+            .await
+            .map_err(|err| match err {
+                CodexErr::InvalidRequest(message) => invalid_request(message),
+                err => internal_error(format!("failed to submit inter-agent message: {err}")),
+            })?;
+        Ok(ThreadInterAgentMessageResponse { submission_id })
     }
 
     async fn set_app_server_client_info(

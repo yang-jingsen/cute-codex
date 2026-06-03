@@ -2211,7 +2211,10 @@ async fn status_line_custom_catalog_item_renders_when_selected() {
 
     chat.refresh_status_line();
 
-    assert_eq!(status_line_text(&chat), Some("Profile sample-profile".to_string()));
+    assert_eq!(
+        status_line_text(&chat),
+        Some("Profile sample-profile".to_string())
+    );
 }
 
 #[tokio::test]

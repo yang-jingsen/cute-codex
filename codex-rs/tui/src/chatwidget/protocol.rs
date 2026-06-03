@@ -70,6 +70,9 @@ impl ChatWidget {
             ServerNotification::ItemCompleted(notification) => {
                 self.handle_item_completed_notification(notification, replay_kind);
             }
+            ServerNotification::RawResponseItemCompleted(notification) => {
+                self.handle_raw_response_item_completed(notification.item);
+            }
             ServerNotification::AgentMessageDelta(notification) => {
                 self.on_agent_message_delta(notification.delta);
             }
@@ -228,7 +231,6 @@ impl ChatWidget {
             | ServerNotification::ThreadStatusChanged(_)
             | ServerNotification::ThreadArchived(_)
             | ServerNotification::ThreadUnarchived(_)
-            | ServerNotification::RawResponseItemCompleted(_)
             | ServerNotification::CommandExecOutputDelta(_)
             | ServerNotification::ProcessOutputDelta(_)
             | ServerNotification::ProcessExited(_)
@@ -406,4 +408,126 @@ impl ChatWidget {
             replay_kind.map_or(ThreadItemRenderSource::Live, ThreadItemRenderSource::Replay),
         );
     }
+
+    fn handle_raw_response_item_completed(&mut self, item: ResponseItem) {
+        match item {
+            ResponseItem::FunctionCall {
+                name,
+                arguments,
+                call_id,
+                ..
+            } if name == "cutex_agent_send" => {
+                if let Ok(args) = serde_json::from_str::<CutexAgentSendArgsForUi>(&arguments) {
+                    self.pending_cutex_agent_sends.insert(
+                        call_id,
+                        PendingCutexAgentSend {
+                            to: args.to,
+                            message: args.message,
+                        },
+                    );
+                }
+            }
+            ResponseItem::FunctionCallOutput { call_id, output } => {
+                let Some(call) = self.pending_cutex_agent_sends.remove(&call_id) else {
+                    return;
+                };
+                let result = output
+                    .body
+                    .to_text()
+                    .and_then(|text| serde_json::from_str::<CutexAgentSendOutputForUi>(&text).ok());
+                self.add_cutex_agent_sent_history_cell(call, result);
+            }
+            _ => {}
+        }
+    }
+
+    fn add_cutex_agent_sent_history_cell(
+        &mut self,
+        call: PendingCutexAgentSend,
+        result: Option<CutexAgentSendOutputForUi>,
+    ) {
+        let target = result
+            .as_ref()
+            .and_then(|result| {
+                result
+                    .to_name
+                    .as_deref()
+                    .or(result.to.as_deref())
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .unwrap_or(call.to.as_str())
+            .to_string();
+        let header = if result.as_ref().and_then(|result| result.ok) == Some(false) {
+            "CUTEX AGENT SEND FAILED"
+        } else {
+            "CUTEX AGENT SENT"
+        };
+        let mut lines = vec![Line::from(vec![
+            header.green().bold(),
+            " to ".dim(),
+            target.cyan().bold(),
+        ])];
+
+        let mut meta = Vec::new();
+        if let Some(from) = result
+            .as_ref()
+            .and_then(|result| result.from.as_deref())
+            .filter(|value| !value.trim().is_empty())
+        {
+            meta.push(format!("from={from}"));
+        }
+        if let Some(id) = result
+            .as_ref()
+            .and_then(|result| result.message_id.as_deref())
+            .filter(|value| !value.trim().is_empty())
+        {
+            meta.push(format!("id={id}"));
+        }
+        if let Some(queued) = result.as_ref().and_then(|result| result.queued) {
+            meta.push(format!("queued={queued}"));
+        }
+        if let Some(trigger_turn) = result.as_ref().and_then(|result| result.trigger_turn) {
+            meta.push(format!("trigger_turn={trigger_turn}"));
+        }
+        if let Some(deduplicated) = result.as_ref().and_then(|result| result.deduplicated) {
+            meta.push(format!("deduplicated={deduplicated}"));
+        }
+        if !meta.is_empty() {
+            lines.push(Line::from(meta.join(" | ").dim()));
+        }
+
+        let preview = crate::text_formatting::truncate_text(&call.message, 2000);
+        for line in preview.lines() {
+            lines.push(Line::from(vec!["  ".dim(), line.to_string().into()]));
+        }
+        self.flush_answer_stream_with_separator();
+        self.add_to_history(PlainHistoryCell::new(lines));
+        self.request_redraw();
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct CutexAgentSendArgsForUi {
+    to: String,
+    message: String,
+}
+
+#[derive(serde::Deserialize)]
+struct CutexAgentSendOutputForUi {
+    #[serde(default)]
+    ok: Option<bool>,
+    #[serde(default)]
+    message_id: Option<String>,
+    #[serde(default)]
+    from: Option<String>,
+    #[serde(default)]
+    to: Option<String>,
+    #[serde(default)]
+    to_name: Option<String>,
+    #[serde(default)]
+    queued: Option<bool>,
+    #[serde(default)]
+    trigger_turn: Option<bool>,
+    #[serde(default)]
+    deduplicated: Option<bool>,
 }

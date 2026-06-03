@@ -11,11 +11,13 @@ use super::TurnEnvironmentParams;
 use super::TurnItemsView;
 use super::shared::v2_enum_from_core;
 use codex_experimental_api_macros::ExperimentalApi;
+use codex_protocol::AgentPath;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
 use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
 use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
@@ -1199,6 +1201,45 @@ pub struct ThreadInjectItemsParams {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadInjectItemsResponse {}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadInterAgentMessageParams {
+    pub thread_id: String,
+    pub author: String,
+    pub recipient: String,
+    #[serde(default)]
+    pub other_recipients: Vec<String>,
+    pub content: String,
+    pub trigger_turn: bool,
+}
+
+impl ThreadInterAgentMessageParams {
+    pub fn to_core_communication(&self) -> Result<InterAgentCommunication, String> {
+        let author = AgentPath::try_from(self.author.as_str())?;
+        let recipient = AgentPath::try_from(self.recipient.as_str())?;
+        let other_recipients = self
+            .other_recipients
+            .iter()
+            .map(|path| AgentPath::try_from(path.as_str()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(InterAgentCommunication::new(
+            author,
+            recipient,
+            other_recipients,
+            self.content.clone(),
+            self.trigger_turn,
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadInterAgentMessageResponse {
+    pub submission_id: String,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]

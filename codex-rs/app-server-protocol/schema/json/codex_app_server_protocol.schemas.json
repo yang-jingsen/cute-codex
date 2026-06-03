@@ -686,6 +686,31 @@
           "type": "object"
         },
         {
+          "description": "Deliver an inter-agent mailbox message to a loaded thread.",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/inter_agent_message"
+              ],
+              "title": "Thread/interAgentMessageRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ThreadInterAgentMessageParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/interAgentMessageRequest",
+          "type": "object"
+        },
+        {
           "properties": {
             "id": {
               "$ref": "#/definitions/v2/RequestId"
@@ -16044,6 +16069,55 @@
       "ThreadInjectItemsResponse": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "ThreadInjectItemsResponse",
+        "type": "object"
+      },
+      "ThreadInterAgentMessageParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "otherRecipients": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "triggerTurn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "author",
+          "content",
+          "recipient",
+          "threadId",
+          "triggerTurn"
+        ],
+        "title": "ThreadInterAgentMessageParams",
+        "type": "object"
+      },
+      "ThreadInterAgentMessageResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "title": "ThreadInterAgentMessageResponse",
         "type": "object"
       },
       "ThreadItem": {

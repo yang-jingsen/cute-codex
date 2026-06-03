@@ -616,6 +616,12 @@ impl App {
                 }
                 Ok(true)
             }
+            AppCommand::InterAgentCommunication { communication } => {
+                app_server
+                    .thread_inter_agent_message(thread_id, communication.clone())
+                    .await?;
+                Ok(true)
+            }
             AppCommand::ListSkills { cwds, force_reload } => {
                 self.handle_skills_list_result(
                     app_server

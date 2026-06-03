@@ -4,7 +4,8 @@ use codex_config::types::NotifyServiceSettings;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 
 pub(crate) type IdleNotifyStatus = NotifyServiceEvent;
 

@@ -63,6 +63,8 @@ use codex_app_server_protocol::ThreadGoalSetResponse;
 use codex_app_server_protocol::ThreadGoalStatus;
 use codex_app_server_protocol::ThreadInjectItemsParams;
 use codex_app_server_protocol::ThreadInjectItemsResponse;
+use codex_app_server_protocol::ThreadInterAgentMessageParams;
+use codex_app_server_protocol::ThreadInterAgentMessageResponse;
 use codex_app_server_protocol::ThreadListParams;
 use codex_app_server_protocol::ThreadListResponse;
 use codex_app_server_protocol::ThreadLoadedListParams;
@@ -121,6 +123,7 @@ use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ModelUpgrade;
 use codex_protocol::openai_models::ReasoningEffortPreset;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use color_eyre::eyre::ContextCompat;
 use color_eyre::eyre::Result;
@@ -674,6 +677,32 @@ impl AppServerSession {
             })
             .await
             .wrap_err("thread/inject_items failed during TUI side conversation setup")
+    }
+
+    pub(crate) async fn thread_inter_agent_message(
+        &mut self,
+        thread_id: ThreadId,
+        communication: InterAgentCommunication,
+    ) -> Result<ThreadInterAgentMessageResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::ThreadInterAgentMessage {
+                request_id,
+                params: ThreadInterAgentMessageParams {
+                    thread_id: thread_id.to_string(),
+                    author: communication.author.to_string(),
+                    recipient: communication.recipient.to_string(),
+                    other_recipients: communication
+                        .other_recipients
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                    content: communication.content,
+                    trigger_turn: communication.trigger_turn,
+                },
+            })
+            .await
+            .wrap_err("thread/inter_agent_message failed in TUI")
     }
 
     #[allow(clippy::too_many_arguments)]

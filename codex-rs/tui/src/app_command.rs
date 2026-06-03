@@ -19,6 +19,7 @@ use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use serde::Serialize;
 use serde_json::Value;
@@ -84,6 +85,9 @@ pub(crate) enum AppCommand {
     UserInputAnswer {
         id: String,
         response: ToolRequestUserInputResponse,
+    },
+    InterAgentCommunication {
+        communication: InterAgentCommunication,
     },
     RequestPermissionsResponse {
         id: String,
@@ -234,6 +238,10 @@ impl AppCommand {
 
     pub(crate) fn user_input_answer(id: String, response: ToolRequestUserInputResponse) -> Self {
         Self::UserInputAnswer { id, response }
+    }
+
+    pub(crate) fn inter_agent_communication(communication: InterAgentCommunication) -> Self {
+        Self::InterAgentCommunication { communication }
     }
 
     pub(crate) fn request_permissions_response(

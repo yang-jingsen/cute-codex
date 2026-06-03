@@ -379,6 +379,8 @@ export type { ThreadGoalStatus } from "./ThreadGoalStatus";
 export type { ThreadGoalUpdatedNotification } from "./ThreadGoalUpdatedNotification";
 export type { ThreadInjectItemsParams } from "./ThreadInjectItemsParams";
 export type { ThreadInjectItemsResponse } from "./ThreadInjectItemsResponse";
+export type { ThreadInterAgentMessageParams } from "./ThreadInterAgentMessageParams";
+export type { ThreadInterAgentMessageResponse } from "./ThreadInterAgentMessageResponse";
 export type { ThreadItem } from "./ThreadItem";
 export type { ThreadListParams } from "./ThreadListParams";
 export type { ThreadListResponse } from "./ThreadListResponse";

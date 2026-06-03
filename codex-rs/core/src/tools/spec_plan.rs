@@ -5,6 +5,8 @@ use crate::tools::handlers::ApplyPatchHandler;
 use crate::tools::handlers::CodeModeExecuteHandler;
 use crate::tools::handlers::CodeModeWaitHandler;
 use crate::tools::handlers::CreateGoalHandler;
+use crate::tools::handlers::CutexAgentListHandler;
+use crate::tools::handlers::CutexAgentSendHandler;
 use crate::tools::handlers::DynamicToolHandler;
 use crate::tools::handlers::ExecCommandHandler;
 use crate::tools::handlers::ExecCommandHandlerOptions;
@@ -27,6 +29,7 @@ use crate::tools::handlers::ViewImageHandler;
 use crate::tools::handlers::WriteStdinHandler;
 use crate::tools::handlers::agent_jobs::ReportAgentJobResultHandler;
 use crate::tools::handlers::agent_jobs::SpawnAgentsOnCsvHandler;
+use crate::tools::handlers::cutex_agent_bus::cutex_agent_bus_available;
 use crate::tools::handlers::extension_tools::ExtensionToolAdapter;
 use crate::tools::handlers::multi_agents::CloseAgentHandler;
 use crate::tools::handlers::multi_agents::ResumeAgentHandler;
@@ -594,6 +597,10 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut
     let environment_mode = turn_context.tool_environment_mode();
 
     planned_tools.add(PlanHandler);
+    if cutex_agent_bus_available() {
+        planned_tools.add(CutexAgentListHandler);
+        planned_tools.add(CutexAgentSendHandler);
+    }
     if goal_tools_enabled(turn_context) {
         planned_tools.add(GetGoalHandler);
         planned_tools.add(CreateGoalHandler);

@@ -3281,6 +3281,40 @@
       ],
       "type": "object"
     },
+    "ThreadInterAgentMessageParams": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "otherRecipients": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "recipient": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "triggerTurn": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "author",
+        "content",
+        "recipient",
+        "threadId",
+        "triggerTurn"
+      ],
+      "type": "object"
+    },
     "ThreadListCwdFilter": {
       "anyOf": [
         {
@@ -4771,6 +4805,31 @@
         "params"
       ],
       "title": "Thread/injectItemsRequest",
+      "type": "object"
+    },
+    {
+      "description": "Deliver an inter-agent mailbox message to a loaded thread.",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/inter_agent_message"
+          ],
+          "title": "Thread/interAgentMessageRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadInterAgentMessageParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/interAgentMessageRequest",
       "type": "object"
     },
     {

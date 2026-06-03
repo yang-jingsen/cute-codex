@@ -122,6 +122,7 @@ mod color;
 mod config_update;
 mod custom_status_items;
 pub(crate) mod custom_terminal;
+mod cutex_agent_receiver;
 mod pets;
 pub use custom_terminal::Terminal;
 mod auto_review_denials;
