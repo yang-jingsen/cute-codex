@@ -144,9 +144,9 @@ impl ToolExecutor<ToolInvocation> for CutexAgentListHandler {
         let config = load_cutex_agent_bus_config()?;
         let agents = fetch_agents(&config).await?;
         let result = build_agent_list_result(&config, agents);
-        Ok(boxed_tool_output(FunctionToolOutput::from_text(
-            json_tool_result(&result, CUTEX_AGENT_LIST_TOOL_NAME),
-            Some(true),
+        Ok(boxed_tool_output(json_function_tool_output(
+            &result,
+            CUTEX_AGENT_LIST_TOOL_NAME,
         )))
     }
 }
@@ -191,9 +191,9 @@ impl ToolExecutor<ToolInvocation> for CutexAgentSendHandler {
         };
         let response = post_message(&config, &request).await?;
         let result = build_send_result(&sender, response);
-        Ok(boxed_tool_output(FunctionToolOutput::from_text(
-            json_tool_result(&result, CUTEX_AGENT_SEND_TOOL_NAME),
-            Some(true),
+        Ok(boxed_tool_output(json_function_tool_output(
+            &result,
+            CUTEX_AGENT_SEND_TOOL_NAME,
         )))
     }
 }
@@ -432,6 +432,12 @@ fn json_tool_result<T: Serialize>(value: &T, tool_name: &str) -> String {
     })
 }
 
+fn json_function_tool_output<T: Serialize>(value: &T, tool_name: &str) -> FunctionToolOutput {
+    let mut output = FunctionToolOutput::from_text(json_tool_result(value, tool_name), Some(true));
+    output.post_tool_use_response = serde_json::to_value(value).ok();
+    output
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -503,6 +509,36 @@ mod tests {
         assert_eq!(value["to_name"], "msgbot-2.abc1234");
         assert_eq!(value["queued"], true);
         assert_eq!(value["deduplicated"], false);
+    }
+
+    #[test]
+    fn json_function_tool_output_exposes_structured_post_tool_response() {
+        let result = build_send_result(
+            "msgbot-1",
+            AgentBusSendResponse {
+                id: "message-1".to_string(),
+                from: Some("msgbot-1".to_string()),
+                to: "agent-2".to_string(),
+                to_name: Some("msgbot-2.abc1234".to_string()),
+                trigger_turn: true,
+                queued: true,
+                deduplicated: false,
+            },
+        );
+
+        let output = json_function_tool_output(&result, CUTEX_AGENT_SEND_TOOL_NAME);
+        let post_tool_response = output
+            .post_tool_use_response
+            .clone()
+            .expect("structured response should be present");
+        assert_eq!(post_tool_response["ok"], true);
+        assert_eq!(post_tool_response["message_id"], "message-1");
+        assert_eq!(post_tool_response["trigger_turn"], true);
+
+        let model_text = output.into_text();
+        let model_value: serde_json::Value =
+            serde_json::from_str(&model_text).expect("model text should remain JSON");
+        assert_eq!(model_value["message_id"], "message-1");
     }
 
     #[test]

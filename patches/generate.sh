@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Regenerate the authoritative patch file from the current worktree vs HEAD.
+# Regenerate the authoritative patch file from the upstream base plus the
+# current branch/worktree changes.
 # Usage:
 #   git checkout -b cute-side6-v0136 rust-v0.136.0
 #   # apply/port local changes
 #   bash patches/generate.sh
 #
-# This overwrites the rollup patch. It intentionally uses `git diff HEAD`
-# instead of `BASE..HEAD` so conflict-resolution edits that have not been
-# committed yet are included. The patch is scoped to `codex-rs/`.
+# This overwrites the rollup patch. It intentionally diffs against the upstream
+# release tag, not HEAD, so the patch remains a complete patcher artifact after
+# the branch is committed. The patch is scoped to `codex-rs/`.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$REPO_DIR"
+
+BASE_REF="${1:-${CUTE_CODEX_PATCH_BASE:-rust-v0.136.0}}"
 
 INTENT_TO_ADD_FILES=(
   codex-rs/tui/src/custom_status_items.rs
@@ -38,10 +41,10 @@ done
 
 PATCH="$SCRIPT_DIR/00-cute-codex-side6-rollup.patch"
 
-echo "Generating patch: HEAD..worktree"
+echo "Generating patch: $BASE_REF..worktree"
 echo ""
 
-git diff --binary HEAD -- codex-rs > "$PATCH"
+git diff --binary "$BASE_REF" -- codex-rs > "$PATCH"
 echo "  $(basename "$PATCH")"
 
 echo ""

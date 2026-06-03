@@ -9,6 +9,22 @@ If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="http
 
 ---
 
+## cute-codex / cutex collaboration build
+
+The `cute` branch in this fork carries local patches for use with
+[`cutex`](https://github.com/yang-jingsen/cutex). The headline feature is
+opt-in agent-to-agent messaging: when a session is launched with
+`cutex --agent` or `cutex run <profile> --agent`, `cute-codex` registers with a
+shared local agent bus, exposes model-native `cutex_agent_list` and
+`cutex_agent_send` tools, and renders incoming peer messages in the TUI history.
+
+Normal inter-agent sends wake the recipient so it can respond promptly.
+Queue-only delivery is reserved for explicit FYI/no-action messages. Plain
+`cutex` launches keep the native solo behavior and do not expose the agent bus
+or collaboration tools to the model.
+
+---
+
 ## Quickstart
 
 ### Installing and running Codex CLI
