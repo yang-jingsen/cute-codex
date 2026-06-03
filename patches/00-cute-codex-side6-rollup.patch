@@ -8200,6 +8200,132 @@ index 0000000000..97c67fbb8e
 +    }
 +    serde_json::from_str(body).map_err(|err| err.to_string())
 +}
+diff --git a/codex-rs/tui/src/history_cell/separators.rs b/codex-rs/tui/src/history_cell/separators.rs
+index 0a74680638..5e2b45c33c 100644
+--- a/codex-rs/tui/src/history_cell/separators.rs
++++ b/codex-rs/tui/src/history_cell/separators.rs
+@@ -3,7 +3,8 @@
+ use super::*;
+
+ #[derive(Debug)]
+-/// A visual divider between turns, optionally showing how long the assistant "worked for".
++/// A visual divider between turns, optionally showing how long the assistant "worked for" and
++/// when the completion separator appeared in the UI.
+ ///
+ /// This separator is only emitted for turns that performed concrete work (e.g., running commands,
+ /// applying patches, making MCP tool calls), so purely conversational turns do not show an empty
+@@ -11,16 +12,30 @@ use super::*;
+ pub struct FinalMessageSeparator {
+     elapsed_seconds: Option<u64>,
+     runtime_metrics: Option<RuntimeMetricsSummary>,
++    completed_at_label: String,
+ }
+ impl FinalMessageSeparator {
+     /// Creates a separator; completed turns should pass protocol turn duration when available.
+     pub(crate) fn new(
+         elapsed_seconds: Option<u64>,
+         runtime_metrics: Option<RuntimeMetricsSummary>,
++    ) -> Self {
++        Self::new_with_completed_at_label(
++            elapsed_seconds,
++            runtime_metrics,
++            format_completed_at_label(),
++        )
++    }
++
++    pub(crate) fn new_with_completed_at_label(
++        elapsed_seconds: Option<u64>,
++        runtime_metrics: Option<RuntimeMetricsSummary>,
++        completed_at_label: String,
+     ) -> Self {
+         Self {
+             elapsed_seconds,
+             runtime_metrics,
++            completed_at_label,
+         }
+     }
+ }
+@@ -32,25 +47,55 @@ impl HistoryCell for FinalMessageSeparator {
+             .filter(|seconds| *seconds > 60)
+             .map(crate::status_indicator_widget::fmt_elapsed_compact)
+         {
+-            label_parts.push(format!("Worked for {elapsed_seconds}"));
++            label_parts.push((format!("Worked for {elapsed_seconds}"), false));
++        }
++        if !self.completed_at_label.is_empty() {
++            label_parts.push((self.completed_at_label.clone(), true));
+         }
+         if let Some(metrics_label) = self.runtime_metrics.and_then(runtime_metrics_label) {
+-            label_parts.push(metrics_label);
++            label_parts.push((metrics_label, false));
+         }
+
+         if label_parts.is_empty() {
+             return vec![Line::from_iter(["─".repeat(width as usize).dim()])];
+         }
+
+-        let label = format!("─ {} ─", label_parts.join(" • "));
+-        let (label, _suffix, label_width) = take_prefix_by_width(&label, width as usize);
+-        vec![
+-            Line::from_iter([
+-                label,
+-                "─".repeat((width as usize).saturating_sub(label_width)),
+-            ])
+-            .dim(),
+-        ]
++        let joined = label_parts
++            .iter()
++            .map(|(part, _)| part.as_str())
++            .collect::<Vec<_>>()
++            .join(" • ");
++        let label = format!("─ {joined} ─");
++        let (label, suffix, label_width) = take_prefix_by_width(&label, width as usize);
++        if !suffix.is_empty() {
++            return vec![
++                Line::from_iter([
++                    label,
++                    "─".repeat((width as usize).saturating_sub(label_width)),
++                ])
++                .dim(),
++            ];
++        }
++
++        let mut spans = Vec::new();
++        spans.push("─ ".dim());
++        for (idx, (part, is_timestamp)) in label_parts.into_iter().enumerate() {
++            if idx > 0 {
++                spans.push(" • ".dim());
++            }
++            if is_timestamp {
++                spans.push(part.cyan().bold());
++            } else {
++                spans.push(part.dim());
++            }
++        }
++        spans.push(" ─".dim());
++        spans.push(
++            "─"
++                .repeat((width as usize).saturating_sub(label_width))
++                .dim(),
++        );
++        vec![Line::from(spans)]
+     }
+
+     fn raw_lines(&self) -> Vec<Line<'static>> {
+@@ -73,6 +118,13 @@ impl HistoryCell for FinalMessageSeparator {
+     }
+ }
+
++fn format_completed_at_label() -> String {
++    chrono::Local::now()
++        .format("%H:%M:%S %a %Y-%m-%d")
++        .to_string()
++        .to_ascii_uppercase()
++}
++
+ pub(crate) fn runtime_metrics_label(summary: RuntimeMetricsSummary) -> Option<String> {
+     let mut parts = Vec::new();
+     if summary.tool_calls.count > 0 {
 diff --git a/codex-rs/tui/src/history_cell/session.rs b/codex-rs/tui/src/history_cell/session.rs
 index 23e8836454..92405adeca 100644
 --- a/codex-rs/tui/src/history_cell/session.rs
@@ -8241,6 +8367,43 @@ index 23e8836454..92405adeca 100644
              Line::from(format!(
                  "model: {}{}",
                  self.model,
+diff --git a/codex-rs/tui/src/history_cell/tests.rs b/codex-rs/tui/src/history_cell/tests.rs
+index 63a04d19d4..47ed88f6a7 100644
+--- a/codex-rs/tui/src/history_cell/tests.rs
++++ b/codex-rs/tui/src/history_cell/tests.rs
+@@ -571,6 +571,32 @@ fn final_message_separator_includes_worked_label_after_one_minute() {
+
+     assert_eq!(rendered.len(), 1);
+     assert!(rendered[0].contains("Worked for"));
++    assert!(!rendered[0].contains("Ended at"));
++}
++
++#[test]
++fn final_message_separator_completion_time_is_display_only() {
++    let timestamp = "20:31:08 THU 2026-06-04";
++    let cell = FinalMessageSeparator::new_with_completed_at_label(
++        Some(61),
++        /*runtime_metrics*/ None,
++        timestamp.to_string(),
++    );
++    let display_lines = cell.display_lines(/*width*/ 200);
++    let rendered = render_lines(&display_lines);
++    let raw = render_lines(&cell.raw_lines());
++
++    assert!(rendered[0].contains(timestamp));
++    assert!(!rendered[0].contains("Ended at"));
++    assert!(!raw.join("\n").contains(timestamp));
++
++    let timestamp_span = display_lines[0]
++        .spans
++        .iter()
++        .find(|span| span.content.as_ref() == timestamp)
++        .expect("timestamp span");
++    assert_eq!(timestamp_span.style.fg, Some(Color::Cyan));
++    assert!(timestamp_span.style.add_modifier.contains(Modifier::BOLD));
+ }
+
+ #[test]
 diff --git a/codex-rs/tui/src/lib.rs b/codex-rs/tui/src/lib.rs
 index 508977fb53..c9cc34a3ef 100644
 --- a/codex-rs/tui/src/lib.rs

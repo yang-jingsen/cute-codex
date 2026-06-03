@@ -571,6 +571,32 @@ fn final_message_separator_includes_worked_label_after_one_minute() {
 
     assert_eq!(rendered.len(), 1);
     assert!(rendered[0].contains("Worked for"));
+    assert!(!rendered[0].contains("Ended at"));
+}
+
+#[test]
+fn final_message_separator_completion_time_is_display_only() {
+    let timestamp = "20:31:08 THU 2026-06-04";
+    let cell = FinalMessageSeparator::new_with_completed_at_label(
+        Some(61),
+        /*runtime_metrics*/ None,
+        timestamp.to_string(),
+    );
+    let display_lines = cell.display_lines(/*width*/ 200);
+    let rendered = render_lines(&display_lines);
+    let raw = render_lines(&cell.raw_lines());
+
+    assert!(rendered[0].contains(timestamp));
+    assert!(!rendered[0].contains("Ended at"));
+    assert!(!raw.join("\n").contains(timestamp));
+
+    let timestamp_span = display_lines[0]
+        .spans
+        .iter()
+        .find(|span| span.content.as_ref() == timestamp)
+        .expect("timestamp span");
+    assert_eq!(timestamp_span.style.fg, Some(Color::Cyan));
+    assert!(timestamp_span.style.add_modifier.contains(Modifier::BOLD));
 }
 
 #[test]
