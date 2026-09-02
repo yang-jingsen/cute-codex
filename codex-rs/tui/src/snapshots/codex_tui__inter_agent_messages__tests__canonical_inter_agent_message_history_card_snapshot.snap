@@ -1,0 +1,8 @@
+---
+source: tui/src/inter_agent_messages_tests.rs
+expression: rendered
+---
+Agent message [after-turn] from /root/sender
+id=message-1 | to=/root/receiver | mode=after-turn | other_recipients=/root/observer
+  First line
+  Second line

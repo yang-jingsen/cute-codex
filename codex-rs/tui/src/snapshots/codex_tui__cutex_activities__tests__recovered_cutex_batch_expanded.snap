@@ -1,0 +1,13 @@
+---
+source: tui/src/cutex_activities.rs
+assertion_line: 1679
+expression: expanded
+---
+↳ Recovered Cutex activity · catch-up · 4 of 4 (ctrl + t to view transcript)
+  • Started managed agent Agent
+    managed agent · id=cutex.worker · status=Completed · sequence=12
+    role: Worker
+    initial task: deliver the meal
+  Task Service · started · Director → Agent
+    task=task-1 · assignment=assignment-1 · status=AttemptStarted · sequence=13
+    Deliver lunch

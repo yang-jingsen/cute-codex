@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "InterAgentDeliveryStatusQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "messageId": {
+          "type": "string"
+        },
+        "semanticSha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "semanticSha256"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "messages": {
+      "items": {
+        "$ref": "#/definitions/InterAgentDeliveryStatusQuery"
+      },
+      "type": "array"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "messages",
+    "threadId"
+  ],
+  "title": "ThreadInterAgentMessageStatusParams",
+  "type": "object"
+}

@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "CutexParticipantPresentation": {
+      "additionalProperties": false,
+      "description": "Optional presentation-only attributes for a Cutex participant.\n\nEvery field is an authenticated hint supplied by Cutex. Consumers must not infer missing values from Agent paths, runtime IDs, message bodies, groups, working directories, or prose.",
+      "properties": {
+        "cutexSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasoning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtimeBackend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "InterAgentDeliveryMode": {
+      "enum": [
+        "after_turn",
+        "soon",
+        "passive",
+        "interrupt"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "author": {
+      "type": "string"
+    },
+    "authorMetadata": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/CutexParticipantPresentation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "content": {
+      "type": "string"
+    },
+    "deliveryMode": {
+      "$ref": "#/definitions/InterAgentDeliveryMode"
+    },
+    "messageId": {
+      "type": "string"
+    },
+    "otherRecipients": {
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "recipient": {
+      "type": "string"
+    },
+    "recipientMetadata": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/CutexParticipantPresentation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "author",
+    "content",
+    "deliveryMode",
+    "messageId",
+    "recipient",
+    "threadId"
+  ],
+  "title": "ThreadInterAgentMessageParams",
+  "type": "object"
+}

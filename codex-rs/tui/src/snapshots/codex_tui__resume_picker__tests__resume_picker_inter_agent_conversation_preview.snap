@@ -1,0 +1,6 @@
+---
+source: tui/src/resume_picker.rs
+expression: rendered
+---
+  │ Agent message [after-turn] from /root/coordinator: Continue with the focused
+  └ TUI tests.

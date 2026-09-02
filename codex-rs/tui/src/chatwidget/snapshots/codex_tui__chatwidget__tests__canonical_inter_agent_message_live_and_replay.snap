@@ -1,0 +1,8 @@
+---
+source: tui/src/chatwidget/tests/inter_agent_messages.rs
+expression: live_rendered
+---
+Agent message [after-turn] from /root/sender
+id=message-1 | to=/root/receiver | mode=after-turn | other_recipients=/root/observer
+  Please recheck the focused tests.
+  Keep the output compact.

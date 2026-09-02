@@ -1,0 +1,10 @@
+---
+source: tui/src/app/agent_status_feed_tests.rs
+expression: rendered
+---
+/subagents
+Sub-agents running
+
+  • `/root/reviewer`
+    Agent message [soon] from /root/coordinator: Review the canonical rendering
+    path.

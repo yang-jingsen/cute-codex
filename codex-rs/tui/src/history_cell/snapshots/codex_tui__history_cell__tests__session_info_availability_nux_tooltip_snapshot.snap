@@ -1,0 +1,13 @@
+---
+source: tui/src/history_cell/tests.rs
+assertion_line: 728
+expression: rendered
+---
+╭─────────────────────────────────────╮
+│ >_ cute-codex (v0.150.0)            │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+
+  Tip: Model just became available

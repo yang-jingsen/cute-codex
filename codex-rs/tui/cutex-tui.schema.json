@@ -1,0 +1,1790 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "TuiAgentManagementOperationPresentation": {
+      "additionalProperties": false,
+      "description": "Per-operation overrides for every committed phase in the frozen Cutex wire contract.",
+      "properties": {
+        "adopted": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "authority_transfer_pending": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "authority_transferred": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "complete": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "configured": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "failure": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "message_pending": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "message_queued": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "native_bootstrap_pending": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "native_session_captured": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "no_write": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "online": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "owner_action_required": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "phase_display": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhaseDisplay"
+            }
+          ],
+          "default": null
+        },
+        "predecessor_closed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "predecessor_closing": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "prepared": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "private_cwd_ready": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "ready": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        },
+        "successor_ready": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiAgentManagementPhasePresentation"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "TuiAgentManagementPhaseDisplay": {
+      "description": "Whether committed Agent Management phases advance one card or append live-only lines.",
+      "enum": [
+        "coalesce",
+        "append"
+      ],
+      "type": "string"
+    },
+    "TuiAgentManagementPhasePresentation": {
+      "additionalProperties": false,
+      "description": "Presentation-only settings for one authoritative Agent Management phase.",
+      "properties": {
+        "bold": {
+          "default": null,
+          "type": "boolean"
+        },
+        "dim": {
+          "default": null,
+          "type": "boolean"
+        },
+        "foreground": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexForegroundColor"
+            }
+          ],
+          "default": null
+        },
+        "grouped_templates": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexGroupedTemplates"
+          },
+          "type": "array"
+        },
+        "indent": {
+          "default": null,
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "italic": {
+          "default": null,
+          "type": "boolean"
+        },
+        "rich_template": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexRichSpan"
+          },
+          "type": "array"
+        },
+        "selection": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTemplateSelection"
+            }
+          ],
+          "default": null
+        },
+        "show": {
+          "default": null,
+          "type": "boolean"
+        },
+        "template": {
+          "default": null,
+          "type": "string"
+        },
+        "templates": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wrap_width": {
+          "default": null,
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "TuiCutexForegroundColor": {
+      "oneOf": [
+        {
+          "enum": [
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "gray",
+            "white"
+          ],
+          "type": "string"
+        },
+        {
+          "maxLength": 7,
+          "minLength": 7,
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "type": "string"
+        }
+      ]
+    },
+    "TuiCutexGroupedTemplates": {
+      "additionalProperties": false,
+      "description": "One named candidate pool used to keep correlated live presentation in the same group.",
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "templates": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "group",
+        "templates"
+      ],
+      "type": "object"
+    },
+    "TuiCutexInboundMessageSettings": {
+      "additionalProperties": false,
+      "description": "Tagged Cutex inbound-message presentation. Native parent/subagent messages never consult it.",
+      "properties": {
+        "content_indent": {
+          "default": 2,
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "label": {
+          "default": null,
+          "description": "Bounded template placeholders: `{author}`, `{recipient}`, `{mode}`, `{profile}`, `{model}`, `{reasoning}`, `{role}`, and `{runtime_backend}`. Newlines deliberately separate label lines; other control characters are rejected by the renderer.",
+          "type": "string"
+        },
+        "show_ids": {
+          "default": true,
+          "type": "boolean"
+        },
+        "show_metadata": {
+          "default": true,
+          "type": "boolean"
+        },
+        "style": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTextStyle"
+            }
+          ],
+          "default": {
+            "bold": true,
+            "dim": false,
+            "foreground": "cyan",
+            "italic": false
+          }
+        }
+      },
+      "type": "object"
+    },
+    "TuiCutexRichSpan": {
+      "additionalProperties": false,
+      "description": "One ordered span in a bounded mixed-style Cutex presentation template.",
+      "properties": {
+        "bold": {
+          "default": null,
+          "type": "boolean"
+        },
+        "dim": {
+          "default": null,
+          "type": "boolean"
+        },
+        "foreground": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexForegroundColor"
+            }
+          ],
+          "default": null
+        },
+        "italic": {
+          "default": null,
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "TuiCutexTemplateSelection": {
+      "description": "Deterministic frontend-local selection for an ordered template candidate list.",
+      "enum": [
+        "stable_random"
+      ],
+      "type": "string"
+    },
+    "TuiCutexTextStyle": {
+      "additionalProperties": false,
+      "description": "Presentation-only style overrides. `None` retains the renderer's safe status default.",
+      "properties": {
+        "bold": {
+          "default": null,
+          "type": "boolean"
+        },
+        "dim": {
+          "default": null,
+          "type": "boolean"
+        },
+        "foreground": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexForegroundColor"
+            }
+          ],
+          "default": null
+        },
+        "italic": {
+          "default": null,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TuiManagedAgentActivityLabels": {
+      "additionalProperties": false,
+      "description": "Presentation-only labels for managed-Agent activity in the TUI.\n\nValues are bounded, allowlisted templates at render time. Invalid values fall back to the built-in English wording. Supported placeholders are `{agent}`, `{operation}`, and `{status}`.",
+      "properties": {
+        "completed": {
+          "default": null,
+          "type": "string"
+        },
+        "failed": {
+          "default": null,
+          "type": "string"
+        },
+        "in_progress": {
+          "default": null,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TuiOutboundMessageActivityLabels": {
+      "additionalProperties": false,
+      "description": "Presentation-only labels for outbound Agent Bus activity in the TUI. Supported placeholders are `{sender}`, `{recipient}`, and `{status}`.",
+      "properties": {
+        "failed": {
+          "default": null,
+          "type": "string"
+        },
+        "sending": {
+          "default": null,
+          "type": "string"
+        },
+        "sent": {
+          "default": null,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TuiTaskAssignmentActivitySettings": {
+      "additionalProperties": false,
+      "description": "Per-status presentation for authoritative Task assignment activity.",
+      "properties": {
+        "aborted": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "attempt_acknowledged": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "attempt_blocked": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "attempt_progressed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "attempt_resumed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "attempt_started": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "closed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "committed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "communication_recorded": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "completed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "declined": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "failed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "retry_scheduled": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        },
+        "review_ready": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskAssignmentStatusPresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "rich_template": null,
+            "show": null,
+            "show_detail": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null
+          }
+        }
+      },
+      "type": "object"
+    },
+    "TuiTaskAssignmentStatusPresentation": {
+      "additionalProperties": false,
+      "description": "Presentation for one authoritative Task assignment status.\n\nSupported placeholders are `{director}`, `{assignee}`, `{task}`, `{assignment}`, `{status}`, `{sequence}`, `{title}`, and `{detail}`.",
+      "properties": {
+        "content_indent": {
+          "default": null,
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "rich_template": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexRichSpan"
+          },
+          "type": "array"
+        },
+        "show": {
+          "default": null,
+          "type": "boolean"
+        },
+        "show_detail": {
+          "default": null,
+          "type": "boolean"
+        },
+        "style": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTextStyle"
+            }
+          ],
+          "default": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          }
+        },
+        "template": {
+          "default": null,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TuiTaskServiceMessagePresentation": {
+      "additionalProperties": false,
+      "description": "Presentation for one authenticated Task Service semantic message class.",
+      "properties": {
+        "content_indent": {
+          "default": null,
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "grouped_templates": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexGroupedTemplates"
+          },
+          "type": "array"
+        },
+        "rich_template": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexRichSpan"
+          },
+          "type": "array"
+        },
+        "selection": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTemplateSelection"
+            }
+          ],
+          "default": null
+        },
+        "show": {
+          "default": null,
+          "type": "boolean"
+        },
+        "show_payload": {
+          "default": null,
+          "type": "boolean"
+        },
+        "style": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTextStyle"
+            }
+          ],
+          "default": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          }
+        },
+        "template": {
+          "default": null,
+          "type": "string"
+        },
+        "templates": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "TuiTaskServiceMessageSettings": {
+      "additionalProperties": false,
+      "description": "Dedicated live presentation for authenticated Task Service system messages.",
+      "properties": {
+        "assignment": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "blocked": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "progress": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "resumed": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "retry": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "review_ready": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "terminal_closure": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskServiceMessagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": false,
+            "show_payload": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "visible": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TuiTaskWatchdogSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "director_escalated": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskWatchdogStagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "first_stale": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiTaskWatchdogStagePresentation"
+            }
+          ],
+          "default": {
+            "content_indent": null,
+            "grouped_templates": null,
+            "rich_template": null,
+            "selection": null,
+            "show": null,
+            "style": {
+              "bold": null,
+              "dim": null,
+              "foreground": null,
+              "italic": null
+            },
+            "template": null,
+            "templates": null
+          }
+        },
+        "visible": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TuiTaskWatchdogStagePresentation": {
+      "additionalProperties": false,
+      "description": "Presentation for one raw Task watchdog stage. It never changes Task Service state.",
+      "properties": {
+        "content_indent": {
+          "default": null,
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "grouped_templates": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexGroupedTemplates"
+          },
+          "type": "array"
+        },
+        "rich_template": {
+          "default": null,
+          "items": {
+            "$ref": "#/definitions/TuiCutexRichSpan"
+          },
+          "type": "array"
+        },
+        "selection": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTemplateSelection"
+            }
+          ],
+          "default": null
+        },
+        "show": {
+          "default": null,
+          "type": "boolean"
+        },
+        "style": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TuiCutexTextStyle"
+            }
+          ],
+          "default": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          }
+        },
+        "template": {
+          "default": null,
+          "type": "string"
+        },
+        "templates": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "description": "Frontend-owned Cutex activity presentation settings.\n\nThese settings only affect the current TUI's rendering. They do not alter typed activity, rollout items, model context, Task Service status, or Agent authority.",
+  "properties": {
+    "close": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "create": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "director_rotate": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "inbound_message": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiCutexInboundMessageSettings"
+        }
+      ],
+      "default": {
+        "content_indent": 2,
+        "label": null,
+        "show_ids": true,
+        "show_metadata": true,
+        "style": {
+          "bold": true,
+          "dim": false,
+          "foreground": "cyan",
+          "italic": false
+        }
+      }
+    },
+    "managed_agent": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiManagedAgentActivityLabels"
+        }
+      ],
+      "default": {
+        "completed": null,
+        "failed": null,
+        "in_progress": null
+      }
+    },
+    "managed_agent_visible": {
+      "default": true,
+      "type": "boolean"
+    },
+    "offline": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "online": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "outbound_message": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiOutboundMessageActivityLabels"
+        }
+      ],
+      "default": {
+        "failed": null,
+        "sending": null,
+        "sent": null
+      }
+    },
+    "outbound_message_visible": {
+      "default": true,
+      "type": "boolean"
+    },
+    "phase_display": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementPhaseDisplay"
+        }
+      ],
+      "default": "coalesce"
+    },
+    "query_managed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "replace": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "restart": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiAgentManagementOperationPresentation"
+        }
+      ],
+      "default": {
+        "adopted": null,
+        "authority_transfer_pending": null,
+        "authority_transferred": null,
+        "complete": null,
+        "configured": null,
+        "failure": null,
+        "message_pending": null,
+        "message_queued": null,
+        "native_bootstrap_pending": null,
+        "native_session_captured": null,
+        "no_write": null,
+        "online": null,
+        "owner_action_required": null,
+        "phase_display": null,
+        "predecessor_closed": null,
+        "predecessor_closing": null,
+        "prepared": null,
+        "private_cwd_ready": null,
+        "ready": null,
+        "successor_ready": null
+      }
+    },
+    "task_assignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiTaskAssignmentActivitySettings"
+        }
+      ],
+      "default": {
+        "aborted": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "attempt_acknowledged": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "attempt_blocked": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "attempt_progressed": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "attempt_resumed": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "attempt_started": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "closed": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "committed": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "communication_recorded": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "completed": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "declined": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "failed": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "retry_scheduled": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        },
+        "review_ready": {
+          "content_indent": null,
+          "rich_template": null,
+          "show": null,
+          "show_detail": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null
+        }
+      }
+    },
+    "task_assignment_visible": {
+      "default": true,
+      "type": "boolean"
+    },
+    "task_service_message": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiTaskServiceMessageSettings"
+        }
+      ],
+      "default": {
+        "assignment": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "blocked": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "progress": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "resumed": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "retry": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "review_ready": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "terminal_closure": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": false,
+          "show_payload": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "visible": true
+      }
+    },
+    "task_watchdog": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TuiTaskWatchdogSettings"
+        }
+      ],
+      "default": {
+        "director_escalated": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "first_stale": {
+          "content_indent": null,
+          "grouped_templates": null,
+          "rich_template": null,
+          "selection": null,
+          "show": null,
+          "style": {
+            "bold": null,
+            "dim": null,
+            "foreground": null,
+            "italic": null
+          },
+          "template": null,
+          "templates": null
+        },
+        "visible": true
+      }
+    },
+    "visible": {
+      "default": true,
+      "type": "boolean"
+    }
+  },
+  "title": "TuiCutexActivitySettings",
+  "type": "object"
+}

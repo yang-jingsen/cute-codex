@@ -1,0 +1,7 @@
+---
+source: tui/src/thread_transcript_tests.rs
+expression: rendered
+---
+Agent message [passive] from /root/sender
+id=message-1 | to=/root/receiver | mode=passive | other_recipients=/root/observer
+  Persisted inbound content

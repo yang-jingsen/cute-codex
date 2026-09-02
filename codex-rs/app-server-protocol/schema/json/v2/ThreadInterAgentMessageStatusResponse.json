@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "InterAgentDeliveryReceipt": {
+      "properties": {
+        "receiptId": {
+          "type": "string"
+        },
+        "responseItemId": {
+          "type": "string"
+        },
+        "rolloutOrdinal": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "receiptId",
+        "responseItemId",
+        "rolloutOrdinal",
+        "turnId"
+      ],
+      "type": "object"
+    },
+    "InterAgentDeliveryStatus": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "semantic_sha256": {
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "message_id",
+            "semantic_sha256",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "semantic_sha256": {
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "pending"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "message_id",
+            "semantic_sha256",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "receipt": {
+              "$ref": "#/definitions/InterAgentDeliveryReceipt"
+            },
+            "semantic_sha256": {
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "context_persisted"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "message_id",
+            "receipt",
+            "semantic_sha256",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "semantic_sha256": {
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "conflict"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "message_id",
+            "semantic_sha256",
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "message_id": {
+              "type": "string"
+            },
+            "semantic_sha256": {
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "retryable_error"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "message_id",
+            "semantic_sha256",
+            "state"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema": {
+      "type": "string"
+    },
+    "statuses": {
+      "items": {
+        "$ref": "#/definitions/InterAgentDeliveryStatus"
+      },
+      "type": "array"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "statuses",
+    "threadId"
+  ],
+  "title": "ThreadInterAgentMessageStatusResponse",
+  "type": "object"
+}

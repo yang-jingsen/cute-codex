@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/exec_flow.rs
+expression: snapshot
+---
+• Ran echo preparing
+  └ preparing
+
+─ <time> ────────────────────────────────────────────────────────────────────────
+
+• Final response.
+
+─ <time> • Worked for 2m 05s ────────────────────────────────────────────────────

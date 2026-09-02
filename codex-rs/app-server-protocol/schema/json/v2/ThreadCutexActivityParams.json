@@ -1,0 +1,798 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "AgentManagementPhase": {
+      "description": "Authoritative committed Agent Management phase projected by Cutex for live presentation.",
+      "enum": [
+        "prepared",
+        "privateCwdReady",
+        "nativeBootstrapPending",
+        "nativeSessionCaptured",
+        "adopted",
+        "configured",
+        "online",
+        "ready",
+        "messagePending",
+        "messageQueued",
+        "predecessorClosing",
+        "predecessorClosed",
+        "authorityTransferPending",
+        "authorityTransferred",
+        "successorReady",
+        "complete",
+        "noWrite",
+        "ownerActionRequired",
+        "failure"
+      ],
+      "type": "string"
+    },
+    "AgentManagementReplacePolicy": {
+      "enum": [
+        "closeBeforeCreate",
+        "closeAfterReady",
+        "keepOld"
+      ],
+      "type": "string"
+    },
+    "AgentManagementRotationMode": {
+      "enum": [
+        "closePredecessorThenCreateWithMessage",
+        "retainPredecessorWithMessage",
+        "retainPredecessorBootstrapOnly"
+      ],
+      "type": "string"
+    },
+    "CutexParticipantPresentation": {
+      "additionalProperties": false,
+      "description": "Optional presentation-only attributes for a Cutex participant.\n\nEvery field is an authenticated hint supplied by Cutex. Consumers must not infer missing values from Agent paths, runtime IDs, message bodies, groups, working directories, or prose.",
+      "properties": {
+        "cutexSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasoning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtimeBackend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "CutexUiActivity": {
+      "oneOf": [
+        {
+          "description": "UI-only lifecycle for a durable Cutex-managed agent.\n\nThese identifiers deliberately remain opaque strings. They are not native Codex `ThreadId`s or `AgentPath`s and must never be used to establish native sub-agent ownership.",
+          "properties": {
+            "actionId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "authorityEpoch": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "eventId": {
+              "description": "Unique source-event identity used for idempotent ingestion.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Stable action identity used to update one visible activity.",
+              "type": "string"
+            },
+            "initialTaskPreview": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "managedAgentId": {
+              "type": "string"
+            },
+            "managedAgentMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "managedAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "managedAgentRole": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "occurredAtMs": {
+              "description": "Source event time, in Unix milliseconds.",
+              "format": "int64",
+              "type": "integer"
+            },
+            "operation": {
+              "$ref": "#/definitions/ManagedAgentOperation"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AgentManagementPhase"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "phaseEventId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "predecessorAgentId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "predecessorAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "predecessorMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "projectId": {
+              "description": "Authoritative Cutex project identity for frontend-local presentation correlation.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "replacePolicy": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AgentManagementReplacePolicy"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rotationMode": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AgentManagementRotationMode"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "runtimeGeneration": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "sequence": {
+              "description": "Monotonic sequence for this action.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "#/definitions/ManagedAgentActivityStatus"
+            },
+            "successorAgentId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "successorAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "successorMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "enum": [
+                "managedAgentActivity"
+              ],
+              "title": "ManagedAgentActivityCutexUiActivityType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "eventId",
+            "id",
+            "managedAgentId",
+            "occurredAtMs",
+            "operation",
+            "sequence",
+            "status",
+            "type"
+          ],
+          "title": "ManagedAgentActivityCutexUiActivity",
+          "type": "object"
+        },
+        {
+          "description": "UI-only record of a message sent through the Cutex Agent Bus.",
+          "properties": {
+            "contentPreview": {
+              "description": "Bounded display-only preview. The full function-call argument remains the model-visible source of truth and is never reconstructed from this field.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "deliveryMode": {
+              "$ref": "#/definitions/InterAgentDeliveryMode"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "eventId": {
+              "description": "Unique source-event identity used for idempotent ingestion.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Stable message identity used to update one visible activity.",
+              "type": "string"
+            },
+            "occurredAtMs": {
+              "description": "Source event time, in Unix milliseconds.",
+              "format": "int64",
+              "type": "integer"
+            },
+            "otherRecipientAgentIds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "recipientAgentId": {
+              "type": "string"
+            },
+            "recipientAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "recipientMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "senderAgentId": {
+              "type": "string"
+            },
+            "senderAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "senderMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sequence": {
+              "description": "Monotonic sequence for this message.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "#/definitions/OutboundInterAgentMessageStatus"
+            },
+            "type": {
+              "enum": [
+                "outboundInterAgentMessage"
+              ],
+              "title": "OutboundInterAgentMessageCutexUiActivityType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "deliveryMode",
+            "eventId",
+            "id",
+            "occurredAtMs",
+            "recipientAgentId",
+            "senderAgentId",
+            "sequence",
+            "status",
+            "type"
+          ],
+          "title": "OutboundInterAgentMessageCutexUiActivity",
+          "type": "object"
+        },
+        {
+          "description": "Typed UI reducer input for Cutex Task Service assignment and attempt transitions.\n\nA future task panel must still requery the authoritative Task Service snapshot; these watch events are durable timeline records and sequence-bearing invalidation hints, not authority.",
+          "properties": {
+            "assigneeAgentId": {
+              "type": "string"
+            },
+            "assigneeAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "assigneeMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "attemptId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "attemptNumber": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "directorAgentId": {
+              "type": "string"
+            },
+            "directorAgentName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "directorMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "eventId": {
+              "description": "Unique source-event identity used for idempotent ingestion.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Stable assignment identity used to update one visible activity.",
+              "type": "string"
+            },
+            "occurredAtMs": {
+              "description": "Source event time, in Unix milliseconds.",
+              "format": "int64",
+              "type": "integer"
+            },
+            "sequence": {
+              "description": "Monotonic Task Service sequence for the assignment.",
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "status": {
+              "$ref": "#/definitions/TaskAssignmentActivityStatus"
+            },
+            "taskId": {
+              "type": "string"
+            },
+            "taskTitle": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "taskAssignmentActivity"
+              ],
+              "title": "TaskAssignmentActivityCutexUiActivityType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "assigneeAgentId",
+            "directorAgentId",
+            "eventId",
+            "id",
+            "occurredAtMs",
+            "sequence",
+            "status",
+            "taskId",
+            "type"
+          ],
+          "title": "TaskAssignmentActivityCutexUiActivity",
+          "type": "object"
+        },
+        {
+          "description": "Raw presentation-only metadata for one stale-running Task Service episode.",
+          "properties": {
+            "activityKind": {
+              "$ref": "#/definitions/TaskWatchdogActivityKind"
+            },
+            "activityWatermark": {
+              "type": "string"
+            },
+            "assigneeAgentId": {
+              "type": "string"
+            },
+            "assigneeMetadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/CutexParticipantPresentation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "assignmentId": {
+              "type": "string"
+            },
+            "attemptNumber": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "directorAgentId": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "eventKey": {
+              "type": "string"
+            },
+            "id": {
+              "description": "Stable episode identity shared by every stage of one stale interval.",
+              "type": "string"
+            },
+            "idleDurationSecs": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "occurredAtMs": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "projectId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "sourceSequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "stage": {
+              "$ref": "#/definitions/TaskWatchdogStage"
+            },
+            "taskId": {
+              "type": "string"
+            },
+            "taskRevision": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "taskWatchdogActivity"
+              ],
+              "title": "TaskWatchdogActivityCutexUiActivityType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "activityKind",
+            "activityWatermark",
+            "assigneeAgentId",
+            "assignmentId",
+            "attemptNumber",
+            "directorAgentId",
+            "eventId",
+            "eventKey",
+            "id",
+            "idleDurationSecs",
+            "occurredAtMs",
+            "sequence",
+            "sourceSequence",
+            "stage",
+            "taskId",
+            "taskRevision",
+            "type"
+          ],
+          "title": "TaskWatchdogActivityCutexUiActivity",
+          "type": "object"
+        }
+      ]
+    },
+    "CutexUiActivityCheckpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "sequence": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "streamId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cursor",
+        "sequence",
+        "streamId"
+      ],
+      "type": "object"
+    },
+    "CutexUiActivityDelivery": {
+      "additionalProperties": false,
+      "description": "Required transport facts for one producer-projected Cutex UI activity.",
+      "properties": {
+        "batchCheckpoint": {
+          "$ref": "#/definitions/CutexUiActivityCheckpoint"
+        },
+        "batchId": {
+          "type": "string"
+        },
+        "batchIndex": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "batchSize": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "class": {
+          "$ref": "#/definitions/CutexUiActivityDeliveryClass"
+        },
+        "recovered": {
+          "type": "boolean"
+        },
+        "schema": {
+          "$ref": "#/definitions/CutexUiActivityDeliverySchema"
+        },
+        "sourceCheckpoint": {
+          "$ref": "#/definitions/CutexUiActivityCheckpoint"
+        }
+      },
+      "required": [
+        "batchCheckpoint",
+        "batchId",
+        "batchIndex",
+        "batchSize",
+        "class",
+        "recovered",
+        "schema",
+        "sourceCheckpoint"
+      ],
+      "type": "object"
+    },
+    "CutexUiActivityDeliveryClass": {
+      "enum": [
+        "live",
+        "catch_up"
+      ],
+      "type": "string"
+    },
+    "CutexUiActivityDeliverySchema": {
+      "enum": [
+        "cutex/ui-activity-delivery/v1"
+      ],
+      "type": "string"
+    },
+    "InterAgentDeliveryMode": {
+      "enum": [
+        "after_turn",
+        "soon",
+        "passive",
+        "interrupt"
+      ],
+      "type": "string"
+    },
+    "ManagedAgentActivityStatus": {
+      "enum": [
+        "inProgress",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "ManagedAgentOperation": {
+      "enum": [
+        "create",
+        "queryManaged",
+        "online",
+        "offline",
+        "restart",
+        "replace",
+        "close",
+        "directorRotate"
+      ],
+      "type": "string"
+    },
+    "OutboundInterAgentMessageStatus": {
+      "enum": [
+        "sending",
+        "sent",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "TaskAssignmentActivityStatus": {
+      "enum": [
+        "committed",
+        "communicationRecorded",
+        "attemptStarted",
+        "attemptAcknowledged",
+        "attemptProgressed",
+        "attemptBlocked",
+        "attemptResumed",
+        "retryScheduled",
+        "reviewReady",
+        "completed",
+        "failed",
+        "closed",
+        "declined",
+        "aborted"
+      ],
+      "type": "string"
+    },
+    "TaskWatchdogActivityKind": {
+      "enum": [
+        "phase_transition",
+        "status_progress",
+        "last_output",
+        "last_tool_call"
+      ],
+      "type": "string"
+    },
+    "TaskWatchdogStage": {
+      "enum": [
+        "first_stale",
+        "director_escalated"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Strictly UI-only Cutex activity ingestion. This method cannot append response items or start a turn and is rejected for native parent-owned sub-agent threads.",
+  "properties": {
+    "activity": {
+      "$ref": "#/definitions/CutexUiActivity"
+    },
+    "delivery": {
+      "$ref": "#/definitions/CutexUiActivityDelivery"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "activity",
+    "delivery",
+    "threadId"
+  ],
+  "title": "ThreadCutexActivityParams",
+  "type": "object"
+}

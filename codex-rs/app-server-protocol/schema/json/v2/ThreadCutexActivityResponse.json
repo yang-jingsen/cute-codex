@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "CutexUiActivityIngestionDisposition": {
+      "enum": [
+        "accepted",
+        "duplicate",
+        "stale"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "disposition": {
+      "$ref": "#/definitions/CutexUiActivityIngestionDisposition"
+    },
+    "submissionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "disposition",
+    "submissionId"
+  ],
+  "title": "ThreadCutexActivityResponse",
+  "type": "object"
+}
