@@ -305,7 +305,7 @@ async fn slash_side_requests_forked_side_question_while_task_running() {
     chat.config.tui_status_line = Some(vec!["model-with-reasoning".to_string()]);
     chat.refresh_status_line();
     chat.on_task_started();
-    chat.show_welcome_banner = false;
+    chat.startup_text = StartupTextState::Consumed;
     chat.bottom_pane.set_composer_text(
         "/side explore the codebase".to_string(),
         Vec::new(),
@@ -384,7 +384,7 @@ async fn slash_btw_requests_forked_side_question_while_task_running() {
 #[tokio::test]
 async fn side_context_label_preserves_status_line_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.show_welcome_banner = false;
+    chat.startup_text = StartupTextState::Consumed;
     chat.config.tui_status_line = Some(vec!["model-name".to_string()]);
     chat.refresh_status_line();
     chat.set_side_conversation_active(/*active*/ true);
@@ -407,7 +407,7 @@ async fn side_context_label_preserves_status_line_snapshot() {
 #[tokio::test]
 async fn side_context_label_shows_parent_status_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.show_welcome_banner = false;
+    chat.startup_text = StartupTextState::Consumed;
     chat.set_side_conversation_active(/*active*/ true);
     chat.set_side_conversation_context_label(Some(
         "Side from main thread · main needs input · ctrl + / to switch · ctrl + c to close"
@@ -426,7 +426,7 @@ async fn side_context_label_shows_parent_status_snapshot() {
 #[tokio::test]
 async fn side_context_label_shows_hidden_side_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.show_welcome_banner = false;
+    chat.startup_text = StartupTextState::Consumed;
     chat.config.tui_status_line = Some(vec!["model-name".to_string()]);
     chat.refresh_status_line();
     chat.set_side_conversation_context_label(Some("ctrl + / for side".to_string()));

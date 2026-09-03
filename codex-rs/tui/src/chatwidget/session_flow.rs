@@ -132,16 +132,18 @@ impl ChatWidget {
             display,
             SessionConfiguredDisplay::Normal | SessionConfiguredDisplay::PromptEdit
         ) {
-            let startup_tooltip_override = self.startup_tooltip_override.take();
             let show_fast_status = self
                 .should_show_fast_status(&model_for_header, self.effective_service_tier.as_deref());
+            let startup_text = self.startup_text.take(StartupTextSelection {
+                plan_type: self.plan_type,
+                fast_mode_enabled: show_fast_status,
+                tooltips_enabled: self.config.show_tooltips,
+            });
             let session_info_cell = history_cell::new_session_info(
                 &self.config,
                 &model_for_header,
                 &session,
-                self.show_welcome_banner,
-                startup_tooltip_override,
-                self.plan_type,
+                startup_text,
                 show_fast_status,
             );
             self.apply_session_info_cell(session_info_cell);

@@ -128,6 +128,74 @@ async fn resize_reflow_preserves_configured_scrollback_when_the_terminal_height_
 }
 
 #[tokio::test]
+async fn selected_startup_text_survives_repeated_width_and_height_reflow() {
+    let mut app = make_test_app().await;
+    app.config.terminal_resize_reflow.max_rows = TerminalResizeReflowMaxRows::Disabled;
+    let session = crate::session_state::ThreadSessionState {
+        thread_id: codex_protocol::ThreadId::new(),
+        forked_from_id: None,
+        fork_parent_title: None,
+        thread_name: None,
+        model: app.chat_widget.current_model().to_string(),
+        model_provider_id: "test-provider".to_string(),
+        service_tier: None,
+        approval_policy: codex_app_server_protocol::AskForApproval::Never,
+        approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer::User,
+        permission_profile: codex_protocol::models::PermissionProfile::read_only(),
+        active_permission_profile: None,
+        cwd: app.config.cwd.clone(),
+        runtime_workspace_roots: Vec::new(),
+        instruction_source_paths: Vec::new(),
+        reasoning_effort: None,
+        collaboration_mode: None,
+        personality: None,
+        message_history: None,
+        network_proxy: None,
+        rollout_path: None,
+    };
+    let selected_tip = "one semantic startup identity through all resize events";
+    let cell = Arc::new(crate::history_cell::new_session_info(
+        &app.config,
+        app.chat_widget.current_model(),
+        &session,
+        crate::history_cell::SessionInfoText::Tooltip(selected_tip.to_string()),
+        /*show_fast_status*/ false,
+    )) as Arc<dyn HistoryCell>;
+    let expected_raw = cell
+        .raw_lines()
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>();
+    app.transcript_cells = vec![Arc::clone(&cell)];
+
+    for size in [
+        Size::new(/*width*/ 32, /*height*/ 12),
+        Size::new(/*width*/ 80, /*height*/ 12),
+        Size::new(/*width*/ 80, /*height*/ 48),
+        Size::new(/*width*/ 48, /*height*/ 24),
+        Size::new(/*width*/ 32, /*height*/ 48),
+    ] {
+        app.update_visible_history_rows(size);
+        let rendered = app.render_transcript_lines_for_reflow(size.width);
+        let compact = rendered
+            .lines
+            .iter()
+            .map(rendered_line_text)
+            .collect::<String>()
+            .split_whitespace()
+            .collect::<String>();
+        assert!(compact.contains(&selected_tip.split_whitespace().collect::<String>()));
+        assert_eq!(
+            cell.raw_lines()
+                .into_iter()
+                .map(|line| line.to_string())
+                .collect::<Vec<_>>(),
+            expected_raw
+        );
+    }
+}
+
+#[tokio::test]
 async fn resize_reflow_preserves_explicitly_unlimited_history() {
     let mut app = make_test_app().await;
     app.config.terminal_resize_reflow.max_rows = TerminalResizeReflowMaxRows::Disabled;

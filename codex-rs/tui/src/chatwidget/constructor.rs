@@ -216,8 +216,11 @@ impl ChatWidget {
             chat_keymap,
             permission_shortcut_pending: false,
             queued_message_edit_hint_binding,
-            show_welcome_banner: is_first_run,
-            startup_tooltip_override,
+            startup_text: if is_first_run {
+                StartupTextState::first_event()
+            } else {
+                StartupTextState::tooltip(startup_tooltip_override)
+            },
             suppress_session_configured_redraw: false,
             suppress_initial_user_message_submit: false,
             pending_notification: None,

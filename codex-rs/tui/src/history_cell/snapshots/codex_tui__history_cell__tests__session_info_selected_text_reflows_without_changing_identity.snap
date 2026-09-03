@@ -1,0 +1,46 @@
+---
+source: tui/src/history_cell/tests.rs
+expression: "displays.join(\"\\n\\n\")"
+---
+width 32
+╭──────────────────────────────╮
+│ >_ cute-codex (v0.150.0)     │
+│                              │
+│ model:     gpt-5   /model t… │
+│ directory: /tmp/project      │
+╰──────────────────────────────╯
+
+  Tip: Keep this session-
+  selected tip stable across
+  every resize
+
+width 48
+╭─────────────────────────────────────╮
+│ >_ cute-codex (v0.150.0)            │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+
+  Tip: Keep this session-selected tip stable
+  across every resize
+
+width 80
+╭─────────────────────────────────────╮
+│ >_ cute-codex (v0.150.0)            │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+
+  Tip: Keep this session-selected tip stable across every resize
+
+width 120
+╭─────────────────────────────────────╮
+│ >_ cute-codex (v0.150.0)            │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+
+  Tip: Keep this session-selected tip stable across every resize
