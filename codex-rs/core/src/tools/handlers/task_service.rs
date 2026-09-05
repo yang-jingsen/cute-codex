@@ -37,6 +37,7 @@ use super::task_service_transport::TransportError;
 
 const ACTION_SCHEMA: &str = "cutex/task-service-action/v2";
 const MAX_SEMANTIC_TEXT_BYTES: usize = 4096;
+const MAX_BLOCKER_SUMMARY_BYTES: usize = 2048;
 
 pub struct TaskServiceHandler {
     transport: TaskServiceTransport,
@@ -203,7 +204,10 @@ impl ToolExecutor<ToolInvocation> for TaskServiceHandler {
         create_task_service_tool()
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(async move {
             let ToolPayload::Function { arguments } = invocation.payload else {
                 return Err(FunctionCallError::RespondToModel(
@@ -261,8 +265,23 @@ fn provider_request(args: &TaskServiceArgs) -> Result<Value, &'static str> {
             body.insert("result_sha256".to_string(), json!(result_sha256));
             body.insert("result_reference".to_string(), json!(result_reference));
         }
+        WorkerOperation::Block => {
+            if args.evidence_sha256.is_some()
+                || args.result_sha256.is_some()
+                || args.result_reference.is_some()
+            {
+                return Err("invalid_semantic_payload");
+            }
+            let summary = args
+                .summary
+                .as_deref()
+                .filter(|value| {
+                    !value.trim().is_empty() && value.len() <= MAX_BLOCKER_SUMMARY_BYTES
+                })
+                .ok_or("invalid_semantic_payload")?;
+            body.insert("summary".to_string(), json!(summary));
+        }
         WorkerOperation::Start
-        | WorkerOperation::Block
         | WorkerOperation::Resume
         | WorkerOperation::Decline
         | WorkerOperation::AbortAttempt => {

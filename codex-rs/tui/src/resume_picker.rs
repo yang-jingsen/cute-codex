@@ -579,7 +579,7 @@ async fn run_session_picker_with_loader(
                     TuiEvent::Paste(pasted) => {
                         state.handle_paste(pasted);
                     }
-                    TuiEvent::Draw | TuiEvent::Resume | TuiEvent::Resize(_) => {
+                    TuiEvent::Draw | TuiEvent::Resume | TuiEvent::Resize(_) | TuiEvent::FocusGained => {
                         let list_width = list_viewport_width(screen_size.width);
                         let list_height =
                             usize::from(screen_size.height.saturating_sub(PICKER_CHROME_HEIGHT));
@@ -590,6 +590,7 @@ async fn run_session_picker_with_loader(
                             state.open_pending_transcript_if_ready();
                         }
                     }
+                    TuiEvent::FocusLost => {}
                 }
             }
             Some(event) = background_events.next() => {
@@ -6323,6 +6324,8 @@ session_picker_view = "dense"
             project_id: None,
             history_mode: Default::default(),
             model_provider: String::from("openai"),
+            model: None,
+            reasoning_effort: None,
             created_at: 1,
             updated_at: 2,
             recency_at: Some(2),
@@ -6365,6 +6368,8 @@ session_picker_view = "dense"
             project_id: None,
             history_mode: Default::default(),
             model_provider: String::from("openai"),
+            model: None,
+            reasoning_effort: None,
             created_at: 1,
             updated_at: 2,
             recency_at: Some(2),
@@ -6397,6 +6402,7 @@ session_picker_view = "dense"
                         phase: None,
                         memory_citation: None,
                         delivery: None,
+                        questions: None,
                     },
                     ThreadItem::Plan {
                         id: String::from("plan-1"),
@@ -6446,6 +6452,8 @@ session_picker_view = "dense"
             project_id: None,
             history_mode: Default::default(),
             model_provider: String::from("openai"),
+            model: None,
+            reasoning_effort: None,
             created_at: 1,
             updated_at: 2,
             recency_at: Some(2),
@@ -6519,6 +6527,8 @@ session_picker_view = "dense"
             project_id: None,
             history_mode: Default::default(),
             model_provider: String::from("openai"),
+            model: None,
+            reasoning_effort: None,
             created_at: 1,
             updated_at: 2,
             recency_at: Some(2),

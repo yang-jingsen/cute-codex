@@ -5,6 +5,7 @@
 
 mod fs;
 mod history;
+mod models;
 mod rollout_history;
 
 pub(crate) use history::HISTORY_ITEM_PAGE_LIMIT;
@@ -175,7 +176,8 @@ pub(crate) enum ThreadHistorySupport {
 }
 
 fn bootstrap_request_error(context: &'static str, err: TypedRequestError) -> color_eyre::Report {
-    color_eyre::eyre::eyre!("{context}: {err}")
+    let message = format!("{context}: {err}");
+    color_eyre::Report::new(err).wrap_err(message)
 }
 
 pub(crate) fn is_history_pagination_unsupported(source: &JSONRPCErrorError) -> bool {
@@ -462,6 +464,13 @@ impl AppServerSession {
         }
     }
 
+    pub(crate) fn with_thread_tool_transport(mut self, transport: ThreadToolTransport) -> Self {
+        if let ThreadToolTransport::Mcp(server) = transport {
+            self.dynamic_tool_mcp = Some(server);
+        }
+        self
+    }
+
     pub(crate) fn with_remote_cwd_override(mut self, remote_cwd_override: Option<PathBuf>) -> Self {
         self.remote_cwd_override = remote_cwd_override;
         self
@@ -477,6 +486,11 @@ impl AppServerSession {
 
     pub(crate) fn uses_embedded_app_server(&self) -> bool {
         matches!(&self.client, AppServerClient::InProcess(_))
+    }
+
+    /// Carry capabilities that may exist only in memory when the optional cache is unwritable.
+    pub(crate) fn inherit_task_tool_capabilities(&mut self, previous: &Self) {
+        self.task_tool_threads.extend(&previous.task_tool_threads);
     }
 
     pub(crate) fn task_tools_available(&self, thread_id: ThreadId) -> bool {
@@ -650,6 +664,10 @@ impl AppServerSession {
 
     pub(crate) fn managed_new_thread_defaults(&self) -> Option<&NewThreadModelDefaults> {
         self.managed_new_thread_defaults.as_ref()
+    }
+
+    pub(crate) fn supports_paginated_history(&self) -> bool {
+        self.history_support == ThreadHistorySupport::Paginated
     }
 
     /// Fetches the current account info without refreshing the auth token.
@@ -1201,8 +1219,10 @@ impl AppServerSession {
                 request_id,
                 params: TurnStartParams {
                     thread_id: thread_id.to_string(),
+                    turn_trigger: None,
                     client_user_message_id: None,
                     input: items,
+                    tool_output: None,
                     responsesapi_client_metadata: None,
                     additional_context: None,
                     environments: None,
@@ -1214,12 +1234,14 @@ impl AppServerSession {
                     permissions,
                     model: Some(model),
                     service_tier,
+                    service_tier_for_turn: None,
                     effort,
                     summary,
                     personality,
                     output_schema,
                     collaboration_mode,
                     multi_agent_mode: None,
+                    cyber_access_program: None,
                 },
             })
             .await
@@ -1437,6 +1459,7 @@ impl AppServerSession {
                 params: ThreadShellCommandParams {
                     thread_id: thread_id.to_string(),
                     command,
+                    timeout_ms: None,
                 },
             })
             .await
@@ -1779,6 +1802,29 @@ fn sandbox_mode_from_permission_profile(
             }
         }
     }
+}
+
+pub(crate) fn permission_profile_is_safely_represented_by_sandbox_mode(
+    permission_profile: &PermissionProfile,
+    cwd: &std::path::Path,
+) -> bool {
+    let Some(sandbox_mode) = sandbox_mode_from_permission_profile(permission_profile, cwd) else {
+        return false;
+    };
+    let projected_profile = match sandbox_mode {
+        codex_app_server_protocol::SandboxMode::ReadOnly => PermissionProfile::read_only(),
+        codex_app_server_protocol::SandboxMode::WorkspaceWrite => {
+            PermissionProfile::from_legacy_sandbox_policy_for_cwd(
+                &codex_protocol::protocol::SandboxPolicy::new_workspace_write_policy(),
+                cwd,
+            )
+        }
+        codex_app_server_protocol::SandboxMode::DangerFullAccess => PermissionProfile::Disabled,
+    };
+    permission_profile.network_sandbox_policy() == projected_profile.network_sandbox_policy()
+        && permission_profile
+            .file_system_sandbox_policy()
+            .is_semantically_equivalent_to(&projected_profile.file_system_sandbox_policy(), cwd)
 }
 
 fn permission_profile_id_from_active_profile(active: ActivePermissionProfile) -> String {
@@ -2281,6 +2327,15 @@ mod tests {
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
+    macro_rules! large_stack_async_test {
+        ($name:ident, $test:ident) => {
+            #[test]
+            fn $name() -> Result<()> {
+                crate::test_support::run_async_test_with_large_stack(stringify!($name), $test)
+            }
+        };
+    }
+
     async fn build_config(temp_dir: &TempDir) -> Config {
         ConfigBuilder::default()
             .codex_home(temp_dir.path().to_path_buf())
@@ -2289,8 +2344,11 @@ mod tests {
             .expect("config should build")
     }
 
-    #[tokio::test]
-    async fn bootstrap_reuses_prefetched_account_without_another_account_read() -> Result<()> {
+    large_stack_async_test!(
+        bootstrap_reuses_prefetched_account_without_another_account_read,
+        bootstrap_reuses_prefetched_account_without_another_account_read_impl
+    );
+    async fn bootstrap_reuses_prefetched_account_without_another_account_read_impl() -> Result<()> {
         let codex_home = tempfile::tempdir()?;
         let config = build_config(&codex_home).await;
         let mut app_server = crate::start_embedded_app_server_for_picker(&config).await?;
@@ -2327,8 +2385,11 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn bootstrap_reads_account_when_no_prefetched_account_is_available() -> Result<()> {
+    large_stack_async_test!(
+        bootstrap_reads_account_when_no_prefetched_account_is_available,
+        bootstrap_reads_account_when_no_prefetched_account_is_available_impl
+    );
+    async fn bootstrap_reads_account_when_no_prefetched_account_is_available_impl() -> Result<()> {
         let codex_home = tempfile::tempdir()?;
         let config = build_config(&codex_home).await;
         let mut app_server = crate::start_embedded_app_server_for_picker(&config).await?;
@@ -2428,6 +2489,8 @@ mod tests {
     #[test]
     fn app_server_rate_limit_snapshots_deduplicates_top_level_limit_from_map() {
         let response = GetAccountRateLimitsResponse {
+            account_id: None,
+            rate_limit_upsell: None,
             rate_limits: rate_limit_snapshot("codex"),
             rate_limits_by_limit_id: Some(HashMap::from([
                 ("codex".to_string(), rate_limit_snapshot("codex")),
@@ -2547,8 +2610,11 @@ mod tests {
         assert_eq!(params.history_mode, None);
     }
 
-    #[tokio::test]
-    async fn shared_thread_start_preserves_explicit_session_overrides() -> Result<()> {
+    large_stack_async_test!(
+        shared_thread_start_preserves_explicit_session_overrides,
+        shared_thread_start_preserves_explicit_session_overrides_impl
+    );
+    async fn shared_thread_start_preserves_explicit_session_overrides_impl() -> Result<()> {
         let codex_home = tempfile::tempdir()?;
         let workspace = codex_home.path().join("workspace");
         std::fs::create_dir(&workspace)?;
@@ -2993,6 +3059,10 @@ mod tests {
             sandbox_mode_from_permission_profile(&permission_profile, cwd.as_path()),
             Some(codex_app_server_protocol::SandboxMode::ReadOnly)
         );
+        assert!(!permission_profile_is_safely_represented_by_sandbox_mode(
+            &permission_profile,
+            cwd.as_path(),
+        ));
     }
 
     #[test]
@@ -3189,8 +3259,11 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn persisted_resume_does_not_forward_implicit_service_tier() -> Result<()> {
+    large_stack_async_test!(
+        persisted_resume_does_not_forward_implicit_service_tier,
+        persisted_resume_does_not_forward_implicit_service_tier_impl
+    );
+    async fn persisted_resume_does_not_forward_implicit_service_tier_impl() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
         let mut config = build_config(&codex_home).await;
         config.model = Some("gpt-5.4".to_string());
@@ -3233,9 +3306,12 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn side_fork_skips_parent_title_lookup_but_normal_ephemeral_fork_keeps_it() -> Result<()>
-    {
+    large_stack_async_test!(
+        side_fork_skips_parent_title_lookup_but_normal_ephemeral_fork_keeps_it,
+        side_fork_skips_parent_title_lookup_but_normal_ephemeral_fork_keeps_it_impl
+    );
+    async fn side_fork_skips_parent_title_lookup_but_normal_ephemeral_fork_keeps_it_impl()
+    -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
         let config = build_config(&codex_home).await;
         let source_thread_id = ThreadId::from_string(
@@ -3279,8 +3355,11 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn ephemeral_paginated_fork_skips_unsupported_history_hydration() -> Result<()> {
+    large_stack_async_test!(
+        ephemeral_paginated_fork_skips_unsupported_history_hydration,
+        ephemeral_paginated_fork_skips_unsupported_history_hydration_impl
+    );
+    async fn ephemeral_paginated_fork_skips_unsupported_history_hydration_impl() -> Result<()> {
         let codex_home = tempfile::tempdir()?;
         let config = build_config(&codex_home).await;
         let source_thread_id = ThreadId::from_string(
@@ -3310,8 +3389,11 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn side_fork_uses_one_request_for_long_paginated_history() -> Result<()> {
+    large_stack_async_test!(
+        side_fork_uses_one_request_for_long_paginated_history,
+        side_fork_uses_one_request_for_long_paginated_history_impl
+    );
+    async fn side_fork_uses_one_request_for_long_paginated_history_impl() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
         let mut config = build_config(&codex_home).await;
         config.terminal_resize_reflow.max_rows =
@@ -3457,8 +3539,11 @@ mod tests {
         assert_eq!(params.base_instructions, None);
     }
 
-    #[tokio::test]
-    async fn side_fork_excludes_turns_without_clearing_regular_ephemeral_fork() -> Result<()> {
+    large_stack_async_test!(
+        side_fork_excludes_turns_without_clearing_regular_ephemeral_fork,
+        side_fork_excludes_turns_without_clearing_regular_ephemeral_fork_impl
+    );
+    async fn side_fork_excludes_turns_without_clearing_regular_ephemeral_fork_impl() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
         let mut config = build_config(&codex_home).await;
         config.ephemeral = true;
@@ -3588,6 +3673,8 @@ mod tests {
                 project_id: None,
                 history_mode: Default::default(),
                 model_provider: "openai".to_string(),
+                model: None,
+                reasoning_effort: None,
                 created_at: 1,
                 updated_at: 2,
                 recency_at: Some(2),
@@ -3620,6 +3707,7 @@ mod tests {
                             phase: None,
                             memory_citation: None,
                             delivery: None,
+                            questions: None,
                         },
                     ],
                     status: TurnStatus::Completed,

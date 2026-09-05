@@ -173,7 +173,10 @@ impl ToolExecutor<ToolInvocation> for CutexAgentListHandler {
         true
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(async move {
             let arguments = function_arguments(invocation.payload)?;
             let args: AgentBusListArgs = parse_arguments(&arguments)?;
@@ -208,7 +211,10 @@ impl ToolExecutor<ToolInvocation> for CutexAgentSendHandler {
         create_cutex_agent_send_tool()
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(async move {
             let arguments = function_arguments(invocation.payload)?;
             let args: AgentBusSendArgs = parse_arguments(&arguments)?;

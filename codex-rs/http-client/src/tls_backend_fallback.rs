@@ -15,6 +15,17 @@ use crate::OutboundProxyRoute;
 const MAX_CACHED_RUSTLS_DESTINATIONS: usize = 16;
 // Schannel maps TLS alert 70 (protocol_version) to SEC_E_UNSUPPORTED_FUNCTION.
 const SCHANNEL_PROTOCOL_VERSION_ERROR: i32 = 0x8009_0302_u32 as i32;
+const CERTIFICATE_ERROR_MARKERS: [&str; 9] = [
+    "certificate",
+    "unknown issuer",
+    "unknown ca",
+    "untrusted",
+    "self signed",
+    "self-signed",
+    "hostname",
+    "expired",
+    "revoked",
+];
 
 #[derive(Clone, Default)]
 pub(crate) struct RustlsClientCache {
@@ -111,44 +122,57 @@ fn has_retryable_tls_error(error: &(dyn Error + 'static)) -> bool {
 
     while let Some(error) = source {
         let message = error.to_string().to_ascii_lowercase();
-        if [
-            "certificate",
-            "unknown issuer",
-            "unknown ca",
-            "untrusted",
-            "self signed",
-            "self-signed",
-            "hostname",
-            "expired",
-            "revoked",
-        ]
-        .iter()
-        .any(|marker| message.contains(marker))
-        {
+        if contains_certificate_error(&message) {
             return false;
         }
 
-        // macOS Secure Transport reports the protocol alert as "bad protocol version".
-        let is_macos_protocol_version_error = message.contains("bad protocol version");
-        // Linux OpenSSL reports the peer's "tlsv1 alert protocol version".
-        let is_linux_protocol_version_error = message.contains("tlsv1 alert protocol version");
-        // Windows Schannel may expose the protocol alert as a raw or formatted OS error.
-        let is_schannel_protocol_version_error = error
-            .downcast_ref::<std::io::Error>()
-            .and_then(std::io::Error::raw_os_error)
-            == Some(SCHANNEL_PROTOCOL_VERSION_ERROR)
-            || message.contains("(os error -2146893054)")
-            || message.contains("0x80090302");
-        if is_macos_protocol_version_error
-            || is_linux_protocol_version_error
-            || is_schannel_protocol_version_error
-        {
+        if is_protocol_version_error(error, &message) {
             recognized_negotiation_failure = true;
         }
         source = error.source();
     }
 
     recognized_negotiation_failure
+}
+
+pub(crate) fn is_tls_error(error: &(dyn Error + 'static)) -> bool {
+    if error.downcast_ref::<rustls::Error>().is_some()
+        || error.downcast_ref::<native_tls::Error>().is_some()
+    {
+        return true;
+    }
+
+    let Some(error) = error.downcast_ref::<std::io::Error>() else {
+        return false;
+    };
+    let message = error.to_string().to_ascii_lowercase();
+    contains_certificate_error(&message) || is_protocol_version_error(error, &message)
+}
+
+fn contains_certificate_error(message: &str) -> bool {
+    CERTIFICATE_ERROR_MARKERS
+        .iter()
+        .any(|marker| message.contains(marker))
+}
+
+fn is_protocol_version_error(error: &(dyn Error + 'static), message: &str) -> bool {
+    // macOS Secure Transport reports the protocol alert as "bad protocol version".
+    let is_macos_protocol_version_error = message.contains("bad protocol version");
+    // Linux OpenSSL reports the peer's "tlsv1 alert protocol version". Rustls can be hidden inside
+    // an opaque `std::io::Error` and expose only the peer alert in its display text.
+    let is_linux_protocol_version_error = message.contains("tlsv1 alert protocol version")
+        || message.contains("received fatal alert: protocolversion");
+    // Windows Schannel may expose the protocol alert as a raw or formatted OS error.
+    let is_schannel_protocol_version_error = error
+        .downcast_ref::<std::io::Error>()
+        .and_then(std::io::Error::raw_os_error)
+        == Some(SCHANNEL_PROTOCOL_VERSION_ERROR)
+        || message.contains("(os error -2146893054)")
+        || message.contains("0x80090302");
+
+    is_macos_protocol_version_error
+        || is_linux_protocol_version_error
+        || is_schannel_protocol_version_error
 }
 
 #[cfg(test)]

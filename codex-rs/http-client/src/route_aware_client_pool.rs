@@ -33,6 +33,7 @@ use crate::route_aware_redirect::redirect_request;
 use crate::route_aware_redirect::redirect_url;
 use crate::route_aware_redirect::remove_sensitive_headers;
 use crate::tls_backend_fallback::RustlsClientCache;
+use crate::tls_backend_fallback::is_tls_error;
 use crate::tls_backend_fallback::should_retry_with_rustls;
 
 const MAX_CACHED_ROUTES: usize = 16;
@@ -121,6 +122,7 @@ impl RouteAwareRequestError {
         while let Some(error) = source {
             if error.downcast_ref::<rustls::Error>().is_some()
                 || error.downcast_ref::<native_tls::Error>().is_some()
+                || (self.is_connect() && is_tls_error(error))
             {
                 return Some(RouteFailureClass::TlsError);
             }

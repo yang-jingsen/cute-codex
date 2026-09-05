@@ -1,12 +1,11 @@
 ---
 source: tui/src/status/tests.rs
-assertion_line: 1610
 expression: sanitized
 ---
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ cute-codex (v0.150.0)                                                   │
+│  >_ cute-codex (v0.153.2)                                                   │
 │                                                                             │
 │ Visit https://chatgpt.com/codex/settings/usage for up-to-date               │
 │ information on rate limits and credits                                      │

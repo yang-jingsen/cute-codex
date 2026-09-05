@@ -28,6 +28,8 @@ fn reconstructed_transcript_inter_agent_message_snapshot() {
         section_entered_at: None,
         history_mode: Default::default(),
         model_provider: "openai".to_string(),
+        model: Some("gpt-6-astra".to_string()),
+        reasoning_effort: Some(codex_protocol::openai_models::ReasoningEffort::Ultra),
         created_at: 1,
         updated_at: 2,
         recency_at: Some(2),

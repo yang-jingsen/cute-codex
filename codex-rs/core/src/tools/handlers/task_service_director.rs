@@ -8,6 +8,8 @@ use serde::Serialize;
 use serde_json::Map;
 use serde_json::Value;
 use serde_json::json;
+use sha2::Digest;
+use sha2::Sha256;
 
 use super::task_service_director_spec::TASK_SERVICE_DIRECTOR_TOOL_NAME;
 use super::task_service_director_spec::create_task_service_director_tool;
@@ -73,6 +75,8 @@ struct DirectorArgs {
     workflow_id: Option<String>,
     task_id: Option<String>,
     task_revision: Option<u64>,
+    /// Accepted only for compatibility with older callers. The native
+    /// integration always derives and forwards the authoritative value.
     contract_sha256: Option<String>,
     opaque_contract: Option<String>,
     completion_policy: Option<CompletionPolicy>,
@@ -149,7 +153,10 @@ impl ToolExecutor<ToolInvocation> for TaskServiceDirectorHandler {
         ToolExposure::Deferred
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(async move {
             let ToolPayload::Function { arguments } = invocation.payload else {
                 return Err(FunctionCallError::RespondToModel(
@@ -241,16 +248,18 @@ fn insert_create_fields(
         .task_revision
         .filter(|revision| *revision > 0 && *revision <= MAX_JSON_SAFE_INTEGER)
         .ok_or("invalid_semantic_payload")?;
-    let contract_sha256 = args
-        .contract_sha256
-        .as_deref()
-        .ok_or("invalid_semantic_payload")?;
-    validate_sha256(contract_sha256)?;
     let opaque_contract = args
         .opaque_contract
         .as_deref()
         .ok_or("invalid_semantic_payload")?;
     validate_text(opaque_contract, MAX_CONTRACT_BYTES)?;
+    let contract_sha256 = format!("{:x}", Sha256::digest(opaque_contract.as_bytes()));
+    if let Some(submitted_sha256) = args.contract_sha256.as_deref() {
+        validate_sha256(submitted_sha256)?;
+        if submitted_sha256 != contract_sha256 {
+            return Err("contract_sha256_mismatch");
+        }
+    }
     let completion_policy = args.completion_policy.ok_or("invalid_semantic_payload")?;
     body.extend([
         ("workflow_id".to_string(), json!(workflow_id)),

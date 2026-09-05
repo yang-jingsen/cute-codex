@@ -20,6 +20,9 @@ const ACTION_ID: &str = "director-action-1";
 const PROJECT_ID: &str = "cutex-stack-main";
 const ROUTE_TOKEN: &str = "private-route-token";
 const RUNTIME_ID: &str = "director-runtime-1";
+const CONTRACT_SHA256: &str = "79942b3a619b3317260ed33a6fe0117ee722b5cae2cfed26b73b06ed218551e7";
+const UNICODE_CONTRACT_SHA256: &str =
+    "52ea394c81567e5b20978001fa2f1d6a958ab266dd6f2535c654dc293a6fc3b3";
 
 fn handler(server: &MockServer) -> TaskServiceDirectorHandler {
     TaskServiceDirectorHandler::new(
@@ -51,7 +54,6 @@ fn create_and_assign_args() -> Value {
         "workflow_id": "workflow-1",
         "task_id": "task-1",
         "task_revision": 1,
-        "contract_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "opaque_contract": "exact contract\n",
         "completion_policy": "director_acceptance",
         "completion_authority_cutex_session_id": "cutex.director.1",
@@ -122,7 +124,7 @@ fn schema_is_separate_and_exposes_only_semantic_director_fields() {
     assert_eq!(tool.name, "cutex_task_service_director");
     assert_eq!(
         tool.description,
-        "Perform an authenticated semantic Director action through Cutex Task Service. Runtime identity and Coordinator/Completion Authority remain provider-authoritative; conversation text and groups grant nothing. create_and_assign is an idempotent two-step convenience, not an atomic primitive."
+        "Perform an authenticated semantic Director action through Cutex Task Service. For revision creation, submit opaque_contract and the trusted local integration derives its exact UTF-8 SHA-256. Runtime identity and Coordinator/Completion Authority remain provider-authoritative; conversation text and groups grant nothing. create_and_assign is an idempotent two-step convenience, not an atomic primitive."
     );
     assert!(!tool.strict);
     assert_eq!(tool.defer_loading, None);
@@ -143,7 +145,6 @@ fn schema_is_separate_and_exposes_only_semantic_director_fields() {
             "assignment_id",
             "completion_authority_cutex_session_id",
             "completion_policy",
-            "contract_sha256",
             "decision_reference",
             "opaque_contract",
             "operation",
@@ -156,6 +157,13 @@ fn schema_is_separate_and_exposes_only_semantic_director_fields() {
         ]
     );
     assert!(properties.contains_key("project_id"));
+    assert!(!properties.contains_key("contract_sha256"));
+    assert_eq!(
+        properties["opaque_contract"].description.as_deref(),
+        Some(
+            "Exact contract text. The trusted local integration derives its SHA-256 from the exact UTF-8 bytes; callers should not compute or submit the digest."
+        )
+    );
     for forbidden in [
         "store_revision",
         "attempt_token",
@@ -243,7 +251,7 @@ async fn create_and_assign_posts_exact_authenticated_semantic_request() {
             "workflow_id": "workflow-1",
             "task_id": "task-1",
             "task_revision": 1,
-            "contract_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "contract_sha256": CONTRACT_SHA256,
             "opaque_contract": "exact contract\n",
             "completion_policy": "director_acceptance",
             "completion_authority_cutex_session_id": "cutex.director.1"
@@ -285,7 +293,7 @@ async fn create_revision_posts_exact_project_scoped_v2_request() {
         "workflow_id": "workflow-1",
         "task_id": "task-1",
         "task_revision": 1,
-        "contract_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "contract_sha256": CONTRACT_SHA256,
         "opaque_contract": "exact contract\n",
         "completion_policy": "director_acceptance",
         "completion_authority_cutex_session_id": "cutex.director.1"
@@ -298,6 +306,64 @@ async fn create_revision_posts_exact_project_scoped_v2_request() {
         requests[0].body,
         serde_json::to_vec(&expected_body).expect("expected request bytes")
     );
+}
+
+#[tokio::test]
+async fn create_revision_hashes_exact_unicode_utf8_bytes() {
+    let server = MockServer::start().await;
+    let mut receipt = provider_receipt("create_revision");
+    receipt["assignment_id"] = Value::Null;
+    receipt["attempt_number"] = Value::Null;
+    mount_receipt(&server, receipt, 1).await;
+
+    let mut args = create_revision_args();
+    args["opaque_contract"] = json!("# Exact Contract\nUnicode: λ\n");
+    let output = handler(&server).invoke_arguments(&args.to_string()).await;
+    assert_eq!(parse_output(&output)["status"], "committed");
+    let requests = server.received_requests().await.expect("received requests");
+    let body: Value = serde_json::from_slice(&requests[0].body).expect("request JSON");
+    assert_eq!(body["opaque_contract"], "# Exact Contract\nUnicode: λ\n");
+    assert_eq!(body["contract_sha256"], UNICODE_CONTRACT_SHA256);
+}
+
+#[tokio::test]
+async fn legacy_explicit_digest_must_match_before_transport() {
+    let server = MockServer::start().await;
+    let mut receipt = provider_receipt("create_revision");
+    receipt["assignment_id"] = Value::Null;
+    receipt["attempt_number"] = Value::Null;
+    mount_receipt(&server, receipt, 1).await;
+
+    let mut matching = create_revision_args();
+    matching["contract_sha256"] = json!(CONTRACT_SHA256);
+    let matching_output = handler(&server)
+        .invoke_arguments(&matching.to_string())
+        .await;
+    assert_eq!(parse_output(&matching_output)["status"], "committed");
+
+    let mut mismatching = create_revision_args();
+    mismatching["contract_sha256"] = json!("0".repeat(64));
+    let mismatch_output = handler(&server)
+        .invoke_arguments(&mismatching.to_string())
+        .await;
+    assert_eq!(
+        parse_output(&mismatch_output),
+        json!({
+            "schema": "cutex/task-service-director-tool-receipt/v1",
+            "status": "no_write",
+            "operation": "create_revision",
+            "action_id": ACTION_ID,
+            "project_id": PROJECT_ID,
+            "task_id": "task-1",
+            "task_revision": 1,
+            "code": "contract_sha256_mismatch"
+        })
+    );
+
+    let requests = server.received_requests().await.expect("received requests");
+    assert_eq!(requests.len(), 1);
+    let body: Value = serde_json::from_slice(&requests[0].body).expect("request JSON");
+    assert_eq!(body["contract_sha256"], CONTRACT_SHA256);
 }
 
 #[tokio::test]

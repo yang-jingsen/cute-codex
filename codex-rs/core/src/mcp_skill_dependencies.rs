@@ -221,6 +221,7 @@ async fn maybe_install_mcp_dependencies(
             server_config.oauth_resource.as_deref(),
             callback_port,
             config.mcp_oauth_callback_url.as_deref(),
+            config.mcp_oauth_callback_url.as_deref(),
             Arc::clone(&http_client),
         )
         .await;
@@ -239,6 +240,7 @@ async fn maybe_install_mcp_dependencies(
                     McpOAuthClientRegistration::Auto,
                     server_config.oauth_resource.as_deref(),
                     callback_port,
+                    config.mcp_oauth_callback_url.as_deref(),
                     config.mcp_oauth_callback_url.as_deref(),
                     Arc::clone(&http_client),
                 )
@@ -443,6 +445,7 @@ fn mcp_dependency_to_server_config(
                 .oauth_callback_port
                 .map(|callback_port| McpServerOAuthConfig {
                     client_id: None,
+                    callback_url: None,
                     callback_port: Some(callback_port),
                 }),
             oauth_resource: None,

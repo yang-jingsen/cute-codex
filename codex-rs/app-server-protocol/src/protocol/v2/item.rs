@@ -30,6 +30,7 @@ pub use codex_protocol::items::AgentManagementReplacePolicy;
 pub use codex_protocol::items::AgentManagementRotationMode;
 use codex_protocol::items::AgentMessageContent as CoreAgentMessageContent;
 pub use codex_protocol::items::AgentMessageDelivery;
+pub use codex_protocol::items::AsyncUserInputQuestion;
 use codex_protocol::items::CollabAgentTool as CoreCollabAgentTool;
 use codex_protocol::items::CollabAgentToolCallStatus as CoreCollabAgentToolCallStatus;
 use codex_protocol::items::CommandExecutionStatus as CoreCommandExecutionStatus;
@@ -56,6 +57,7 @@ pub use codex_protocol::items::TaskWatchdogStage;
 use codex_protocol::items::TurnItem as CoreTurnItem;
 use codex_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
 use codex_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
+use codex_protocol::models::FunctionCallOutputBody;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -277,6 +279,8 @@ pub enum ThreadItem {
         memory_citation: Option<MemoryCitation>,
         #[serde(default)]
         delivery: Option<AgentMessageDelivery>,
+        #[serde(default)]
+        questions: Option<Vec<AsyncUserInputQuestion>>,
     },
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
@@ -297,6 +301,14 @@ pub enum ThreadItem {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         task_service_presentation: Option<TaskServiceMessagePresentation>,
+    },
+    #[serde(rename_all = "camelCase")]
+    #[ts(rename_all = "camelCase")]
+    FunctionCallOutput {
+        id: String,
+        name: String,
+        namespace: Option<String>,
+        output: FunctionCallOutputBody,
     },
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
@@ -500,6 +512,7 @@ impl ThreadItem {
             | ThreadItem::HookPrompt { id, .. }
             | ThreadItem::AgentMessage { id, .. }
             | ThreadItem::InterAgentMessage { id, .. }
+            | ThreadItem::FunctionCallOutput { id, .. }
             | ThreadItem::Plan { id, .. }
             | ThreadItem::Reasoning { id, .. }
             | ThreadItem::CommandExecution { id, .. }
@@ -946,6 +959,7 @@ impl From<CoreTurnItem> for ThreadItem {
                     phase: agent.phase,
                     memory_citation: agent.memory_citation.map(Into::into),
                     delivery: agent.delivery,
+                    questions: agent.questions,
                 }
             }
             CoreTurnItem::InterAgentMessage(message) => {
@@ -968,6 +982,12 @@ impl From<CoreTurnItem> for ThreadItem {
                     task_service_presentation,
                 }
             }
+            CoreTurnItem::FunctionCallOutput(output) => ThreadItem::FunctionCallOutput {
+                id: output.id,
+                name: output.name,
+                namespace: output.namespace,
+                output: output.output,
+            },
             CoreTurnItem::Plan(plan) => ThreadItem::Plan {
                 id: plan.id,
                 text: plan.text,
@@ -1080,6 +1100,7 @@ impl From<CoreTurnItem> for ThreadItem {
                     transparent_background: None,
                     failure: None,
                     saved_path: image.saved_path,
+                    imagegen_request_id: None,
                 })
             }
             CoreTurnItem::EnteredReviewMode(review) => ThreadItem::EnteredReviewMode {

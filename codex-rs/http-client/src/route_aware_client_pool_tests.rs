@@ -110,6 +110,18 @@ async fn request_failures_classify_https_proxy_authentication_challenges() {
 }
 
 #[test]
+fn proxy_resolution_errors_with_hostname_text_are_not_classified_as_tls() {
+    let error = RouteAwareRequestError::Route(RouteAwareClientPoolError::Resolve(
+        io::Error::other("hostname resolution unavailable"),
+    ));
+
+    assert_eq!(
+        error.failure_class(),
+        Some(RouteFailureClass::ProxyResolutionUnavailable)
+    );
+}
+
+#[test]
 fn request_builder_debug_redacts_url_secrets() {
     let pool = RouteAwareClientPool::new(
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),

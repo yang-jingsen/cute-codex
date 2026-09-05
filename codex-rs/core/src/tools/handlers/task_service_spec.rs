@@ -38,7 +38,7 @@ pub(crate) fn create_task_service_tool() -> ToolSpec {
         (
             "summary".to_string(),
             JsonSchema::string(Some(
-                "Required only for report_status: a concise semantic progress summary."
+                "Required for report_status and block: a concise semantic progress or blocker summary; block summaries are limited to 2048 UTF-8 bytes."
                     .to_string(),
             )),
         ),

@@ -105,6 +105,15 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
             );
             continue;
         }
+        if feature.id == codex_features::Feature::ContextManagement {
+            validation.properties.insert(
+                feature.key.to_string(),
+                schema_gen.subschema_for::<codex_features::FeatureToml<
+                    codex_features::ContextManagementConfigToml,
+                >>(),
+            );
+            continue;
+        }
         if feature.id == codex_features::Feature::RolloutBudget {
             validation.properties.insert(
                 feature.key.to_string(),
@@ -119,6 +128,15 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
                 feature.key.to_string(),
                 schema_gen.subschema_for::<codex_features::FeatureToml<
                     codex_features::CurrentTimeReminderConfigToml,
+                >>(),
+            );
+            continue;
+        }
+        if feature.id == codex_features::Feature::SleepTool {
+            validation.properties.insert(
+                feature.key.to_string(),
+                schema_gen.subschema_for::<codex_features::FeatureToml<
+                    codex_features::SleepToolConfigToml,
                 >>(),
             );
             continue;

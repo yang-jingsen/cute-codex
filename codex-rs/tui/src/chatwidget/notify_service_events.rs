@@ -39,8 +39,8 @@ impl ChatWidget {
 
     pub(super) fn current_turn_duration_seconds(&self) -> Option<u64> {
         self.bottom_pane
-            .status_widget()
-            .map(crate::status_indicator_widget::StatusIndicatorWidget::elapsed_seconds)
+            .status_elapsed()
+            .map(|elapsed| elapsed.as_secs())
     }
 
     pub(super) fn post_notify_service_event(

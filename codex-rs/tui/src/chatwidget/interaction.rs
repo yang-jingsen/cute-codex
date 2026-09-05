@@ -4,6 +4,10 @@ use super::*;
 use crate::bottom_pane::BottomPaneView;
 
 impl ChatWidget {
+    pub(crate) fn set_agents_navigation_enabled(&mut self, enabled: bool) {
+        self.bottom_pane.set_agents_navigation_enabled(enabled);
+    }
+
     pub(crate) fn keymap_contexts(&self) -> crate::keymap::KeymapContextSet {
         self.bottom_pane.keymap_contexts()
     }
@@ -186,6 +190,7 @@ impl ChatWidget {
                 self.schedule_idle_notification_after_composer_activity(
                     previous_activity_generation,
                 );
+                self.sync_backend_banner_view();
                 if should_pause_active_goal {
                     self.pause_active_goal_for_interrupt();
                 }
@@ -257,6 +262,10 @@ impl ChatWidget {
 
     pub(crate) fn selected_index_for_present_view(&self, view_id: &'static str) -> Option<usize> {
         self.bottom_pane.selected_index_for_present_view(view_id)
+    }
+
+    pub(crate) fn selected_index_for_active_view(&self, view_id: &'static str) -> Option<usize> {
+        self.bottom_pane.selected_index_for_active_view(view_id)
     }
 
     pub(crate) fn replace_selection_view_if_present(

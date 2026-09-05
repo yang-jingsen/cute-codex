@@ -312,10 +312,53 @@ fn production_tool_spec_serialization_identity_is_stable() {
     let serialized =
         serde_json::to_string(&create_task_service_tool()).expect("serialize production ToolSpec");
 
-    assert_eq!(serialized.len(), 1_282);
+    assert_eq!(serialized.len(), 1_347);
     assert_eq!(
         format!("{:x}", Sha256::digest(serialized.as_bytes())),
-        "b821d43a72ec43ad043e3f897e40189367964931dee69a71d243757f8f6653bd"
+        "64cf11606207283a6ea11262313408cca99f143f7ccbec9788063d4e2abb4e42"
+    );
+}
+
+#[test]
+fn block_requires_and_forwards_a_bounded_semantic_summary() {
+    let missing: super::TaskServiceArgs =
+        serde_json::from_str(&action_args("block", "block-missing", None)).unwrap();
+    assert_eq!(
+        super::provider_request(&missing),
+        Err("invalid_semantic_payload")
+    );
+
+    let summary = "normal managed service lifecycle cannot stop the runtime";
+    let valid: super::TaskServiceArgs =
+        serde_json::from_str(&action_args("block", "block-with-summary", Some(summary))).unwrap();
+    assert_eq!(
+        super::provider_request(&valid).unwrap(),
+        semantic_action("block", "block-with-summary", Some(summary))
+    );
+
+    let oversized = json!({
+        "operation": "block",
+        "assignment_id": ASSIGNMENT_ID,
+        "action_id": "block-oversized",
+        "summary": "x".repeat(super::MAX_BLOCKER_SUMMARY_BYTES + 1),
+    });
+    let oversized: super::TaskServiceArgs = serde_json::from_value(oversized).unwrap();
+    assert_eq!(
+        super::provider_request(&oversized),
+        Err("invalid_semantic_payload")
+    );
+
+    let forged = json!({
+        "operation": "block",
+        "assignment_id": ASSIGNMENT_ID,
+        "action_id": "block-forged-evidence",
+        "summary": summary,
+        "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
+    let forged: super::TaskServiceArgs = serde_json::from_value(forged).unwrap();
+    assert_eq!(
+        super::provider_request(&forged),
+        Err("invalid_semantic_payload")
     );
 }
 
@@ -895,7 +938,8 @@ async fn same_attempt_cas_conflict_uses_only_the_refreshed_provider_envelope() {
 async fn a_fresh_runtime_never_retargets_attempt_one_preparation_to_attempt_two() {
     let server = MockServer::start().await;
     let action_id = "action-183-stale-attempt";
-    let action = semantic_action("block", action_id, None);
+    let blocker_summary = "the original attempt remains unresolved";
+    let action = semantic_action("block", action_id, Some(blocker_summary));
     Mock::given(method("POST"))
         .and(path("/api/task/v2/worker-prepare"))
         .respond_with(DelayedDurableProbe {
@@ -917,12 +961,12 @@ async fn a_fresh_runtime_never_retargets_attempt_one_preparation_to_attempt_two(
         .await;
 
     let first = handler(&server)
-        .invoke_arguments(&action_args("block", action_id, None))
+        .invoke_arguments(&action_args("block", action_id, Some(blocker_summary)))
         .await;
     assert_eq!(parse_output(&first)["status"], "response_uncertain");
     let restarted = handler_with_runtime(&server, RESTARTED_RUNTIME_ID);
     let refused = restarted
-        .invoke_arguments(&action_args("block", action_id, None))
+        .invoke_arguments(&action_args("block", action_id, Some(blocker_summary)))
         .await;
     let refused = parse_output(&refused);
     assert_eq!(refused["status"], "conflict");
@@ -935,7 +979,8 @@ async fn a_fresh_runtime_never_retargets_attempt_one_preparation_to_attempt_two(
 #[tokio::test]
 async fn a_new_runtime_prepares_new_actions_on_the_same_attempt() {
     let server = MockServer::start().await;
-    let block = semantic_action("block", "action-183-block", None);
+    let blocker_summary = "waiting for Director guidance";
+    let block = semantic_action("block", "action-183-block", Some(blocker_summary));
     let resume = semantic_action("resume", "action-183-resume", None);
     Mock::given(method("POST"))
         .and(path("/api/task/v2/worker-prepare"))
@@ -963,7 +1008,11 @@ async fn a_new_runtime_prepares_new_actions_on_the_same_attempt() {
         .await;
 
     let first = handler(&server)
-        .invoke_arguments(&action_args("block", "action-183-block", None))
+        .invoke_arguments(&action_args(
+            "block",
+            "action-183-block",
+            Some(blocker_summary),
+        ))
         .await;
     let restarted = handler_with_runtime(&server, RESTARTED_RUNTIME_ID);
     let second = restarted

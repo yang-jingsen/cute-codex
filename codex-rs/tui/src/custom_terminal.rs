@@ -52,6 +52,8 @@ use ratatui::style::Color;
 use ratatui::style::Modifier;
 use ratatui::widgets::WidgetRef;
 
+mod cursor;
+
 fn osc8_hyperlink_parts(symbol: &str) -> Option<(&str, &str)> {
     let content = symbol.strip_prefix("\x1b]8;;")?;
     let destination_end = content.find('\x07')?;
@@ -450,7 +452,7 @@ where
         match cursor_position {
             None => self.hide_cursor()?,
             Some(position) => {
-                self.set_cursor_style(cursor_style)?;
+                self.set_cursor_style_with_repair(cursor_style)?;
                 self.set_cursor_position(position)?;
                 self.show_cursor()?;
             }
@@ -857,7 +859,9 @@ impl ModifierDiff {
     }
 }
 
+// Keep nested #[path] modules discoverable by cargo-shear as well as rustc.
 #[cfg(test)]
+#[path = "custom_terminal/tests"]
 mod tests {
     use super::*;
     use std::num::NonZeroU16;
@@ -873,6 +877,9 @@ mod tests {
     use ratatui::widgets::Paragraph;
     use ratatui::widgets::Widget;
     use ratatui::widgets::Wrap;
+
+    #[path = "cursor_tests.rs"]
+    mod cursor;
 
     struct CaptureBackend {
         output: Vec<u8>,

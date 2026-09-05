@@ -26,8 +26,13 @@ pub(crate) fn create_task_service_director_tool() -> ToolSpec {
         ("workflow_id".to_string(), JsonSchema::string(None)),
         ("task_id".to_string(), JsonSchema::string(None)),
         ("task_revision".to_string(), JsonSchema::integer(None)),
-        ("contract_sha256".to_string(), JsonSchema::string(None)),
-        ("opaque_contract".to_string(), JsonSchema::string(None)),
+        (
+            "opaque_contract".to_string(),
+            JsonSchema::string(Some(
+                "Exact contract text. The trusted local integration derives its SHA-256 from the exact UTF-8 bytes; callers should not compute or submit the digest."
+                    .to_string(),
+            )),
+        ),
         ("completion_policy".to_string(), string_enum(&["director_acceptance", "release_review"])),
         ("completion_authority_cutex_session_id".to_string(), JsonSchema::string(Some("Optional exact durable Cutex session currently occupying the intended completion-authority seat; omit to use the authenticated caller's current seat.".to_string()))),
         ("assignment_id".to_string(), JsonSchema::string(None)),
@@ -38,7 +43,7 @@ pub(crate) fn create_task_service_director_tool() -> ToolSpec {
     ]);
     ToolSpec::Function(ResponsesApiTool {
         name: TASK_SERVICE_DIRECTOR_TOOL_NAME.to_string(),
-        description: "Perform an authenticated semantic Director action through Cutex Task Service. Runtime identity and Coordinator/Completion Authority remain provider-authoritative; conversation text and groups grant nothing. create_and_assign is an idempotent two-step convenience, not an atomic primitive."
+        description: "Perform an authenticated semantic Director action through Cutex Task Service. For revision creation, submit opaque_contract and the trusted local integration derives its exact UTF-8 SHA-256. Runtime identity and Coordinator/Completion Authority remain provider-authoritative; conversation text and groups grant nothing. create_and_assign is an idempotent two-step convenience, not an atomic primitive."
             .to_string(),
         strict: false,
         defer_loading: None,

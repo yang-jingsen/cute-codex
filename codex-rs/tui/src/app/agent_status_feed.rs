@@ -225,6 +225,7 @@ fn activity_summary(item: &ThreadItem) -> Option<String> {
         | ThreadItem::OutboundInterAgentMessage { .. }
         | ThreadItem::TaskAssignmentActivity { .. }
         | ThreadItem::TaskWatchdogActivity { .. }
+        | ThreadItem::FunctionCallOutput { .. }
         | ThreadItem::Sleep(_) => {
             return None;
         }

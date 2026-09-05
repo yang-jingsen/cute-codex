@@ -28,6 +28,7 @@ impl ChatWidget {
             self.session_started_at = Some(Instant::now());
         }
         if previous_thread_id != self.thread_id {
+            self.backend_banner_notice_model = None;
             self.pending_automatic_thread_names.clear();
             self.review.recent_auto_review_denials = RecentAutoReviewDenials::default();
             self.clear_thread_usage_state();
