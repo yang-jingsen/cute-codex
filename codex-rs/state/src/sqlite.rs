@@ -13,7 +13,9 @@ use crate::telemetry::DbKind;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use log::LevelFilter;
 use sqlx::ConnectOptions;
+use sqlx::Connection;
 use sqlx::Error;
+use sqlx::SqliteConnection;
 use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
 use sqlx::sqlite::SqliteAutoVacuum;
@@ -27,6 +29,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 const LOGS_DB_FILENAME: &str = "logs_2.sqlite";
+pub(crate) const LOGS_WAL_JOURNAL_SIZE_LIMIT_BYTES: i64 = 16 * 1024 * 1024;
 const GOALS_DB_FILENAME: &str = "goals_1.sqlite";
 const MEMORIES_DB_FILENAME: &str = "memories_1.sqlite";
 const QUEUE_DB_FILENAME: &str = "queue_1.sqlite";
@@ -236,8 +239,14 @@ impl SqliteConfig {
     ) -> anyhow::Result<SqlitePool> {
         let path = spec.path(self.home());
         let started = Instant::now();
-        let pool_result = self
-            .open_read_write_pool(&path)
+        let options = if matches!(spec.kind, DbKind::Logs) {
+            self.logs_read_write_options(&path)
+        } else {
+            self.read_write_options(&path)
+        };
+        let pool_result = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(options)
             .await
             .map_err(anyhow::Error::from);
         telemetry::record_init_result(
@@ -276,18 +285,47 @@ impl SqliteConfig {
 
     /// Open a writable Codex SQLite database, creating it if necessary.
     pub async fn open_read_write_pool(&self, path: &Path) -> Result<SqlitePool, Error> {
-        let options = SqliteConnectOptions::new()
+        SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(self.read_write_options(path))
+            .await
+    }
+
+    fn read_write_options(&self, path: &Path) -> SqliteConnectOptions {
+        SqliteConnectOptions::new()
             .filename(path)
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
             .auto_vacuum(SqliteAutoVacuum::Incremental)
             .busy_timeout(Duration::from_secs(5))
+            .log_statements(LevelFilter::Off)
+    }
+
+    fn logs_read_write_options(&self, path: &Path) -> SqliteConnectOptions {
+        self.read_write_options(path).pragma(
+            "journal_size_limit",
+            LOGS_WAL_JOURNAL_SIZE_LIMIT_BYTES.to_string(),
+        )
+    }
+
+    pub(crate) async fn open_logs_wal_maintenance_connection(
+        &self,
+        busy_timeout: Duration,
+    ) -> Result<SqliteConnection, Error> {
+        // WAL mode is persistent. Re-requesting it while opening a maintenance
+        // connection needs an exclusive lock that SQLite's busy timeout cannot
+        // bound, so open the existing database without changing journal mode.
+        let options = SqliteConnectOptions::new()
+            .filename(self.logs_db_path())
+            .create_if_missing(false)
+            .busy_timeout(busy_timeout)
+            .pragma(
+                "journal_size_limit",
+                LOGS_WAL_JOURNAL_SIZE_LIMIT_BYTES.to_string(),
+            )
             .log_statements(LevelFilter::Off);
-        SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await
+        SqliteConnection::connect_with(&options).await
     }
 
     /// Open an existing Codex SQLite database without creating or modifying it.

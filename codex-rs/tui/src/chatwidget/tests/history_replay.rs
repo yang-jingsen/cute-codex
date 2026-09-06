@@ -1387,7 +1387,7 @@ async fn deferred_mcp_lifecycle_events_keep_fifo_after_stream_finishes() {
 #[tokio::test]
 async fn live_reasoning_summary_is_not_rendered_twice_when_item_completes() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
 
     chat.handle_server_notification(
         ServerNotification::TurnStarted(TurnStartedNotification {
@@ -1444,7 +1444,7 @@ async fn live_reasoning_summary_is_not_rendered_twice_when_item_completes() {
 #[tokio::test]
 async fn live_reasoning_summary_drops_empty_parts_without_losing_content() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
 
     chat.handle_server_notification(
         ServerNotification::TurnStarted(TurnStartedNotification {

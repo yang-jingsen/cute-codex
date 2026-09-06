@@ -43,6 +43,7 @@ mod backfill;
 mod external_agent_config_imports;
 mod goals;
 mod logs;
+mod logs_wal;
 mod memories;
 mod projects;
 mod queued_items;
@@ -265,6 +266,7 @@ impl StateRuntime {
                 logs_path.display(),
             );
         }
+        runtime.start_logs_wal_maintenance();
         Ok(runtime)
     }
 

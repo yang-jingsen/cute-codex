@@ -2213,9 +2213,9 @@ async fn underfilled_scrollback_fetches_older_pages_without_opening_the_transcri
             &app.config,
             started.session.model.as_str(),
             &started.session,
-            crate::history_cell::SessionInfoText::Tooltip(
-                "This is a test announcement".to_string(),
-            ),
+            /*is_first_event*/ false,
+            Some("This is a test announcement".to_string()),
+            /*auth_plan*/ None,
             /*show_fast_status*/ false,
         )),
     );

@@ -373,7 +373,6 @@ mod misalignment_policy;
 mod pets;
 mod session_flow;
 mod session_header;
-mod startup_text;
 use self::session_header::SessionHeader;
 mod hook_lifecycle;
 mod hooks;
@@ -477,8 +476,6 @@ use self::user_messages::user_message_display_for_history;
 use self::user_messages::user_message_for_restore;
 use self::user_messages::user_message_preview_text;
 mod warnings;
-use self::startup_text::StartupTextSelection;
-use self::startup_text::StartupTextState;
 use self::warnings::WarningDisplayState;
 pub(crate) use crate::branch_summary::StatusLineGitSummary;
 use crate::streaming::chunking::AdaptiveChunkingPolicy;
@@ -699,8 +696,10 @@ pub(crate) struct ChatWidget {
     forked_from: Option<ThreadId>,
     interrupted_turn_notice_mode: InterruptedTurnNoticeMode,
     frame_requester: FrameRequester,
-    // One-shot semantic copy for the primary session header.
-    startup_text: StartupTextState,
+    // Whether to include the initial welcome banner on session configured
+    show_welcome_banner: bool,
+    // One-shot tooltip override for the primary startup session.
+    startup_tooltip_override: Option<String>,
     // When resuming an existing session (selected via resume picker), avoid an
     // immediate redraw on SessionConfigured to prevent a gratuitous UI flicker.
     suppress_session_configured_redraw: bool,

@@ -2142,7 +2142,7 @@ async fn ctrl_c_interrupt_pauses_active_goal_turn() {
 #[tokio::test]
 async fn esc_interrupt_pauses_active_goal_turn() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     let thread_id = start_active_goal_turn(&mut chat);
 
     chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
@@ -3561,7 +3561,7 @@ async fn status_line_estimated_thread_cost_footer_snapshot() {
     chat.thread_id = Some(thread_id);
     chat.has_codex_backend_auth = true;
     chat.plan_type = Some(PlanType::Business);
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.tui_status_line = Some(vec![
         "model-with-reasoning".to_string(),
         "thread-credits".to_string(),
@@ -4122,7 +4122,7 @@ async fn status_line_fast_mode_footer_snapshot() {
 
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
     set_fast_mode_test_catalog(&mut chat);
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.tui_status_line = Some(vec![
         "model-with-reasoning".to_string(),
         "fast-mode".to_string(),
@@ -4247,7 +4247,7 @@ async fn status_line_model_with_reasoning_plan_mode_footer_snapshot() {
     use ratatui::backend::TestBackend;
 
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);
     chat.config.tui_status_line = Some(vec!["model-with-reasoning".to_string()]);
     chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
@@ -4274,7 +4274,7 @@ async fn renamed_thread_footer_title_snapshot() {
     use ratatui::backend::TestBackend;
 
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.2")).await;
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.tui_status_line = Some(vec![
         "model-with-reasoning".to_string(),
         "thread-title".to_string(),
@@ -4314,7 +4314,7 @@ async fn status_line_model_with_reasoning_fast_footer_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     set_fast_mode_test_catalog(&mut chat);
     assert!(get_available_model(&chat, "gpt-5.4").supports_fast_mode());
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.cwd = test_project_path().abs();
     chat.config.tui_status_line = Some(vec![
         "model-with-reasoning".to_string(),
@@ -4348,7 +4348,7 @@ async fn status_line_model_with_reasoning_context_remaining_footer_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     set_fast_mode_test_catalog(&mut chat);
     assert!(get_available_model(&chat, "gpt-5.4").supports_fast_mode());
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.cwd = test_project_path().abs();
     chat.config.tui_status_line = Some(vec![
         "model-with-reasoning".to_string(),
@@ -4381,7 +4381,7 @@ async fn status_line_goal_active_token_budget_footer_snapshot() {
 
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     chat.set_feature_enabled(Feature::Goals, /*enabled*/ true);
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.tui_status_line = Some(vec!["model-name".to_string()]);
     chat.refresh_status_line();
     chat.handle_server_notification(
@@ -4418,7 +4418,7 @@ async fn status_line_goal_complete_elapsed_footer_snapshot() {
 
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     chat.set_feature_enabled(Feature::Goals, /*enabled*/ true);
-    chat.startup_text = StartupTextState::Consumed;
+    chat.show_welcome_banner = false;
     chat.config.tui_status_line = Some(vec!["model-name".to_string()]);
     chat.refresh_status_line();
     let mut goal = test_thread_goal(

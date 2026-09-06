@@ -709,7 +709,9 @@ async fn session_info_uses_availability_nux_tooltip_override() {
         &config,
         "gpt-5",
         &session_configured_event("gpt-5"),
-        SessionInfoText::Tooltip("Model just became available".to_string()),
+        /*is_first_event*/ false,
+        Some("Model just became available".to_string()),
+        Some(PlanType::Free),
         /*show_fast_status*/ false,
     );
 
@@ -729,7 +731,9 @@ async fn session_info_availability_nux_tooltip_snapshot() {
         &config,
         "gpt-5",
         &session_configured_event("gpt-5"),
-        SessionInfoText::Tooltip("Model just became available".to_string()),
+        /*is_first_event*/ false,
+        Some("Model just became available".to_string()),
+        Some(PlanType::Free),
         /*show_fast_status*/ false,
     );
 
@@ -738,70 +742,39 @@ async fn session_info_availability_nux_tooltip_snapshot() {
 }
 
 #[tokio::test]
-#[cfg_attr(
-    target_os = "windows",
-    ignore = "snapshot path rendering differs on Windows"
-)]
-async fn session_info_selected_text_reflows_without_changing_identity() {
-    let mut config = test_config().await;
-    config.cwd = test_path_buf("/tmp/project").abs();
-    let selected_tip = "Keep this session-selected tip stable across every resize";
+async fn session_info_first_event_suppresses_tooltips_and_nux() {
+    let config = test_config().await;
     let cell = new_session_info(
         &config,
         "gpt-5",
         &session_configured_event("gpt-5"),
-        SessionInfoText::Tooltip(selected_tip.to_string()),
+        /*is_first_event*/ true,
+        Some("Model just became available".to_string()),
+        Some(PlanType::Free),
         /*show_fast_status*/ false,
     );
-    let expected_raw = render_lines(&cell.raw_lines());
-    let mut displays = Vec::new();
 
-    for width in [32, 48, 80, 120] {
-        let rendered = render_lines(&cell.display_lines(width));
-        let compact = rendered.concat().split_whitespace().collect::<String>();
-        assert!(compact.contains(&selected_tip.split_whitespace().collect::<String>()));
-        assert_eq!(render_lines(&cell.raw_lines()), expected_raw);
-        displays.push(format!("width {width}\n{}", rendered.join("\n")));
-    }
-
-    insta::assert_snapshot!(displays.join("\n\n"));
+    let rendered = render_transcript(&cell).join("\n");
+    assert!(!rendered.contains("Model just became available"));
+    assert!(rendered.contains("To get started"));
 }
 
 #[tokio::test]
-async fn session_info_first_event_help_reflows_without_changing_copy() {
-    let config = test_config().await;
-    let cell = new_session_info(
-        &config,
-        "requested-model",
-        &session_configured_event("gpt-5"),
-        SessionInfoText::FirstEventHelp,
-        /*show_fast_status*/ false,
-    );
-    let expected_raw = render_lines(&cell.raw_lines());
-
-    for width in [28, 44, 80, 120] {
-        let rendered = render_lines(&cell.display_lines(width)).join("\n");
-        assert!(rendered.contains("To get started"));
-        assert!(rendered.contains("/permissions"));
-        assert!(!rendered.contains("model changed"));
-        assert_eq!(render_lines(&cell.raw_lines()), expected_raw);
-    }
-}
-
-#[tokio::test]
-async fn session_info_preserves_selected_tooltip_when_config_changes() {
+async fn session_info_hides_tooltips_when_disabled() {
     let mut config = test_config().await;
     config.show_tooltips = false;
     let cell = new_session_info(
         &config,
         "gpt-5",
         &session_configured_event("gpt-5"),
-        SessionInfoText::Tooltip("Already selected".to_string()),
+        /*is_first_event*/ false,
+        Some("Model just became available".to_string()),
+        Some(PlanType::Free),
         /*show_fast_status*/ false,
     );
 
     let rendered = render_transcript(&cell).join("\n");
-    assert!(rendered.contains("Already selected"));
+    assert!(!rendered.contains("Model just became available"));
 }
 
 #[test]
