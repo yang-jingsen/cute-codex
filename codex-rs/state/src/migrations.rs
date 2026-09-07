@@ -1,6 +1,10 @@
 use std::borrow::Cow;
 
+use sqlx::AssertSqlSafe;
+use sqlx::SqlSafeStr;
 use sqlx::SqlitePool;
+use sqlx::migrate::Migration;
+use sqlx::migrate::MigrationType;
 use sqlx::migrate::Migrator;
 
 pub(crate) static STATE_MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -10,21 +14,90 @@ pub(crate) static MEMORIES_MIGRATOR: Migrator = sqlx::migrate!("./memory_migrati
 pub(crate) static QUEUE_MIGRATOR: Migrator = sqlx::migrate!("./queue_migrations");
 pub(crate) static THREAD_HISTORY_MIGRATOR: Migrator = sqlx::migrate!("./thread_history_migrations");
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MigrationLineEnding {
+    Lf,
+    CrLf,
+}
+
+impl MigrationLineEnding {
+    const fn for_target() -> Self {
+        if cfg!(windows) { Self::CrLf } else { Self::Lf }
+    }
+}
+
+/// Derive migration checksums from the target's official line endings rather
+/// than from however the source tree happened to be staged for the build.
+///
+/// Official native Windows builds persist CRLF-derived checksums, while
+/// official non-Windows builds persist LF-derived checksums. Only CRLF pairs
+/// are normalized here, so lone carriage returns and every other content byte
+/// remain checksum-significant.
+fn sql_with_line_ending(sql: &str, line_ending: MigrationLineEnding) -> Cow<'_, str> {
+    let lf_sql = if sql.contains("\r\n") {
+        Cow::Owned(sql.replace("\r\n", "\n"))
+    } else {
+        Cow::Borrowed(sql)
+    };
+
+    match line_ending {
+        MigrationLineEnding::Lf => lf_sql,
+        MigrationLineEnding::CrLf => Cow::Owned(lf_sql.replace('\n', "\r\n")),
+    }
+}
+
+fn checksum_with_line_ending(sql: &str, line_ending: MigrationLineEnding) -> Vec<u8> {
+    let sql = sql_with_line_ending(sql, line_ending);
+    Migration::new(
+        /*version*/ 0,
+        Cow::Borrowed("checksum only"),
+        MigrationType::Simple,
+        AssertSqlSafe(sql.into_owned()).into_sql_str(),
+        /*no_tx*/ false,
+    )
+    .checksum
+    .into_owned()
+}
+
+fn migration_with_line_ending_checksum(
+    migration: &Migration,
+    line_ending: MigrationLineEnding,
+) -> Migration {
+    let mut migration = migration.clone();
+    migration.checksum = Cow::Owned(checksum_with_line_ending(
+        migration.sql.as_str(),
+        line_ending,
+    ));
+    migration
+}
+
 /// Allow an older Codex binary to open a database that has already been
 /// migrated by a newer binary running in parallel.
 ///
 /// We intentionally ignore applied migration versions that are newer than the
 /// embedded migration set. Known migration versions are still validated by
 /// checksum, so this only relaxes the "database is ahead of me" case.
-fn runtime_migrator(base: &'static Migrator) -> Migrator {
+fn runtime_migrator_with_line_ending(
+    base: &Migrator,
+    line_ending: MigrationLineEnding,
+) -> Migrator {
     Migrator {
-        migrations: Cow::Borrowed(base.migrations.as_ref()),
+        migrations: Cow::Owned(
+            base.migrations
+                .iter()
+                .map(|migration| migration_with_line_ending_checksum(migration, line_ending))
+                .collect(),
+        ),
         ignore_missing: true,
         locking: base.locking,
         no_tx: base.no_tx,
         table_name: base.table_name.clone(),
         create_schemas: base.create_schemas.clone(),
     }
+}
+
+fn runtime_migrator(base: &Migrator) -> Migrator {
+    runtime_migrator_with_line_ending(base, MigrationLineEnding::for_target())
 }
 
 pub(crate) fn runtime_state_migrator() -> Migrator {

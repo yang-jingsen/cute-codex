@@ -2,17 +2,196 @@ use codex_utils_absolute_path::test_support::PathExt;
 use pretty_assertions::assert_eq;
 use sqlx::Connection;
 use sqlx::Row;
+use sqlx::SqlStr;
+use sqlx::migrate::MigrateError;
 use sqlx::migrate::Migration;
+use sqlx::migrate::MigrationType;
 use sqlx::migrate::Migrator;
 use std::borrow::Cow;
 
+use super::GOALS_MIGRATOR;
+use super::LOGS_MIGRATOR;
+use super::MEMORIES_MIGRATOR;
+use super::MigrationLineEnding;
+use super::QUEUE_MIGRATOR;
 use super::STATE_MIGRATOR;
 use super::THREAD_HISTORY_MIGRATOR;
+use super::checksum_with_line_ending;
 use super::repair_legacy_recency_migration_version;
+use super::runtime_goals_migrator;
+use super::runtime_logs_migrator;
+use super::runtime_memories_migrator;
+use super::runtime_migrator_with_line_ending;
+use super::runtime_queue_migrator;
+use super::runtime_state_migrator;
+use super::runtime_thread_history_migrator;
 use crate::PINNED_THREAD_SECTION_ID;
 use crate::PINNED_THREAD_SECTION_NAME;
 
 const CUSTOM_THREAD_SECTION_ID: &str = "01984de2-8f74-7c91-a3b2-5c5e937cf317";
+
+fn checksum_hex(checksum: &[u8]) -> String {
+    checksum.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn single_migration_migrator(sql: &'static str) -> Migrator {
+    Migrator::with_migrations(vec![Migration::new(
+        /*version*/ 1,
+        Cow::Borrowed("line ending compatibility"),
+        MigrationType::Simple,
+        SqlStr::from_static(sql),
+        /*no_tx*/ false,
+    )])
+}
+
+#[test]
+fn migration_line_ending_official_checksums_are_independent_of_staging() {
+    let migration = STATE_MIGRATOR
+        .migrations
+        .first()
+        .expect("state migration 1 should exist");
+    let lf_sql = migration.sql.as_str().replace("\r\n", "\n");
+    let crlf_sql = lf_sql.replace('\n', "\r\n");
+
+    let lf_from_lf = checksum_with_line_ending(&lf_sql, MigrationLineEnding::Lf);
+    let lf_from_crlf = checksum_with_line_ending(&crlf_sql, MigrationLineEnding::Lf);
+    let crlf_from_lf = checksum_with_line_ending(&lf_sql, MigrationLineEnding::CrLf);
+    let crlf_from_crlf = checksum_with_line_ending(&crlf_sql, MigrationLineEnding::CrLf);
+
+    assert_eq!(lf_from_lf, lf_from_crlf);
+    assert_eq!(crlf_from_lf, crlf_from_crlf);
+    assert_eq!(
+        checksum_hex(&lf_from_lf),
+        "627ef19164c9bb298a0cd99945981c9b7bda3d9e6cf12eb35145e3b1d3bf7cf8740f0dbaa0b475185fc2993397078049"
+    );
+    assert_eq!(
+        checksum_hex(&crlf_from_lf),
+        "54bbd6f47905a4e4c674034575963d82da7b534e66e9a37a81ec2afb6a4b56ce6de9b3ecf3032796a800f650239847d4"
+    );
+}
+
+#[test]
+fn migration_line_ending_normalization_covers_every_database_without_changing_sql() {
+    let base_migrators = [
+        &STATE_MIGRATOR,
+        &LOGS_MIGRATOR,
+        &GOALS_MIGRATOR,
+        &MEMORIES_MIGRATOR,
+        &QUEUE_MIGRATOR,
+        &THREAD_HISTORY_MIGRATOR,
+    ];
+    let runtime_migrators = [
+        runtime_state_migrator(),
+        runtime_logs_migrator(),
+        runtime_goals_migrator(),
+        runtime_memories_migrator(),
+        runtime_queue_migrator(),
+        runtime_thread_history_migrator(),
+    ];
+
+    for (base, runtime) in base_migrators.into_iter().zip(runtime_migrators) {
+        let expected_migrations = base
+            .migrations
+            .iter()
+            .map(|migration| {
+                (
+                    migration.version,
+                    migration.description.to_string(),
+                    migration.migration_type,
+                    migration.sql.as_str().to_string(),
+                    checksum_with_line_ending(
+                        migration.sql.as_str(),
+                        MigrationLineEnding::for_target(),
+                    ),
+                    migration.no_tx,
+                )
+            })
+            .collect::<Vec<_>>();
+        let runtime_migrations = runtime
+            .migrations
+            .iter()
+            .map(|migration| {
+                (
+                    migration.version,
+                    migration.description.to_string(),
+                    migration.migration_type,
+                    migration.sql.as_str().to_string(),
+                    migration.checksum.to_vec(),
+                    migration.no_tx,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(runtime_migrations, expected_migrations);
+        assert_eq!(
+            (
+                runtime.ignore_missing,
+                runtime.locking,
+                runtime.no_tx,
+                runtime.table_name,
+                runtime.create_schemas,
+            ),
+            (
+                true,
+                base.locking,
+                base.no_tx,
+                base.table_name.clone(),
+                base.create_schemas.clone(),
+            )
+        );
+    }
+}
+
+#[tokio::test]
+async fn migration_line_ending_staging_is_accepted_but_content_drift_is_rejected() {
+    const LF_SQL: &str = "CREATE TABLE example (id INTEGER PRIMARY KEY);\n";
+    const CRLF_SQL: &str = "CREATE TABLE example (id INTEGER PRIMARY KEY);\r\n";
+    const CHANGED_SQL: &str = "CREATE TABLE example (id INTEGER PRIMARY KEY, value TEXT);\n";
+
+    for line_ending in [MigrationLineEnding::Lf, MigrationLineEnding::CrLf] {
+        let sqlite_home = crate::runtime::test_support::unique_temp_dir();
+        tokio::fs::create_dir_all(&sqlite_home)
+            .await
+            .expect("sqlite home should be created");
+        let _cleanup = scopeguard::guard(sqlite_home.clone(), |sqlite_home| {
+            let _ = std::fs::remove_dir_all(sqlite_home);
+        });
+        let sqlite = crate::SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
+        let pool = sqlite
+            .open_read_write_pool(&sqlite.state_db_path())
+            .await
+            .expect("database should open");
+
+        runtime_migrator_with_line_ending(&single_migration_migrator(LF_SQL), line_ending)
+            .run(&pool)
+            .await
+            .expect("migration should apply with the target checksum");
+        runtime_migrator_with_line_ending(&single_migration_migrator(CRLF_SQL), line_ending)
+            .run(&pool)
+            .await
+            .expect("line-ending-only source staging should retain compatibility");
+
+        let recorded_checksum = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT checksum FROM _sqlx_migrations WHERE version = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("recorded checksum should load");
+        assert_eq!(
+            recorded_checksum,
+            checksum_with_line_ending(LF_SQL, line_ending)
+        );
+
+        let mismatch =
+            runtime_migrator_with_line_ending(&single_migration_migrator(CHANGED_SQL), line_ending)
+                .run(&pool)
+                .await
+                .expect_err("non-line-ending content drift should remain invalid");
+        assert!(matches!(mismatch, MigrateError::VersionMismatch(1)));
+
+        pool.close().await;
+    }
+}
 
 fn migrator_through(version: i64) -> Migrator {
     Migrator {
