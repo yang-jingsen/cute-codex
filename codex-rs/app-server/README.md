@@ -2931,3 +2931,115 @@ For server-initiated request payloads, annotate the field the same way so schema
    ```bash
    just test -p codex-app-server-protocol
    ```
+
+### Private ExternalInput v1
+
+The experimental `thread/externalInput/submit`, `thread/externalInput/status`, and
+`thread/externalInput/retry` methods support common external data on one already
+existing, loaded, persistent thread. They contain no service-specific handlers or
+model tools. This is a private integration surface, not a production ingress or
+managed thread-creation API.
+
+Launch the app-server executable directly with `--listen unix:///absolute/socket`
+and `--external-input-binding-file /absolute/runtime/binding.json`. The runtime
+directory must be owned by the launching UID and inaccessible to other users; the
+binding must be a nonsymlink regular file owned by that UID with mode `0600`:
+
+```json
+{"version":1,"ownerId":"opaque-owner","threadId":"existing-native-id","runtimeGeneration":7}
+```
+
+The file is loaded once. Only Unix transport supports this binding. A configured
+binding adds `externalInputVersion: 1` to `initialize`; without it the capability
+is disabled. The existing thread must be explicitly resumed through the normal
+API before ingress. Every request must match all four binding fields exactly.
+This trusts a controlled same-UID client and filesystem; it does not isolate
+hostile clients sharing that UID. A returned `thread/start` ID alone is not a
+persistence acknowledgement: a new neutral thread needs a successful
+`thread/read(includeTurns=true)` barrier before this workflow.
+
+Submit adds `message` and `semanticSha256` to the binding fields:
+
+```json
+{"message":{"id":"opaque-message-id","source":{"kind":"service","id":"opaque-source"},"type":"opaque-type","delivery":"after_turn","text":"external data"},"semanticSha256":"64-lowercase-hex-digits"}
+```
+
+Sources are strictly `agent` or `service`; delivery is strictly `after_turn` or
+`passive`. Unknown fields, privileged roles, raw response items, and settings or
+permission overrides are rejected. Identity, source ID, and type strings are
+nonempty and at most 256 UTF-8 bytes; text is nonempty and at most 64 KiB. Actual
+model admission additionally bounds the entire serialized canonical item,
+including JSON escaping, to 10,000 bytes. For the explicitly recognized
+byte-fallback model tokenizers this conservatively bounds the item to at most
+10,000 tokens. Unknown model sizing is rejected, and text is never truncated to
+make it fit. Individual items may exceed 1,000 tokens and require the additional
+P0 context review before integration acceptance.
+
+The semantic digest is SHA-256 over `codex:external-input:v1\0` followed by the
+UTF-8 bytes of owner ID, thread ID, message ID, source kind, source ID, type,
+delivery, and text, in that order. Each field is preceded by its byte length as
+an unsigned 64-bit big-endian integer. The final domain byte is NUL; generation
+is excluded. There is no normalization. This digest checks identity, not authority.
+
+`status` takes `messages: [{messageId, semanticSha256}]` with 1–100 entries and
+returns the same order. Submit returns the same response with one `statuses`
+entry. Responses echo the current binding. Delivery states are `unknown`,
+`pending`, `context_persisted`, `conflict`, and `retryable_error`; only
+`context_persisted` has a receipt. Writer, unreadable-history, and recovery errors
+are RPC errors, never `unknown` or successful A4. The optional
+`thread/externalInput/statusChanged` notification contains only thread/message
+IDs and is a hint to query authoritative status; queries do not wake or load threads.
+
+Before A4, admission is volatile and bounded to 100 pending or unfinished active
+obligations. The external sender owns durable resend. Exact ID/digest replay does
+not insert or wake again; changed content conflicts. At a safe regular-turn
+boundary, native history receives an adjacent versioned mechanical commit and a
+standard standalone `function_call_output`, with `id=message.id`, no `call_id`,
+`name=external_event`, and `namespace=external`. Its output is compact JSON with
+only `source`, `type`, and `text`. Mechanical receipt, binding, and processing
+records never become model text or ordinary display items. The typed non-message
+adapter in `core/context` uses a reviewed, task-scoped exception to the
+contextual-user-fragment trait so it cannot invent a Human or privileged role.
+
+A4 requires the complete pair, writer flush, pending metadata publication, and
+canonical in-memory context publication. It promises process-restart recovery,
+not fsync or power-loss durability. Partial or conflicting history fails closed.
+Receipts retain the original owner/thread/message/digest/item/containing-turn and
+monotonic ordinal across runtime generations. `receiptId` is `eir1_` plus SHA-256
+over `codex:external-input-receipt:v1\0`, the same length-framed owner ID, thread
+ID, message ID, semantic hex digest, response item ID, and turn ID, followed by
+the ordinal as unsigned 64-bit big-endian bytes.
+
+`after_turn` cannot join the active or reserved turn at admission. It may enter a
+later genuine user turn or compete through the upstream idle reservation after
+user-queue arbitration; Plan mode and interruption hold automatic dispatch.
+`passive` may enter the current regular turn at its next safe boundary, but idle
+passive input creates no turn, request, receipt, or wake. Soon, interrupt delivery,
+and special durable-sleep wake behavior are unsupported.
+
+Before sampling, a durable claim associates an attempt UUID with canonical input
+verified in the request context. A successful response with observed output marks
+`output_observed`; this does not promise final text or completed tools. Empty
+responses and uncertain requests remain held. Claimed requests use one HTTP
+attempt without transport, authentication, WebSocket fallback, or stream retries.
+A successful interrupt response requires a flushed interruption gate. Restart
+preserves that gate; a genuine new user turn releases only unclaimed interruption
+pause, not `request_uncertain` or `no_output` obligations. Automatic queued-user dispatch carries a trusted internal start origin and cannot release this gate or delete a paused queue item after an external retry. Explicit `thread/queue/start` from the trusted controller is intentional continuation, like fresh `turn/start`; it may release only unclaimed interruption pause. Payload text and `turn_trigger` cannot choose this authority. A single external retry never resumes the paused user queue or releases another message.
+
+Explicit retry adds `messageId`, `semanticSha256`, `expectedAttemptId` (nullable),
+and `retryId` to the binding. It requires existing A4 and pending/held after-turn
+work. It records one permit before idle arbitration and returns
+`disposition: "released"`; it creates no new item or receipt and does not interrupt.
+Exact action replay returns the original result; changed parameters conflict.
+Passive, claimed, completed, and compare-and-set mismatches are rejected. Held
+history can still be read by later models; these controls govern processing
+obligations, not global exactly-once behavior. Unfinished canonical input removed
+by compaction is restored from verified native history before a released claim,
+or sampling is held. Fork/rollback rejects unfinished or uncertain obligations.
+
+The private test scripts in `scripts/external_input_*probe*.py` use a real native
+app-server, isolated loopback fake Responses, and read-only history/SQLite oracles.
+Debug builds alone include `CODEX_PRIVATE_EXTERNAL_INPUT_PROBE_SOCKET` barriers
+before pair append and after flush for deterministic owned-process crash and OS
+file-size fault tests. This is launcher-only test synchronization, not a control
+RPC, model tool, or release-build facility.
