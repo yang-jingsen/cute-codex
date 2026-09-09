@@ -2099,6 +2099,7 @@ dependencies = [
  "opentelemetry_sdk",
  "pretty_assertions",
  "rmcp",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "serial_test",

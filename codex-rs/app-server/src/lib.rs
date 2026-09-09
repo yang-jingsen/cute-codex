@@ -18,6 +18,7 @@ use std::collections::HashSet;
 use std::io::ErrorKind;
 use std::io::Result as IoResult;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
@@ -111,6 +112,7 @@ mod error_code;
 mod extensions;
 mod external_agent_migration;
 mod external_auth;
+mod external_input_binding;
 
 mod filters;
 mod fs_watch;
@@ -440,6 +442,7 @@ pub enum PluginStartupTasks {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppServerRuntimeOptions {
+    pub external_input_binding_file: Option<PathBuf>,
     pub code_mode_host_transport: CodeModeHostTransport,
     pub plugin_startup_tasks: PluginStartupTasks,
     pub remote_control_startup_mode: RemoteControlStartupMode,
@@ -449,6 +452,7 @@ pub struct AppServerRuntimeOptions {
 impl Default for AppServerRuntimeOptions {
     fn default() -> Self {
         Self {
+            external_input_binding_file: None,
             code_mode_host_transport: CodeModeHostTransport::Local,
             plugin_startup_tasks: PluginStartupTasks::Start,
             remote_control_startup_mode: RemoteControlStartupMode::ResolvePersisted,
@@ -469,6 +473,17 @@ pub async fn run_main_with_transport_options(
     auth: AppServerWebsocketAuthSettings,
     runtime_options: AppServerRuntimeOptions,
 ) -> IoResult<()> {
+    let external_input_binding =
+        if let Some(path) = runtime_options.external_input_binding_file.as_ref() {
+            if !matches!(transport, AppServerTransport::UnixSocket { .. }) {
+                return Err(std::io::Error::other(
+                    "ExternalInput requires private Unix transport",
+                ));
+            }
+            Some(external_input_binding::ExternalInputBinding::load(path)?)
+        } else {
+            None
+        };
     let loader_overrides = loader_overrides_with_test_user_config_file(
         loader_overrides,
         test_user_config_file_from_env(),
@@ -906,6 +921,7 @@ pub async fn run_main_with_transport_options(
         let initialize_notification_sender = outgoing_message_sender.clone();
         let outbound_control_tx = outbound_control_tx;
         let processor = Arc::new(MessageProcessor::new(MessageProcessorArgs {
+            external_input_binding,
             outgoing: outgoing_message_sender,
             analytics_events_client,
             arg0_paths,

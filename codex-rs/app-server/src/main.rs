@@ -20,6 +20,9 @@ const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_C
 #[derive(Debug, Parser)]
 #[command(version)]
 struct AppServerArgs {
+    /// Read a private, owner-only ExternalInput binding once at launch (Unix only).
+    #[arg(long, value_name = "ABS_PATH")]
+    external_input_binding_file: Option<PathBuf>,
     #[command(flatten)]
     config_overrides: CliConfigOverrides,
 
@@ -66,6 +69,7 @@ fn main() -> anyhow::Result<()> {
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
         let AppServerArgs {
+            external_input_binding_file,
             config_overrides,
             code_mode_host,
             listen,
@@ -86,6 +90,7 @@ fn main() -> anyhow::Result<()> {
         let transport = listen;
         let auth = auth.try_into_settings()?;
         let mut runtime_options = AppServerRuntimeOptions {
+            external_input_binding_file,
             code_mode_host_transport: code_mode_host.into(),
             ..Default::default()
         };

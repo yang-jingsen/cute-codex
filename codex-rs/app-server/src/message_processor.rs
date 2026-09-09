@@ -244,6 +244,7 @@ impl ConnectionSessionState {
 }
 
 pub(crate) struct MessageProcessorArgs {
+    pub(crate) external_input_binding: Option<crate::external_input_binding::ExternalInputBinding>,
     pub(crate) outgoing: Arc<OutgoingMessageSender>,
     pub(crate) analytics_events_client: AnalyticsEventsClient,
     pub(crate) arg0_paths: Arg0DispatchPaths,
@@ -269,6 +270,7 @@ impl MessageProcessor {
     /// `Sender` so handlers can enqueue messages to be written to stdout.
     pub(crate) fn new(args: MessageProcessorArgs) -> Self {
         let MessageProcessorArgs {
+            external_input_binding,
             outgoing,
             analytics_events_client,
             arg0_paths,
@@ -360,6 +362,11 @@ impl MessageProcessor {
                     thread_state_manager.clone(),
                 )),
             );
+            let manager = match external_input_binding.as_ref() {
+                Some(binding) => manager
+                    .with_external_input_owner(binding.owner_id.clone(), binding.thread_id.clone()),
+                None => manager,
+            };
             match code_mode_session_provider {
                 Some(provider) => manager.with_code_mode_session_provider(provider),
                 None => manager,
