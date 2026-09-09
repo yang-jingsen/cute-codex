@@ -279,6 +279,21 @@ pub async fn thread_rollback(sess: &Arc<Session>, sub_id: String, num_turns: u32
         return;
     }
 
+    let _external_input_guard = match sess.external_input_migration_guard().await {
+        Ok(guard) => guard,
+        Err(err) => {
+            sess.send_event_raw(Event {
+                id: sub_id,
+                msg: EventMsg::Error(ErrorEvent {
+                    misalignment: None,
+                    message: err.to_string(),
+                    codex_error_info: Some(CodexErrorInfo::ThreadRollbackFailed),
+                }),
+            })
+            .await;
+            return;
+        }
+    };
     let turn_context = sess
         .new_turn_with_default_settings(sub_id, Default::default())
         .await;
@@ -326,6 +341,20 @@ pub async fn thread_rollback(sess: &Arc<Session>, sub_id: String, num_turns: u32
         }
     };
 
+    if let Err(err) =
+        crate::external_input::recovery::ensure_migration_allowed(&stored_history.items)
+    {
+        sess.send_event_raw(Event {
+            id: turn_context.sub_id.clone(),
+            msg: EventMsg::Error(ErrorEvent {
+                misalignment: None,
+                message: err.to_string(),
+                codex_error_info: Some(CodexErrorInfo::ThreadRollbackFailed),
+            }),
+        })
+        .await;
+        return;
+    }
     let rollback_event = ThreadRolledBackEvent { num_turns };
     let rollback_msg = EventMsg::ThreadRolledBack(rollback_event.clone());
     let replay_items = stored_history

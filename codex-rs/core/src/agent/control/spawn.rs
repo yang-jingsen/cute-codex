@@ -824,6 +824,10 @@ impl AgentControl {
 
         let parent_thread_id = *parent_thread_id;
         let parent_thread = state.get_thread(parent_thread_id).await?;
+        let _external_input_guard = parent_thread
+            .session
+            .external_input_migration_guard()
+            .await?;
         let (subagent_developer_instructions, parent_developer_instructions) = match (
             multi_agent_version,
             config

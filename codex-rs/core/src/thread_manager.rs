@@ -341,6 +341,7 @@ pub(crate) struct ResumeThreadWithHistoryOptions {
 /// `Arc` reference that can be downgraded to by `AgentControl` while preventing every single
 /// function to require an `Arc<&Self>`.
 pub(crate) struct ThreadManagerState {
+    external_input_owner: std::sync::OnceLock<(String, String)>,
     threads: Arc<RwLock<HashMap<ThreadId, Arc<CodexThread>>>>,
     thread_created_tx: broadcast::Sender<ThreadId>,
     thread_id_generator: ThreadIdGenerator,
@@ -424,6 +425,19 @@ pub fn local_agent_graph_store_from_state_db(
 }
 
 impl ThreadManager {
+    /// Process launch binding only; never derived from model or RPC payloads.
+    #[expect(
+        clippy::expect_used,
+        reason = "builder is called once by the trusted launch path before sharing the manager"
+    )]
+    pub fn with_external_input_owner(self, owner: String, thread: String) -> Self {
+        self.state
+            .external_input_owner
+            .set((owner, thread))
+            .expect("external input owner is loaded once");
+        self
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: &Config,
@@ -470,6 +484,7 @@ impl ThreadManager {
             };
         Self {
             state: Arc::new(ThreadManagerState {
+                external_input_owner: std::sync::OnceLock::new(),
                 threads: Arc::new(RwLock::new(HashMap::new())),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
@@ -617,6 +632,7 @@ impl ThreadManager {
         let agent_graph_store = local_agent_graph_store_from_state_db(state_db.as_ref());
         Self {
             state: Arc::new(ThreadManagerState {
+                external_input_owner: std::sync::OnceLock::new(),
                 threads: Arc::new(RwLock::new(HashMap::new())),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
@@ -999,6 +1015,7 @@ impl ThreadManager {
         mut options: StartThreadOptions,
     ) -> CodexResult<NewThread> {
         let fork_source = self.get_thread(forked_from_thread_id).await?;
+        let _external_input_guard = fork_source.session.external_input_migration_guard().await?;
         // Persist queued rollout updates before reading the fork snapshot.
         fork_source.ensure_rollout_materialized().await;
         fork_source.flush_rollout().await?;
@@ -1013,6 +1030,8 @@ impl ThreadManager {
                 ))
             })?;
         let history = stored_thread_to_initial_history(stored_thread, fork_source.rollout_path())?;
+        crate::external_input::recovery::ensure_migration_allowed(history.get_rollout_items())
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
         let inherited_multi_agent_version = fork_source
             .multi_agent_version()
             .unwrap_or(MultiAgentVersion::V1);
@@ -1365,6 +1384,31 @@ impl ThreadManager {
             initial_history: history,
             persistence: fork_persistence,
         } = fork_history;
+        if let InitialHistory::Resumed(resumed) = &history
+            && let Some(path) = resumed.rollout_path.as_ref()
+        {
+            let (items, _, parse_errors) =
+                codex_rollout::RolloutRecorder::load_rollout_items(path).await?;
+            if parse_errors != 0 {
+                return Err(CodexErr::InvalidRequest(
+                    "unreadable fork source history".into(),
+                ));
+            }
+            crate::external_input::recovery::ensure_migration_allowed(&items)
+                .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
+        }
+        crate::external_input::recovery::ensure_migration_allowed(history.get_rollout_items())
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
+        let live_source = if let InitialHistory::Resumed(resumed) = &history {
+            self.get_thread(resumed.conversation_id).await.ok()
+        } else {
+            None
+        };
+        let _external_input_guard = if let Some(source) = live_source.as_ref() {
+            Some(source.session.external_input_migration_guard().await?)
+        } else {
+            None
+        };
         // `forked_from_id()` describes this history's existing lineage. When
         // forking a resumed thread, the child copies the resumed thread itself.
         let source_thread_id = match &history {
@@ -2023,6 +2067,17 @@ impl ThreadManagerState {
             windows_sandbox_proxy_settings_mode,
         })
         .await?;
+        if let Some((owner, thread)) = self.external_input_owner.get()
+            && *thread == session.thread_id.to_string()
+            && let Err(error) = session.bind_external_input(owner).await
+        {
+            // Closing the sole submission sender tears down this unpublished
+            // session. Wait for its writer before allowing a caller to retry.
+            let termination = io.session_loop_termination.clone();
+            drop(io);
+            termination.await;
+            return Err(CodexErr::InvalidRequest(error.to_string()));
+        }
         // Enable Full Access form input only after session startup so a required MCP server cannot
         // block startup while waiting for form input.
         if session
@@ -2043,6 +2098,7 @@ impl ThreadManagerState {
         }
         if is_resumed_thread {
             new_thread.thread.emit_thread_resume_lifecycle().await;
+            new_thread.thread.session.dispatch_external_input().await;
         }
         Ok(new_thread)
     }
