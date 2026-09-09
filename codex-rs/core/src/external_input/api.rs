@@ -18,10 +18,9 @@ impl CodexThread {
     }
 
     pub async fn submit_external_input(&self, envelope: Envelope) -> Result<Status> {
-        let after_turn =
-            envelope.message.delivery == codex_protocol::external_input::Delivery::AfterTurn;
+        let active = envelope.message.delivery.is_active();
         let (status, inserted) = self.session.admit_external_input(envelope).await?;
-        if inserted && after_turn {
+        if inserted && active {
             self.session
                 .emit_thread_idle_lifecycle_if_idle(ThreadIdleCause::Completed)
                 .await;

@@ -312,6 +312,7 @@ pub(crate) async fn run_turn(
     // 2. After auto-compact, when model/tool continuation needs to resume before any steer.
 
     let mut next_step_context = Some(first_step_context);
+    let mut external_input_initial_boundary = true;
     loop {
         // Note that pending_input would be something like a message the user
         // submitted through the UI while the model was running. Though the UI
@@ -336,7 +337,15 @@ pub(crate) async fn run_turn(
             break;
         }
 
-        sess.consume_external_input(&turn_context)
+        let external_boundary = if can_drain_pending_input {
+            crate::external_input::InputBoundary::Drain
+        } else if external_input_initial_boundary {
+            crate::external_input::InputBoundary::Initial
+        } else {
+            crate::external_input::InputBoundary::Deferred
+        };
+        external_input_initial_boundary = false;
+        sess.consume_external_input(&turn_context, external_boundary)
             .await
             .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
         let window_id = sess.current_window_id().await;
@@ -439,7 +448,9 @@ pub(crate) async fn run_turn(
                 }
                 .instrument(trace_span!("run_turn.collect_post_sampling_state"))
                 .await;
-                let needs_follow_up = model_needs_follow_up || has_pending_input;
+                let has_pending_soon = sess.has_external_input_soon_for_turn(&turn_context).await;
+                let needs_follow_up =
+                    model_needs_follow_up || has_pending_input || has_pending_soon;
                 let token_limit_reached = token_status.token_limit_reached;
 
                 trace!(

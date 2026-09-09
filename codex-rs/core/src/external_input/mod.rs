@@ -1,6 +1,9 @@
 //! Private, common ExternalInput runtime state. Admission is volatile; only
 //! committed context and processing facts belong to native history.
 mod api;
+mod eligibility;
+pub(crate) use eligibility::InputBoundary;
+pub(crate) use eligibility::SoonBoundary;
 #[cfg(all(debug_assertions, unix))]
 pub(crate) mod probe;
 pub(crate) mod recovery;
@@ -12,6 +15,8 @@ use std::collections::BTreeMap;
 
 pub(crate) struct Pending {
     pub envelope: Envelope,
+    /// Soon arriving after task installation must wait for an input drain.
+    pub running_turn: Option<std::sync::Arc<tokio::sync::Mutex<crate::state::TurnState>>>,
     /// Identity of the active/reserved TurnState at after_turn admission.
     pub excluded_turn: Option<std::sync::Arc<tokio::sync::Mutex<crate::state::TurnState>>>,
 }
@@ -41,10 +46,10 @@ impl Runtime {
         !self.poisoned
             && self.policy_blocked.is_empty()
             && ((!self.paused
-                && self.pending.iter().any(|pending| {
-                    pending.envelope.message.delivery
-                        == codex_protocol::external_input::Delivery::AfterTurn
-                }))
+                && self
+                    .pending
+                    .iter()
+                    .any(|pending| pending.envelope.message.delivery.is_active()))
                 || self.recovery.messages.iter().any(|(id, found)| {
                     matches!(
                         found.processing,

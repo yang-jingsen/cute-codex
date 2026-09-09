@@ -1,6 +1,7 @@
 use super::session::Session;
 use super::turn_context::TurnContext;
 use crate::context::ExternalInputContext;
+use crate::external_input::InputBoundary;
 use crate::external_input::Pending;
 use crate::external_input::Runtime;
 use crate::external_input::recovery::restore;
@@ -229,8 +230,13 @@ impl Session {
         // runtime lock keeps concurrent admissions in this same order.
         let active = self.active_turn.lock().await;
         let excluded_turn = active.as_ref().map(|turn| Arc::clone(&turn.turn_state));
+        let running_turn = active
+            .as_ref()
+            .filter(|turn| turn.task.is_some())
+            .map(|turn| Arc::clone(&turn.turn_state));
         runtime.pending.push(Pending {
             envelope,
+            running_turn,
             excluded_turn,
         });
         drop(active);
@@ -243,7 +249,11 @@ impl Session {
         clippy::await_holding_invalid_type,
         reason = "pair flush and context publication must serialize against admission, status and interruption"
     )]
-    pub(crate) async fn consume_external_input(&self, turn: &TurnContext) -> Result<()> {
+    pub(crate) async fn consume_external_input(
+        &self,
+        turn: &TurnContext,
+        boundary: InputBoundary,
+    ) -> Result<()> {
         let current_turn = self
             .active_turn
             .lock()
@@ -262,6 +272,7 @@ impl Session {
             runtime.policy_blocked.is_empty(),
             "receiver canonical byte policy blocks restored history; adjust trusted launch policy and restart"
         );
+        let soon_boundary = self.external_input_soon_boundary(turn, boundary).await;
         let live = self
             .services
             .live_thread
@@ -300,6 +311,14 @@ impl Session {
                         .as_ref()
                         .zip(current_turn.as_ref())
                         .is_some_and(|(excluded, current)| Arc::ptr_eq(excluded, current)))
+            {
+                index += 1;
+                continue;
+            }
+            if pending.envelope.message.delivery == Delivery::Soon
+                && !soon_boundary
+                    .as_ref()
+                    .is_some_and(|boundary| runtime.can_consume_soon(pending, boundary))
             {
                 index += 1;
                 continue;
@@ -344,7 +363,7 @@ impl Session {
                 TruncationPolicy::Bytes(serde_json::to_vec(&item)?.len()),
             );
             runtime.recovery.next_ordinal = next_ordinal;
-            let processing = if commit.envelope.message.delivery == Delivery::AfterTurn {
+            let processing = if commit.envelope.message.delivery.is_active() {
                 Processing::Pending(None)
             } else {
                 Processing::None
@@ -407,7 +426,7 @@ fn snapshot(runtime: &Runtime, id: &str, digest: &str) -> Status {
         } else {
             DeliveryState::Conflict
         };
-        if found.envelope.message.delivery == Delivery::AfterTurn {
+        if found.envelope.message.delivery.is_active() {
             status.processing = if runtime.paused {
                 (&Processing::Held(None, HoldReason::Interrupted)).into()
             } else {

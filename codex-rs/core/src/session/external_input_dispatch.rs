@@ -1,7 +1,6 @@
 use super::session::Session;
 use anyhow::Result;
 use anyhow::ensure;
-use codex_protocol::external_input::Delivery;
 use codex_protocol::external_input::Processing;
 use codex_protocol::external_input_record::Fact;
 use codex_protocol::external_input_record::MessageKey;
@@ -20,6 +19,51 @@ impl Session {
             return false;
         };
         runtime.has_dispatch_work()
+    }
+
+    /// Called while admission is serialized by the external-input runtime lock.
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "regular task identity and mailbox phase must be captured atomically"
+    )]
+    pub(crate) async fn external_input_soon_boundary(
+        &self,
+        turn: &super::turn_context::TurnContext,
+        input: crate::external_input::InputBoundary,
+    ) -> Option<crate::external_input::SoonBoundary> {
+        let active = self.active_turn.lock().await;
+        let active = active.as_ref()?;
+        let task = active.task.as_ref()?;
+        if task.kind != crate::state::TaskKind::Regular || task.turn_context.sub_id != turn.sub_id {
+            return None;
+        }
+        let accepts_mail = active
+            .turn_state
+            .lock()
+            .await
+            .accepts_mailbox_delivery_for_current_turn();
+        Some(crate::external_input::SoonBoundary {
+            current: Arc::clone(&active.turn_state),
+            input,
+            accepts_mail,
+        })
+    }
+
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "continuation eligibility must serialize against admission and the interruption gate"
+    )]
+    pub(crate) async fn has_external_input_soon_for_turn(
+        &self,
+        turn: &super::turn_context::TurnContext,
+    ) -> bool {
+        let state = self.external_input.lock().await;
+        let Some(runtime) = state.as_ref() else {
+            return false;
+        };
+        self.external_input_soon_boundary(turn, crate::external_input::InputBoundary::Drain)
+            .await
+            .is_some_and(|boundary| runtime.has_soon_continuation(&boundary))
     }
 
     /// Runs after upstream mailbox/user-queue lifecycle arbitration. The common
@@ -121,7 +165,7 @@ impl Session {
             "external input conflict"
         );
         ensure!(
-            found.commit.envelope.message.delivery == Delivery::AfterTurn,
+            found.commit.envelope.message.delivery.is_active(),
             "passive input cannot be retried"
         );
         let attempt = match found.processing {
