@@ -5,6 +5,7 @@ use crate::external_input::InputBoundary;
 use crate::external_input::Pending;
 use crate::external_input::Runtime;
 use crate::external_input::recovery::restore;
+use crate::stream_events_utils::mark_thread_memory_mode_polluted_if_external_context;
 use anyhow::Result;
 use anyhow::ensure;
 use codex_history::RolloutItem;
@@ -86,7 +87,11 @@ impl Session {
         // selects a policy that permits all recorded canonical external items.
         let mut policy_blocked = std::collections::BTreeSet::new();
         let mut history = self.state.lock().await;
-        for (id, found) in &mut restored.recovery.messages {
+        // Retained items stay in place; append only missing canonical items in
+        // receipt order. This does not recreate their pre-compaction positions.
+        let mut ordered = restored.recovery.messages.iter_mut().collect::<Vec<_>>();
+        ordered.sort_unstable_by_key(|(_, found)| found.commit.receipt.ordinal);
+        for (id, found) in ordered {
             let item = match ExternalInputContext::new(&found.commit.envelope, policy) {
                 Ok(context) => context.into_response_item(),
                 Err(codex_protocol::external_input::Error::Invalid(
@@ -280,7 +285,10 @@ impl Session {
             .ok_or_else(|| anyhow::anyhow!("external input writer unavailable"))?;
         // A compaction summary is not the canonical input. Restore only released
         // pending obligations; held uncertain/no-output items require explicit retry.
-        for (id, found) in &runtime.recovery.messages {
+        // Use the same missing-item placement rule as bind/resume.
+        let mut ordered = runtime.recovery.messages.iter().collect::<Vec<_>>();
+        ordered.sort_unstable_by_key(|(_, found)| found.commit.receipt.ordinal);
+        for (id, found) in ordered {
             if !matches!(found.processing, Processing::Pending(_))
                 || (runtime.paused && !runtime.permits.contains(id))
                 || runtime
@@ -302,15 +310,16 @@ impl Session {
             }
         }
         let mut index = 0;
-        while index < runtime.pending.len() {
+        // A retry permit belongs to an existing A4 item above. It never
+        // authorizes new admission-to-context, including passive messages.
+        while !runtime.paused && index < runtime.pending.len() {
             let pending = &runtime.pending[index];
             if pending.envelope.message.delivery == Delivery::AfterTurn
-                && (runtime.paused
-                    || pending
-                        .excluded_turn
-                        .as_ref()
-                        .zip(current_turn.as_ref())
-                        .is_some_and(|(excluded, current)| Arc::ptr_eq(excluded, current)))
+                && pending
+                    .excluded_turn
+                    .as_ref()
+                    .zip(current_turn.as_ref())
+                    .is_some_and(|(excluded, current)| Arc::ptr_eq(excluded, current))
             {
                 index += 1;
                 continue;
@@ -358,6 +367,9 @@ impl Session {
             #[cfg(all(debug_assertions, unix))]
             crate::external_input::probe::barrier(live, "after_flush", &commit.envelope.message.id)
                 .await?;
+            // Preserve upstream external-context memory policy without replacing
+            // the authoritative pair barrier with a best-effort history write.
+            mark_thread_memory_mode_polluted_if_external_context(self, turn, &item).await;
             self.state.lock().await.record_items(
                 std::iter::once(&item),
                 TruncationPolicy::Bytes(serde_json::to_vec(&item)?.len()),

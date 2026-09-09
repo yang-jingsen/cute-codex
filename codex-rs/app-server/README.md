@@ -3091,3 +3091,23 @@ Debug builds alone include `CODEX_PRIVATE_EXTERNAL_INPUT_PROBE_SOCKET` barriers
 before pair append and after flush for deterministic owned-process crash and OS
 file-size fault tests. This is launcher-only test synchronization, not a control
 RPC, model tool, or release-build facility.
+
+### ExternalInput restoration and memory policy
+
+When canonical external items are missing after compaction or resume, missing
+items are appended in receipt ordinal order. Items already retained in context
+stay at their existing positions; they are neither moved nor duplicated. Thus a
+retained later item may precede an appended earlier item. This is a deterministic
+missing-item placement rule, not global FIFO or reconstruction of the original
+pre-compaction positions. Receipts, semantic digests and original rollout records
+remain unchanged.
+
+While the interruption gate is paused, an explicit retry permits only its existing
+A4 item. Newly admitted passive items also wait for a genuine Human turn or
+authorized controller continuation before entering context and receiving A4.
+Historical canonical data already in context can still appear in requests.
+
+First consumption of any ExternalInput, including passive, applies the native
+`memories.disable_on_external_context` policy used for standalone `toolOutput`.
+The native memory-mode helper retains its existing best-effort database semantics;
+this does not introduce a transaction spanning the rollout and memory database.
