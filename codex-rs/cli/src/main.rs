@@ -2560,6 +2560,11 @@ async fn run_interactive_tui(
     remote_auth_token_env: Option<String>,
     arg0_paths: Arg0DispatchPaths,
 ) -> std::io::Result<AppExitInfo> {
+    if remote.is_some() && interactive.sandbox_mode.is_some() {
+        return Ok(AppExitInfo::fatal(
+            "--sandbox is not supported for remote terminal sessions: it cannot safely override an already-loaded thread's permission profile. Configure and verify the receiver's permission profile before attaching.",
+        ));
+    }
     if let Some(prompt) = interactive.prompt.take() {
         // Normalize CRLF/CR to LF so CLI-provided text can't leak `\r` into TUI state.
         interactive.prompt = Some(prompt.replace("\r\n", "\n").replace('\r', "\n"));
