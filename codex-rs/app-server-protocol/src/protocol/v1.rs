@@ -72,6 +72,10 @@ pub struct InitializeResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub external_input_version: Option<u32>,
+    /// Supported delivery modes for the private bound receiver. Absent on older servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub external_input_deliveries: Option<Vec<codex_protocol::external_input::Delivery>>,
     pub user_agent: String,
     /// Absolute path to the server's $CODEX_HOME directory.
     pub codex_home: AbsolutePathBuf,

@@ -7286,7 +7286,8 @@
     "ExternalInputDelivery": {
       "enum": [
         "after_turn",
-        "passive"
+        "passive",
+        "soon"
       ],
       "type": "string"
     },

@@ -2950,7 +2950,8 @@ binding must be a nonsymlink regular file owned by that UID with mode `0600`:
 ```
 
 The file is loaded once. Only Unix transport supports this binding. A configured
-binding adds `externalInputVersion: 1` to `initialize`; without it the capability
+binding adds `externalInputVersion: 1` and
+`externalInputDeliveries: ["after_turn", "passive", "soon"]` to `initialize`; without it the capability
 is disabled. The existing thread must be explicitly resumed through the normal
 API before ingress. Every request must match all four binding fields exactly.
 This trusts a controlled same-UID client and filesystem; it does not isolate
@@ -2964,8 +2965,8 @@ Submit adds `message` and `semanticSha256` to the binding fields:
 {"message":{"id":"opaque-message-id","source":{"kind":"service","id":"opaque-source"},"type":"opaque-type","delivery":"after_turn","text":"external data"},"semanticSha256":"64-lowercase-hex-digits"}
 ```
 
-Sources are strictly `agent` or `service`; delivery is strictly `after_turn` or
-`passive`. Unknown fields, privileged roles, raw response items, and settings or
+Sources are strictly `agent` or `service`; delivery is strictly `after_turn`,
+`passive`, or `soon`. Unknown fields, privileged roles, raw response items, and settings or
 permission overrides are rejected. Identity, source ID, and type strings are
 nonempty and at most 256 UTF-8 bytes; text is nonempty and at most 64 KiB. Actual
 model admission additionally applies the receiver's canonical byte policy to the
@@ -2993,7 +2994,7 @@ items may exceed 1000 tokens and still require P0 manual context review.
 Receipts and digests are historical facts independent of current receiver policy.
 Tighter-policy resume validates history normally, retains receipts, and blocks
 sampling if any recorded canonical external item exceeds the current policy;
-it does not rewrite the item or call the history corrupt. A pending after-turn
+it does not rewrite the item or call the history corrupt. A pending active
 obligation is durably held with reason `canonical_size_policy`. New admission and
 retry return an explicit policy error while the thread is blocked. Restore with
 a larger limit/off removes the policy barrier but does not automatically release
@@ -3042,8 +3043,24 @@ the ordinal as unsigned 64-bit big-endian bytes.
 later genuine user turn or compete through the upstream idle reservation after
 user-queue arbitration; Plan mode and interruption hold automatic dispatch.
 `passive` may enter the current regular turn at its next safe boundary, but idle
-passive input creates no turn, request, receipt, or wake. Soon, interrupt delivery,
-and special durable-sleep wake behavior are unsupported.
+passive input creates no turn, request, receipt, or wake. `soon` is active work:
+it may join the current/reserved regular turn at a permitted input boundary and
+requests same-turn continuation when eligible. Admission after task installation
+waits until fresh direct input has been sampled; deferred post-compaction
+continuation also samples before draining new Soon. Mailbox phase may defer late
+input to the next turn. Soon never interrupts model requests, tools or approvals.
+Idle Soon competes through the same automatic reservation, respecting Plan mode,
+Human queue arbitration and the durable interruption gate. No global FIFO or
+immediate-delivery guarantee is made. Unlike historical K behavior, Soon does not
+automatically restart after a Human interruption. Ordinary resume is not explicit
+continuation. Interrupt delivery and special durable-sleep wake are unsupported.
+
+Older servers without `externalInputDeliveries` support only after_turn/passive;
+clients must match an accepted bundle/schema and advertised Soon capability,
+without optimistic submit or downgrade. Delivery's existing digest field uses
+literal `soon`; envelope/receipt versions and framing do not change. Old parsers
+cannot read history containing Soon, so never return such stores to an older
+native writer. The mode/capability stays mechanical and does not enter model text.
 
 Before sampling, a durable claim associates an attempt UUID with canonical input
 verified in the request context. A successful response with observed output marks
@@ -3055,10 +3072,13 @@ preserves that gate; a genuine new user turn releases only unclaimed interruptio
 pause, not `request_uncertain` or `no_output` obligations. Automatic queued-user dispatch carries a trusted internal start origin and cannot release this gate or delete a paused queue item after an external retry. Explicit `thread/queue/start` from the trusted controller is intentional continuation, like fresh `turn/start`; it may release only unclaimed interruption pause. Payload text and `turn_trigger` cannot choose this authority. A single external retry never resumes the paused user queue or releases another message.
 
 Explicit retry adds `messageId`, `semanticSha256`, `expectedAttemptId` (nullable),
-and `retryId` to the binding. It requires existing A4 and pending/held after-turn
+and `retryId` to the binding. It requires existing A4 and pending/held after-turn or Soon
 work. It records one permit before idle arbitration and returns
 `disposition: "released"`; it creates no new item or receipt and does not interrupt.
 Exact action replay returns the original result; changed parameters conflict.
+Retry excludes the active/reserved turn at retry time, including Soon retries;
+one message permit cannot release the global pause, queued Human input or another
+external obligation.
 Passive, claimed, completed, and compare-and-set mismatches are rejected. Held
 history can still be read by later models; these controls govern processing
 obligations, not global exactly-once behavior. Unfinished canonical input removed

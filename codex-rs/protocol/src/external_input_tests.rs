@@ -106,7 +106,7 @@ fn strict_envelope_and_utf8_boundaries() {
         assert_eq!(changed.validate().is_ok(), length == 256);
     }
     let mut value = serde_json::to_value(&e).unwrap();
-    value["message"]["delivery"] = "soon".into();
+    value["message"]["delivery"] = "interrupt".into();
     assert!(serde_json::from_value::<Envelope>(value).is_err());
 }
 #[test]
@@ -374,5 +374,38 @@ fn processing_recovery_holds_uncertainty_and_requires_explicit_retry() {
         .messages["message"]
             .processing,
         Processing::None
+    );
+}
+
+#[test]
+fn soon_digest_recovery_and_model_exclusion() {
+    let mut e = envelope();
+    let previous_item = e.response_item().unwrap();
+    e.message.delivery = Delivery::Soon;
+    e.semantic_sha256 = e.digest();
+    assert_eq!(
+        e.digest(),
+        "23c280ead29895eaec1ee5a4c8479500d281a2733c3e3a8cb4389d74c81b02ba"
+    );
+    assert_eq!(e.response_item().unwrap(), previous_item);
+    let c = Commit {
+        receipt: Receipt::new(&e, "turn".into(), 1).unwrap(),
+        envelope: e,
+    };
+    let item = c.envelope.response_item().unwrap();
+    let recovered = recover(
+        "owner",
+        "thread",
+        &[
+            HistoryEntry::Commit(&c),
+            HistoryEntry::Item {
+                item: &item,
+                turn_id: "turn",
+            },
+        ],
+    );
+    assert_eq!(
+        recovered.unwrap().messages["message"].processing,
+        Processing::Pending(None)
     );
 }

@@ -2919,6 +2919,14 @@
       "title": "ExecCommandApprovalResponse",
       "type": "object"
     },
+    "ExternalInputDelivery": {
+      "enum": [
+        "after_turn",
+        "passive",
+        "soon"
+      ],
+      "type": "string"
+    },
     "FileChange": {
       "oneOf": [
         {
@@ -3298,6 +3306,16 @@
             }
           ],
           "description": "Absolute path to the server's $CODEX_HOME directory."
+        },
+        "externalInputDeliveries": {
+          "description": "Supported delivery modes for the private bound receiver. Absent on older servers.",
+          "items": {
+            "$ref": "#/definitions/v2/ExternalInputDelivery"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "externalInputVersion": {
           "description": "Private launch-bound common ExternalInput control API version, when enabled.",
@@ -11415,7 +11433,8 @@
       "ExternalInputDelivery": {
         "enum": [
           "after_turn",
-          "passive"
+          "passive",
+          "soon"
         ],
         "type": "string"
       },

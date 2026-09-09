@@ -48,6 +48,13 @@ pub struct Source {
 pub enum Delivery {
     AfterTurn,
     Passive,
+    Soon,
+}
+impl Delivery {
+    /// Active deliveries create one processing obligation after context persistence.
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::AfterTurn | Self::Soon)
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -107,6 +114,7 @@ impl Envelope {
                     &self.message.event_type,
                     match self.message.delivery {
                         Delivery::AfterTurn => "after_turn",
+                        Delivery::Soon => "soon",
                         Delivery::Passive => "passive",
                     },
                     &self.message.text,
@@ -387,7 +395,7 @@ pub fn recover(owner: &str, thread: &str, history: &[HistoryEntry<'_>]) -> Resul
                     Recovered {
                         commit: (*commit).clone(),
                         processing: match envelope.message.delivery {
-                            Delivery::AfterTurn => Processing::Pending(None),
+                            Delivery::AfterTurn | Delivery::Soon => Processing::Pending(None),
                             Delivery::Passive => Processing::None,
                         },
                     },

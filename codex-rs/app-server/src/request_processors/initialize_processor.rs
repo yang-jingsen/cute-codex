@@ -148,6 +148,10 @@ impl InitializeRequestProcessor {
         let user_agent = get_codex_user_agent();
         let response = InitializeResponse {
             external_input_version: self.external_input_version,
+            external_input_deliveries: self.external_input_version.map(|_| {
+                use codex_protocol::external_input::Delivery;
+                vec![Delivery::AfterTurn, Delivery::Passive, Delivery::Soon]
+            }),
             user_agent,
             codex_home,
             platform_family: std::env::consts::FAMILY.to_string(),
