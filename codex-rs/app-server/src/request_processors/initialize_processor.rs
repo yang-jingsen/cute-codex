@@ -17,6 +17,7 @@ const NON_ORIGINATING_CLIENT_NAMES: &[&str] = &["codex_app_server_daemon", "code
 
 #[derive(Clone)]
 pub(crate) struct InitializeRequestProcessor {
+    external_input_version: Option<u32>,
     outgoing: Arc<OutgoingMessageSender>,
     analytics_events_client: AnalyticsEventsClient,
     config: Arc<Config>,
@@ -25,6 +26,11 @@ pub(crate) struct InitializeRequestProcessor {
 }
 
 impl InitializeRequestProcessor {
+    pub(crate) fn with_external_input_version(mut self, version: Option<u32>) -> Self {
+        self.external_input_version = version;
+        self
+    }
+
     pub(crate) fn new(
         outgoing: Arc<OutgoingMessageSender>,
         analytics_events_client: AnalyticsEventsClient,
@@ -33,6 +39,7 @@ impl InitializeRequestProcessor {
         rpc_transport: AppServerRpcTransport,
     ) -> Self {
         Self {
+            external_input_version: None,
             outgoing,
             analytics_events_client,
             config,
@@ -140,6 +147,7 @@ impl InitializeRequestProcessor {
 
         let user_agent = get_codex_user_agent();
         let response = InitializeResponse {
+            external_input_version: self.external_input_version,
             user_agent,
             codex_home,
             platform_family: std::env::consts::FAMILY.to_string(),

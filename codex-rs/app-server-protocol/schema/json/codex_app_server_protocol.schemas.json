@@ -3299,6 +3299,15 @@
           ],
           "description": "Absolute path to the server's $CODEX_HOME directory."
         },
+        "externalInputVersion": {
+          "description": "Private launch-bound common ExternalInput control API version, when enabled.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "platformFamily": {
           "description": "Platform family for the running app-server target, for example `\"unix\"` or `\"windows\"`.",
           "type": "string"
@@ -4709,6 +4718,26 @@
             "params"
           ],
           "title": "Thread/goal/clearedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "thread/externalInput/statusChanged"
+              ],
+              "title": "Thread/externalInput/statusChangedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/ExternalInputStatusChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/externalInput/statusChangedNotification",
           "type": "object"
         },
         {
@@ -11382,6 +11411,242 @@
           "remoteMcpServersConfig"
         ],
         "type": "string"
+      },
+      "ExternalInputDelivery": {
+        "enum": [
+          "after_turn",
+          "passive"
+        ],
+        "type": "string"
+      },
+      "ExternalInputDeliveryState": {
+        "enum": [
+          "unknown",
+          "pending",
+          "context_persisted",
+          "conflict",
+          "retryable_error"
+        ],
+        "type": "string"
+      },
+      "ExternalInputHoldReason": {
+        "enum": [
+          "plan_mode",
+          "interrupted",
+          "request_uncertain",
+          "no_output",
+          "context_missing"
+        ],
+        "type": "string"
+      },
+      "ExternalInputMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery": {
+            "$ref": "#/definitions/v2/ExternalInputDelivery"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/v2/ExternalInputSource"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery",
+          "id",
+          "source",
+          "text",
+          "type"
+        ],
+        "type": "object"
+      },
+      "ExternalInputMessageKey": {
+        "additionalProperties": false,
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "semanticSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "semanticSha256"
+        ],
+        "type": "object"
+      },
+      "ExternalInputProcessingState": {
+        "enum": [
+          "none",
+          "pending",
+          "claimed",
+          "output_observed",
+          "held"
+        ],
+        "type": "string"
+      },
+      "ExternalInputProcessingStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ExternalInputHoldReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/definitions/v2/ExternalInputProcessingState"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "ExternalInputReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "ordinal": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "receiptId": {
+            "type": "string"
+          },
+          "responseItemId": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "semanticSha256": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "ordinal",
+          "ownerId",
+          "receiptId",
+          "responseItemId",
+          "schema",
+          "semanticSha256",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "ExternalInputRetryDisposition": {
+        "enum": [
+          "released"
+        ],
+        "type": "string"
+      },
+      "ExternalInputSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/v2/ExternalInputSourceKind"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ExternalInputSourceKind": {
+        "enum": [
+          "agent",
+          "service"
+        ],
+        "type": "string"
+      },
+      "ExternalInputStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "deliveryState": {
+            "$ref": "#/definitions/v2/ExternalInputDeliveryState"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "processing": {
+            "$ref": "#/definitions/v2/ExternalInputProcessingStatus"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ExternalInputReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "semanticSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryState",
+          "messageId",
+          "processing",
+          "semanticSha256"
+        ],
+        "type": "object"
+      },
+      "ExternalInputStatusChangedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "threadId"
+        ],
+        "title": "ExternalInputStatusChangedNotification",
+        "type": "object"
       },
       "FeedbackRequirements": {
         "properties": {

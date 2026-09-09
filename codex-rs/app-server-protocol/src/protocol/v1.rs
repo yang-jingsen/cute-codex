@@ -68,6 +68,10 @@ pub struct InitializeCapabilities {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct InitializeResponse {
+    /// Private launch-bound common ExternalInput control API version, when enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub external_input_version: Option<u32>,
     pub user_agent: String,
     /// Absolute path to the server's $CODEX_HOME directory.
     pub codex_home: AbsolutePathBuf,

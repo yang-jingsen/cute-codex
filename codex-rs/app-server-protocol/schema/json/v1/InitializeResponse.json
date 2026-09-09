@@ -15,6 +15,15 @@
       ],
       "description": "Absolute path to the server's $CODEX_HOME directory."
     },
+    "externalInputVersion": {
+      "description": "Private launch-bound common ExternalInput control API version, when enabled.",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "platformFamily": {
       "description": "Platform family for the running app-server target, for example `\"unix\"` or `\"windows\"`.",
       "type": "string"

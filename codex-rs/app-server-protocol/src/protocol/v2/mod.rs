@@ -13,6 +13,7 @@ mod current_time;
 mod diagnostics;
 mod environment;
 mod experimental_feature;
+mod external_input;
 mod feedback;
 mod fs;
 mod hook;
@@ -71,3 +72,5 @@ pub use windows_sandbox::*;
 
 #[cfg(test)]
 mod tests;
+
+pub use external_input::*;

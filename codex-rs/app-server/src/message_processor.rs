@@ -135,6 +135,7 @@ fn reject_removed_permission_profile(request: &JSONRPCRequest) -> Result<(), JSO
 }
 
 pub(crate) struct MessageProcessor {
+    external_input_processor: crate::request_processors::ExternalInputRequestProcessor,
     outgoing: Arc<OutgoingMessageSender>,
     models_refresh_worker: ModelsRefreshWorker,
     turn_cost_worker: Option<TurnCostWorker>,
@@ -372,6 +373,12 @@ impl MessageProcessor {
                 None => manager,
             }
         });
+        let external_input_processor =
+            crate::request_processors::ExternalInputRequestProcessor::new(
+                external_input_binding.clone(),
+                Arc::clone(&thread_manager),
+                Arc::clone(&outgoing),
+            );
         let models_manager = thread_manager.get_models_manager();
         let models_refresh_worker =
             crate::models_refresh_worker::spawn(&models_manager, config.http_client_factory());
@@ -453,6 +460,11 @@ impl MessageProcessor {
             Arc::clone(&config),
             config_warnings.clone(),
             rpc_transport,
+        )
+        .with_external_input_version(
+            external_input_binding
+                .as_ref()
+                .map(|binding| binding.version),
         );
         let marketplace_processor = MarketplaceRequestProcessor::new(
             Arc::clone(&config),
@@ -598,6 +610,7 @@ impl MessageProcessor {
             search_processor,
             thread_goal_processor,
             thread_queue_processor,
+            external_input_processor,
             thread_processor,
             turn_processor,
             windows_sandbox_processor,
@@ -1215,6 +1228,27 @@ impl MessageProcessor {
                     .thread_goal_clear(request_id.clone(), params)
                     .await
             }
+            ClientRequest::ThreadExternalInputSubmit { params, .. } => self
+                .external_input_processor
+                .submit(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ThreadExternalInputStatus { params, .. } => self
+                .external_input_processor
+                .status(params)
+                .await
+                .map(|response| {
+                    Some(
+                        codex_app_server_protocol::ClientResponsePayload::ThreadExternalInputStatus(
+                            response,
+                        ),
+                    )
+                }),
+            ClientRequest::ThreadExternalInputRetry { params, .. } => self
+                .external_input_processor
+                .retry(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::ThreadQueueAdd { params, .. } => self
                 .thread_queue_processor
                 .add(params)

@@ -583,6 +583,25 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadGoalClearResponse,
     },
+    #[experimental("thread/externalInput/submit")]
+    ThreadExternalInputSubmit => "thread/externalInput/submit" {
+        params: v2::ExternalInputSubmitParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ExternalInputResponse,
+    },
+    #[experimental("thread/externalInput/status")]
+    ThreadExternalInputStatus => "thread/externalInput/status" {
+        params: v2::ExternalInputStatusParams,
+        serialization: thread_id(params.thread_id),
+        manual_payload_conversion: manual,
+        response: v2::ExternalInputResponse,
+    },
+    #[experimental("thread/externalInput/retry")]
+    ThreadExternalInputRetry => "thread/externalInput/retry" {
+        params: v2::ExternalInputRetryParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ExternalInputRetryResponse,
+    },
     #[experimental("thread/queue/add")]
     ThreadQueueAdd => "thread/queue/add" {
         params: v2::ThreadQueueAddParams,
@@ -1853,6 +1872,7 @@ server_notification_definitions! {
     ThreadGoalUpdated => "thread/goal/updated" (v2::ThreadGoalUpdatedNotification),
     ThreadGoalCleared => "thread/goal/cleared" (v2::ThreadGoalClearedNotification),
     #[experimental("thread/queue/changed")]
+    ThreadExternalInputStatusChanged => "thread/externalInput/statusChanged" (v2::ExternalInputStatusChangedNotification),
     ThreadQueueChanged => "thread/queue/changed" (v2::ThreadQueueChangedNotification),
     #[experimental("project/changed")]
     ProjectChanged => "project/changed" (v2::ProjectChangedNotification),
