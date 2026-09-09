@@ -192,6 +192,7 @@ try:
     h.MODES.put(("empty", None))
     owner.call("thread/externalInput/retry", retry)
     request = h.REQUESTS.get(timeout=45)
+    (h.RUN / "request-off.json").write_text(json.dumps(request, indent=2))
     owner.event("turn/completed")
     canonical = [i for i in request["input"] if i.get("name") == "external_event"]
     assert (
@@ -209,6 +210,7 @@ try:
     fresh = h.envelope(thread, 11, ident="raised-fresh", text="y" * 12000)
     owner.call("thread/externalInput/submit", fresh)
     raised_request = h.REQUESTS.get(timeout=45)
+    (h.RUN / "request-raised.json").write_text(json.dumps(raised_request, indent=2))
     owner.event("turn/completed")
     raised_canonical = [
         i for i in raised_request["input"] if i.get("name") == "external_event"

@@ -349,13 +349,26 @@ impl Session {
         // design should keep this same replay shape, but drive it from a resumable reverse source
         // instead of an eagerly loaded `&[RolloutItem]`.
         let rollout_suffix = base_compaction.map_or(rollout_items, |checkpoint| checkpoint.suffix);
-        for item in rollout_suffix {
+        for (index, item) in rollout_suffix.iter().enumerate() {
             match item {
                 RolloutItem::ResponseItem(response_item) => {
-                    history.record_annotated_items(
-                        std::slice::from_ref(response_item),
-                        turn_context.model_info().truncation_policy.into(),
-                    );
+                    let mut policy = turn_context.model_info().truncation_policy.into();
+                    // A complete canonical pair was already bounded by its receiver.
+                    // Reapplying a model's ordinary tool-output limit here would
+                    // manufacture a truncated copy before strict bound-owner recovery.
+                    if let Some(RolloutItem::ExternalInput(record)) = index
+                        .checked_sub(1)
+                        .and_then(|previous| rollout_suffix.get(previous))
+                        && let codex_protocol::external_input_record::Fact::Commit { commit } =
+                            &record.fact
+                        && let Ok(canonical) = commit.envelope.response_item()
+                        && canonical == response_item.item
+                        && let Ok(serialized) = serde_json::to_vec(&canonical)
+                    {
+                        policy =
+                            codex_protocol::protocol::TruncationPolicy::Bytes(serialized.len());
+                    }
+                    history.record_annotated_items(std::slice::from_ref(response_item), policy);
                 }
                 RolloutItem::InterAgentCommunication(communication) => {
                     let response_item = communication.to_model_input_item();
