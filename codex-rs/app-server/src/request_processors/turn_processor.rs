@@ -1106,7 +1106,9 @@ impl TurnRequestProcessor {
                         None,
                         None,
                     ),
-                    NotSubmittedReason::PendingTriggerTurn | NotSubmittedReason::PlanMode => (
+                    NotSubmittedReason::PendingTriggerTurn
+                    | NotSubmittedReason::PlanMode
+                    | NotSubmittedReason::Interrupted => (
                         "no active turn to steer".to_string(),
                         None,
                         Some(AnalyticsJsonRpcError::TurnSteer(
@@ -1596,9 +1598,15 @@ impl TurnRequestProcessor {
 
         // Submit the interrupt. Turn interrupts respond upon TurnAborted; startup
         // interrupts respond here because startup cancellation has no turn event.
-        match self
-            .submit_core_op(request_id, thread.as_ref(), Op::Interrupt)
-            .await
+        match async {
+            thread
+                .pause_external_input()
+                .await
+                .map_err(|error| CodexErr::from(std::io::Error::other(error.to_string())))?;
+            self.submit_core_op(request_id, thread.as_ref(), Op::Interrupt)
+                .await
+        }
+        .await
         {
             Ok(_) if is_startup_interrupt => Ok(Some(TurnInterruptResponse {})),
             Ok(_) => Ok(None),

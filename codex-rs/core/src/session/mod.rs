@@ -222,6 +222,7 @@ pub(crate) mod context_window;
 mod environment;
 pub(crate) mod extension_metrics;
 mod external_input;
+mod external_input_dispatch;
 mod external_input_processing;
 mod handlers;
 mod inject;
