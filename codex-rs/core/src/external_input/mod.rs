@@ -1,5 +1,7 @@
 //! Private, common ExternalInput runtime state. Admission is volatile; only
 //! committed context and processing facts belong to native history.
+#[cfg(all(debug_assertions, unix))]
+pub(crate) mod probe;
 pub(crate) mod recovery;
 
 use codex_protocol::external_input::Envelope;

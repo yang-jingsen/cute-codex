@@ -221,6 +221,7 @@ mod code_mode_warning;
 pub(crate) mod context_window;
 mod environment;
 pub(crate) mod extension_metrics;
+mod external_input;
 mod handlers;
 mod inject;
 mod input_queue;
