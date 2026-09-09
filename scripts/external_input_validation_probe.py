@@ -178,8 +178,10 @@ try:
             "model": "unknown-private-tokenizer",
         },
     )
-    denied.append(owner.call("thread/externalInput/submit", overflow, error=True))
-    assert h.status(owner, overflow)["deliveryState"] == "unknown"
+    owner.call("thread/externalInput/submit", overflow)
+    h.REQUESTS.get(timeout=45)
+    owner.event("turn/completed")
+    assert h.status(owner, overflow)["processing"]["state"] == "output_observed"
     assert h.REQUESTS.empty()
     (h.RUN / "denials.json").write_text(json.dumps(denied, indent=2))
     (h.RUN / "large-request.json").write_text(json.dumps(request, indent=2))
@@ -191,7 +193,7 @@ try:
                 "pending_bound": 100,
                 "canonical_items_in_real_request": 100,
                 "long_item_text_bytes": 9000,
-                "unknown_sizing_rejected": True,
+                "model_name_independent": True,
                 "binary_sha256": hashlib.file_digest(
                     h.BINARY.open("rb"), "sha256"
                 ).hexdigest(),
