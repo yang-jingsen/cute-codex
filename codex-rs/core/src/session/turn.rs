@@ -159,6 +159,9 @@ pub(crate) async fn run_turn(
     prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
 ) -> CodexResult<Option<String>> {
+    sess.ensure_external_input_policy_allows_sampling()
+        .await
+        .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
     // Record results from hooks that finished after the previous turn before this turn's user prompt.
     drain_async_hook_results(&sess, &turn_context, /*before_user_prompt*/ true).await;
 

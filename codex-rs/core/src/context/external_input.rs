@@ -7,28 +7,23 @@ use codex_protocol::external_input::Envelope;
 use codex_protocol::external_input::Error;
 use codex_protocol::models::ResponseItem;
 
-const MAX_CANONICAL_ITEM_BYTES: usize = 10_000;
+use super::CanonicalBytePolicy;
 
 /// A transport-valid envelope is not sufficient for model admission. This type
 /// bounds the entire serialized item, including escaped JSON and identifiers.
-/// As with the existing exec-command rejection bound, at most one token per byte
-/// is conservative for byte-fallback tokenizers. Callers must establish that
-/// tokenizer bound for the selected model; unknown sizing is rejected.
-/// P0 review: an individual accepted item can exceed 1,000 tokens.
+/// The Human-approved receiver byte policy is independent of model/provider.
+/// It makes no local or remote token-count guarantee. P0 context review applies.
 pub(crate) struct ExternalInputContext {
     item: ResponseItem,
 }
 
 impl ExternalInputContext {
-    pub(crate) fn new(envelope: &Envelope, byte_fallback_bound: bool) -> Result<Self, Error> {
-        if !byte_fallback_bound {
-            return Err(Error::Invalid("unknown model item sizing"));
-        }
+    pub(crate) fn new(envelope: &Envelope, policy: CanonicalBytePolicy) -> Result<Self, Error> {
         let item = envelope.response_item()?;
         let serialized =
             serde_json::to_vec(&item).map_err(|_| Error::Invalid("model item serialization"))?;
-        if serialized.len() > MAX_CANONICAL_ITEM_BYTES {
-            return Err(Error::Invalid("canonical model item token bound"));
+        if !policy.permits(serialized.len()) {
+            return Err(Error::Invalid("receiver canonical byte policy exceeded"));
         }
         Ok(Self { item })
     }

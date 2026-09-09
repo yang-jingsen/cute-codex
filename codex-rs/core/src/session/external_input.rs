@@ -24,13 +24,29 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 impl Session {
+    /// Also guards compaction, which can sample before the regular input boundary.
+    pub(crate) async fn ensure_external_input_policy_allows_sampling(&self) -> Result<()> {
+        let state = self.external_input.lock().await;
+        if let Some(runtime) = state.as_ref() {
+            ensure!(
+                runtime.policy_blocked.is_empty(),
+                "receiver canonical byte policy blocks restored history; adjust trusted launch policy and restart"
+            );
+        }
+        Ok(())
+    }
+
     /// Called by the trusted launch owner before exposing the loaded thread.
     /// This never creates or resumes a thread or infers an owner from input text.
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "publication must wait for complete recovery while admission remains excluded"
     )]
-    pub(crate) async fn bind_external_input(&self, owner: &str) -> Result<()> {
+    pub(crate) async fn bind_external_input(
+        &self,
+        owner: &str,
+        policy: crate::context::CanonicalBytePolicy,
+    ) -> Result<()> {
         let mut state = self.external_input.lock().await;
         if let Some(runtime) = state.as_ref() {
             ensure!(
@@ -53,7 +69,7 @@ impl Session {
             parse_errors == 0 && thread_id == Some(self.thread_id),
             "unreadable external input history"
         );
-        let restored = restore(owner, &self.thread_id.to_string(), &items)?;
+        let mut restored = restore(owner, &self.thread_id.to_string(), &items)?;
         let retries = items
             .iter()
             .filter_map(|item| match item {
@@ -64,30 +80,51 @@ impl Session {
                 _ => None,
             })
             .collect::<BTreeMap<_, _>>();
-        // Reconstruct complete canonical input before making historical receipts
-        // queryable. Do not treat a compaction summary mentioning it as the item.
+        // Current policy is not history validity or receipt identity. Keep
+        // historical receipts readable, but stop sampling until trusted restart
+        // selects a policy that permits all recorded canonical external items.
+        let mut policy_blocked = std::collections::BTreeSet::new();
         let mut history = self.state.lock().await;
-        for found in restored.recovery.messages.values() {
-            if !matches!(found.processing, Processing::Pending(_)) {
-                continue;
-            }
-            let item = ExternalInputContext::new(
-                &found.commit.envelope,
-                model_has_byte_bound(
-                    history
-                        .session_configuration
-                        .step_settings
-                        .collaboration_mode
-                        .model(),
-                ),
-            )?
-            .into_response_item();
-            if !history.history.raw_items().any(|old| old == &item) {
-                history.record_items(std::iter::once(&item), TruncationPolicy::Bytes(10_000));
+        for (id, found) in &mut restored.recovery.messages {
+            let item = match ExternalInputContext::new(&found.commit.envelope, policy) {
+                Ok(context) => context.into_response_item(),
+                Err(codex_protocol::external_input::Error::Invalid(
+                    "receiver canonical byte policy exceeded",
+                )) => {
+                    policy_blocked.insert(id.clone());
+                    if let Processing::Pending(attempt) = found.processing {
+                        self.write_external_input_fact(
+                            owner,
+                            Fact::Hold {
+                                key: codex_protocol::external_input_record::MessageKey {
+                                    message_id: id.clone(),
+                                    semantic_sha256: found.commit.envelope.semantic_sha256.clone(),
+                                },
+                                attempt_id: attempt,
+                                reason: HoldReason::CanonicalSizePolicy,
+                            },
+                        )
+                        .await?;
+                        found.processing =
+                            Processing::Held(attempt, HoldReason::CanonicalSizePolicy);
+                    }
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
+            if matches!(found.processing, Processing::Pending(_))
+                && !history.history.raw_items().any(|old| old == &item)
+            {
+                history.record_items(
+                    std::iter::once(&item),
+                    TruncationPolicy::Bytes(serde_json::to_vec(&item)?.len()),
+                );
             }
         }
         drop(history);
         *state = Some(Runtime {
+            policy,
+            policy_blocked,
             dispatch_revision: 1,
             attempted_revision: 0,
             retry_exclusions: BTreeMap::new(),
@@ -142,7 +179,7 @@ impl Session {
 
     #[expect(
         clippy::await_holding_invalid_type,
-        reason = "duplicate validation, model sizing and admission must remain atomic"
+        reason = "duplicate validation, receiver policy and admission must remain atomic"
     )]
     pub(crate) async fn admit_external_input(&self, envelope: Envelope) -> Result<(Status, bool)> {
         envelope.validate()?;
@@ -162,16 +199,11 @@ impl Session {
         if found.delivery_state != DeliveryState::Unknown {
             return Ok((found, false));
         }
-        let model = self
-            .state
-            .lock()
-            .await
-            .session_configuration
-            .step_settings
-            .collaboration_mode
-            .model()
-            .to_owned();
-        ExternalInputContext::new(&envelope, model_has_byte_bound(&model))?;
+        ensure!(
+            runtime.policy_blocked.is_empty(),
+            "receiver canonical byte policy blocks restored history; adjust trusted launch policy and restart"
+        );
+        ExternalInputContext::new(&envelope, runtime.policy)?;
         let obligations = runtime
             .recovery
             .messages
@@ -226,6 +258,10 @@ impl Session {
             !runtime.poisoned,
             "external input recovery required before sampling"
         );
+        ensure!(
+            runtime.policy_blocked.is_empty(),
+            "receiver canonical byte policy blocks restored history; adjust trusted launch policy and restart"
+        );
         let live = self
             .services
             .live_thread
@@ -244,14 +280,14 @@ impl Session {
             {
                 continue;
             }
-            let item = ExternalInputContext::new(
-                &found.commit.envelope,
-                model_has_byte_bound(&turn.model_info().slug),
-            )?
-            .into_response_item();
+            let item = ExternalInputContext::new(&found.commit.envelope, runtime.policy)?
+                .into_response_item();
             let mut history = self.state.lock().await;
             if !history.history.raw_items().any(|old| old == &item) {
-                history.record_items(std::iter::once(&item), TruncationPolicy::Bytes(10_000));
+                history.record_items(
+                    std::iter::once(&item),
+                    TruncationPolicy::Bytes(serde_json::to_vec(&item)?.len()),
+                );
             }
         }
         let mut index = 0;
@@ -269,11 +305,7 @@ impl Session {
                 continue;
             }
             let envelope = pending.envelope.clone();
-            let item = ExternalInputContext::new(
-                &envelope,
-                model_has_byte_bound(&turn.model_info().slug),
-            )?
-            .into_response_item();
+            let item = ExternalInputContext::new(&envelope, runtime.policy)?.into_response_item();
             let next_ordinal = runtime
                 .recovery
                 .next_ordinal
@@ -307,10 +339,10 @@ impl Session {
             #[cfg(all(debug_assertions, unix))]
             crate::external_input::probe::barrier(live, "after_flush", &commit.envelope.message.id)
                 .await?;
-            self.state
-                .lock()
-                .await
-                .record_items(std::iter::once(&item), TruncationPolicy::Bytes(10_000));
+            self.state.lock().await.record_items(
+                std::iter::once(&item),
+                TruncationPolicy::Bytes(serde_json::to_vec(&item)?.len()),
+            );
             runtime.recovery.next_ordinal = next_ordinal;
             let processing = if commit.envelope.message.delivery == Delivery::AfterTurn {
                 Processing::Pending(None)
@@ -348,7 +380,16 @@ fn snapshot(runtime: &Runtime, id: &str, digest: &str) -> Status {
         }
         status.delivery_state = DeliveryState::ContextPersisted;
         status.receipt = Some(found.commit.receipt.clone());
-        status.processing = if runtime.paused
+        status.processing = if runtime.policy_blocked.contains(id)
+            && matches!(found.processing, Processing::Pending(_) | Processing::None)
+        {
+            let attempt = if let Processing::Pending(attempt) = found.processing {
+                attempt
+            } else {
+                None
+            };
+            (&Processing::Held(attempt, HoldReason::CanonicalSizePolicy)).into()
+        } else if runtime.paused
             && !runtime.permits.contains(id)
             && let Processing::Pending(attempt) = found.processing
         {
@@ -375,20 +416,4 @@ fn snapshot(runtime: &Runtime, id: &str, digest: &str) -> Status {
         }
     }
     status
-}
-
-// These model families use byte-fallback text tokenization. An unknown family
-// is not assigned the upstream four-bytes/token estimate as a hard bound.
-fn model_has_byte_bound(model: &str) -> bool {
-    matches!(
-        model,
-        "gpt-6-astra"
-            | "gpt-5.6-sol"
-            | "gpt-5.6-terra"
-            | "gpt-5.6-luna"
-            | "gpt-5.5"
-            | "gpt-5.4"
-            | "gpt-5.4-mini"
-            | "gpt-5.2"
-    )
 }

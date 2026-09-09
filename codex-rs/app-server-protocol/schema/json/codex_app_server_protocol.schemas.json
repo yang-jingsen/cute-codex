@@ -11431,6 +11431,7 @@
       },
       "ExternalInputHoldReason": {
         "enum": [
+          "canonical_size_policy",
           "plan_mode",
           "interrupted",
           "request_uncertain",

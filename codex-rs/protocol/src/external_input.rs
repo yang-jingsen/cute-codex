@@ -240,6 +240,7 @@ pub struct Commit {
 #[ts(rename = "ExternalInputHoldReason", export_to = "v2/")]
 #[schemars(rename = "ExternalInputHoldReason")]
 pub enum HoldReason {
+    CanonicalSizePolicy,
     PlanMode,
     Interrupted,
     RequestUncertain,

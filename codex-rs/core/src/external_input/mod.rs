@@ -17,6 +17,8 @@ pub(crate) struct Pending {
 }
 
 pub(crate) struct Runtime {
+    pub policy: crate::context::CanonicalBytePolicy,
+    pub policy_blocked: std::collections::BTreeSet<String>,
     /// One automatic reservation per new admission/retry, including failed turns.
     pub dispatch_revision: u64,
     pub attempted_revision: u64,
@@ -37,6 +39,7 @@ pub(crate) struct Runtime {
 impl Runtime {
     pub(crate) fn has_dispatch_work(&self) -> bool {
         !self.poisoned
+            && self.policy_blocked.is_empty()
             && ((!self.paused
                 && self.pending.iter().any(|pending| {
                     pending.envelope.message.delivery

@@ -107,6 +107,10 @@ impl Session {
             ensure!(previous == &record, "external input retry conflict");
             return Ok(false);
         }
+        ensure!(
+            runtime.policy_blocked.is_empty(),
+            "receiver canonical byte policy blocks retry; adjust trusted launch policy and restart"
+        );
         let found = runtime
             .recovery
             .messages

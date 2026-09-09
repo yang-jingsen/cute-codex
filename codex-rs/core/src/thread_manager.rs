@@ -341,7 +341,8 @@ pub(crate) struct ResumeThreadWithHistoryOptions {
 /// `Arc` reference that can be downgraded to by `AgentControl` while preventing every single
 /// function to require an `Arc<&Self>`.
 pub(crate) struct ThreadManagerState {
-    external_input_owner: std::sync::OnceLock<(String, String)>,
+    external_input_owner:
+        std::sync::OnceLock<(String, String, crate::context::CanonicalBytePolicy)>,
     threads: Arc<RwLock<HashMap<ThreadId, Arc<CodexThread>>>>,
     thread_created_tx: broadcast::Sender<ThreadId>,
     thread_id_generator: ThreadIdGenerator,
@@ -430,10 +431,15 @@ impl ThreadManager {
         clippy::expect_used,
         reason = "builder is called once by the trusted launch path before sharing the manager"
     )]
-    pub fn with_external_input_owner(self, owner: String, thread: String) -> Self {
+    pub fn with_external_input_owner(
+        self,
+        owner: String,
+        thread: String,
+        policy: crate::context::CanonicalBytePolicy,
+    ) -> Self {
         self.state
             .external_input_owner
-            .set((owner, thread))
+            .set((owner, thread, policy))
             .expect("external input owner is loaded once");
         self
     }
@@ -2067,9 +2073,9 @@ impl ThreadManagerState {
             windows_sandbox_proxy_settings_mode,
         })
         .await?;
-        if let Some((owner, thread)) = self.external_input_owner.get()
+        if let Some((owner, thread, policy)) = self.external_input_owner.get()
             && *thread == session.thread_id.to_string()
-            && let Err(error) = session.bind_external_input(owner).await
+            && let Err(error) = session.bind_external_input(owner, *policy).await
         {
             // Closing the sole submission sender tears down this unpublished
             // session. Wait for its writer before allowing a caller to retry.

@@ -4,6 +4,8 @@ use std::path::Path;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ExternalInputBinding {
+    #[serde(default)]
+    pub canonical_byte_limit: codex_core::context::CanonicalBytePolicy,
     pub version: u32,
     pub owner_id: String,
     pub thread_id: String,

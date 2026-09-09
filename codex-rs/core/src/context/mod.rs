@@ -11,6 +11,8 @@ mod developer_instructions;
 mod environment_context;
 mod environments_instructions;
 mod external_input;
+mod external_input_policy;
+pub use external_input_policy::CanonicalBytePolicy;
 mod guardian_approved_action;
 mod guardian_followup_review_reminder;
 mod guardian_node_repl_policy;

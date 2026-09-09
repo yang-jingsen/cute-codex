@@ -364,8 +364,11 @@ impl MessageProcessor {
                 )),
             );
             let manager = match external_input_binding.as_ref() {
-                Some(binding) => manager
-                    .with_external_input_owner(binding.owner_id.clone(), binding.thread_id.clone()),
+                Some(binding) => manager.with_external_input_owner(
+                    binding.owner_id.clone(),
+                    binding.thread_id.clone(),
+                    binding.canonical_byte_limit,
+                ),
                 None => manager,
             };
             match code_mode_session_provider {

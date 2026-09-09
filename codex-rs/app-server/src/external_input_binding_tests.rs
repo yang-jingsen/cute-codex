@@ -56,3 +56,47 @@ fn rejects_unknown_fields_version_and_unbounded_launch_data() {
         assert!(ExternalInputBinding::load(&path).is_err());
     }
 }
+
+#[test]
+fn receiver_policy_distinguishes_default_positive_and_off_and_rejects_invalid() {
+    use codex_core::context::CanonicalBytePolicy;
+    let (_dir, path) = fixture();
+    assert_eq!(
+        ExternalInputBinding::load(&path)
+            .unwrap()
+            .canonical_byte_limit,
+        CanonicalBytePolicy::default()
+    );
+    let mut binding: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    for value in [
+        serde_json::json!(1),
+        serde_json::json!(10000),
+        serde_json::json!(100000),
+        serde_json::json!(4294967295_u64),
+        serde_json::json!("off"),
+    ] {
+        binding["canonicalByteLimit"] = value.clone();
+        std::fs::write(&path, serde_json::to_vec(&binding).unwrap()).unwrap();
+        let loaded = ExternalInputBinding::load(&path).unwrap();
+        assert_eq!(
+            loaded.canonical_byte_limit,
+            serde_json::from_value::<CanonicalBytePolicy>(value).unwrap()
+        );
+    }
+    for value in [
+        serde_json::json!(0),
+        serde_json::json!(-1),
+        serde_json::json!(1.5),
+        serde_json::json!(4294967296_u64),
+        serde_json::json!(null),
+        serde_json::json!(false),
+        serde_json::json!("10000"),
+        serde_json::json!("OFF"),
+        serde_json::json!({}),
+    ] {
+        binding["canonicalByteLimit"] = value;
+        std::fs::write(&path, serde_json::to_vec(&binding).unwrap()).unwrap();
+        assert!(ExternalInputBinding::load(&path).is_err());
+    }
+}

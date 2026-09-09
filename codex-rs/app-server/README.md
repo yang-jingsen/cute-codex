@@ -2968,12 +2968,40 @@ Sources are strictly `agent` or `service`; delivery is strictly `after_turn` or
 `passive`. Unknown fields, privileged roles, raw response items, and settings or
 permission overrides are rejected. Identity, source ID, and type strings are
 nonempty and at most 256 UTF-8 bytes; text is nonempty and at most 64 KiB. Actual
-model admission additionally bounds the entire serialized canonical item,
-including JSON escaping, to 10,000 bytes. For the explicitly recognized
-byte-fallback model tokenizers this conservatively bounds the item to at most
-10,000 tokens. Unknown model sizing is rejected, and text is never truncated to
-make it fit. Individual items may exceed 1,000 tokens and require the additional
-P0 context review before integration acceptance.
+model admission additionally applies the receiver's canonical byte policy to the
+entire serialized ResponseItem, including wrapper, IDs, UTF-8 and JSON escaping.
+The owner-only launch binding may add `"canonicalByteLimit": 20000`, or the
+explicit string `"off"`. Omission means 10000 bytes (decimal 10 KB). Numeric values
+must be integers in 1..=4294967295; zero, null, booleans, fractions and unknown
+strings reject startup. Human/operators select this trusted receiver setting;
+the separate Cutex adapter may later carry that selection. The binding is loaded
+once, so changing it requires a receiver restart. Controlled same-UID clients are
+trusted controllers, not proof that every API caller is literally Human.
+
+Senders cannot set or override this policy through submit/retry, source/type/text,
+MCP/model arguments, or incoming settings. Over-policy admission fails before
+write with `receiver canonical byte policy exceeded`; no text or digest is changed.
+Off disables only this optional canonical-size policy. The independent 65536-byte
+text transport cap, bounded IDs, admission limit 100, parser/memory protections
+and upstream context budget remain. A larger canonical limit cannot bypass them.
+
+This task-scoped Human-approved byte policy replaces the earlier token-cap
+premise only for ExternalInput. It is neither a remote-token guarantee nor a local
+reference-tokenizer count. There is no provider/model-name allowlist. Individual
+items may exceed 1000 tokens and still require P0 manual context review.
+
+Receipts and digests are historical facts independent of current receiver policy.
+Tighter-policy resume validates history normally, retains receipts, and blocks
+sampling if any recorded canonical external item exceeds the current policy;
+it does not rewrite the item or call the history corrupt. A pending after-turn
+obligation is durably held with reason `canonical_size_policy`. New admission and
+retry return an explicit policy error while the thread is blocked. Restore with
+a larger limit/off removes the policy barrier but does not automatically release
+that durable hold: use the existing explicit retry CAS. Existing uncertain and
+no-output holds are preserved. Historical completed observations remain historical;
+they do not approve sampling under a new policy. Even an oversized completed or
+passive historical item blocks sampling until the operator adjusts the policy,
+because the receiver does not remove or rewrite old context to make it fit.
 
 The semantic digest is SHA-256 over `codex:external-input:v1\0` followed by the
 UTF-8 bytes of owner ID, thread ID, message ID, source kind, source ID, type,

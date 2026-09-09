@@ -33,6 +33,10 @@ impl Session {
             !runtime.poisoned,
             "external input recovery required before sampling"
         );
+        ensure!(
+            runtime.policy_blocked.is_empty(),
+            "receiver canonical byte policy blocks restored history"
+        );
         // Validate every eligible canonical item before persisting any claim.
         // Otherwise a missing later item could strand an earlier claim although
         // no request was attempted.

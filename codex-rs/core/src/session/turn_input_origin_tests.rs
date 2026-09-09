@@ -6,6 +6,8 @@ use pretty_assertions::assert_eq;
 
 fn runtime() -> Runtime {
     Runtime {
+        policy: Default::default(),
+        policy_blocked: Default::default(),
         dispatch_revision: 0,
         attempted_revision: 0,
         retry_exclusions: Default::default(),
