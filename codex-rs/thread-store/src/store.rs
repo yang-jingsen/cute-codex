@@ -388,6 +388,16 @@ pub trait ThreadStore: Any + Send + Sync {
         params: UpdateThreadMetadataParams,
     ) -> ThreadStoreFuture<'_, Option<StoredThread>>;
 
+    /// Publishes metadata for an explicit persistence acknowledgement. Implementations
+    /// must propagate publication errors rather than treating indexing as best effort.
+    /// Stores with best-effort updates must override this default forwarding path.
+    fn publish_thread_metadata(
+        &self,
+        params: UpdateThreadMetadataParams,
+    ) -> ThreadStoreFuture<'_, ()> {
+        Box::pin(async move { self.update_thread_metadata(params).await.map(|_| ()) })
+    }
+
     /// Moves a thread to, within, or out of a server-ordered section.
     fn move_thread_to_section(
         &self,

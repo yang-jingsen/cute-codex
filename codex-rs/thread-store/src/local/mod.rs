@@ -629,9 +629,28 @@ impl ThreadStore for LocalThreadStore {
         params: UpdateThreadMetadataParams,
     ) -> ThreadStoreFuture<'_, Option<StoredThread>> {
         Box::pin(async move {
-            update_thread_metadata::update_thread_metadata(self, params)
-                .await
-                .map(Some)
+            update_thread_metadata::update_thread_metadata(
+                self,
+                params,
+                update_thread_metadata::MetadataWritePolicy::Compatible,
+            )
+            .await
+            .map(Some)
+        })
+    }
+
+    fn publish_thread_metadata(
+        &self,
+        params: UpdateThreadMetadataParams,
+    ) -> ThreadStoreFuture<'_, ()> {
+        Box::pin(async move {
+            update_thread_metadata::update_thread_metadata(
+                self,
+                params,
+                update_thread_metadata::MetadataWritePolicy::Required,
+            )
+            .await
+            .map(|_| ())
         })
     }
 

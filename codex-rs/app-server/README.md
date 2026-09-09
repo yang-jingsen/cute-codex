@@ -661,8 +661,14 @@ Later, after the idle unload timeout:
 
 Use `thread/read` to fetch a stored thread by id without resuming it. Pass `includeTurns` when you want thread history loaded into `thread.turns`. The returned thread includes `parentThreadId`, `agentNickname`, and `agentRole` for subagent threads when available.
 
-Paginated threads can also use `includeTurns: true`, but full-history hydration
-is deprecated and emits `deprecationNotice`. Clients should omit `includeTurns`
+For a loaded persistent paginated thread, `includeTurns: true` first materializes
+the live writer and publishes pending metadata. Writer or metadata publication failures return an error before hydration.
+This permits a pristine paginated thread to acknowledge persistence with zero turns;
+the guarantee covers process exit/restart, not fsync or power loss. Metadata-only
+reads and ordinary empty-thread shutdown do not provide this acknowledgement.
+`thread/start` returning an ID alone is not a persistence acknowledgement.
+
+Full-history hydration is deprecated and emits `deprecationNotice`. Clients should omit `includeTurns`
 (or set it to `false`), then use `thread/turns/list` and `thread/items/list` for
 incremental history loading.
 

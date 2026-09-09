@@ -296,6 +296,18 @@ impl CodexThread {
             .await;
     }
 
+    /// Materialize the live writer and publish pending metadata before reading history.
+    /// Success is a writer barrier, not an fsync or a model-context acknowledgement.
+    pub async fn persist(&self) -> ThreadStoreResult<()> {
+        let live_thread = self
+            .session
+            .live_thread()
+            .ok_or_else(|| ThreadStoreError::Internal {
+                message: "Session persistence is disabled".to_string(),
+            })?;
+        live_thread.persist_for_read().await
+    }
+
     #[doc(hidden)]
     pub async fn flush_rollout(&self) -> std::io::Result<()> {
         self.session.flush_rollout().await
