@@ -1,9 +1,9 @@
 //! Pure ExternalInput v1 foundations for the next ingress slice. No RPC, admission,
 //! writer, scheduling, or A4 acknowledgement is implemented here. Recovery requires
 //! complete ordered history supplied by a caller that has checked read errors.
-use codex_protocol::ResponseItemId;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ResponseItem;
+use crate::ResponseItemId;
+use crate::models::FunctionCallOutputPayload;
+use crate::models::ResponseItem;
 use serde::Deserialize;
 use serde::Serialize;
 use sha2::Digest;

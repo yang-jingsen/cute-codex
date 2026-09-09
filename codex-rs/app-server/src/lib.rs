@@ -111,8 +111,7 @@ mod error_code;
 mod extensions;
 mod external_agent_migration;
 mod external_auth;
-#[doc(hidden)]
-pub mod external_input;
+
 mod filters;
 mod fs_watch;
 mod fuzzy_file_search;
