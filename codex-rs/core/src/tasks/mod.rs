@@ -592,6 +592,9 @@ impl Session {
         turn_context: Arc<TurnContext>,
         task_result: SessionTaskResult,
     ) {
+        if let Err(err) = self.hold_abandoned_external_input_claims().await {
+            warn!(%err, "external input claim recovery required after task completion");
+        }
         let (last_agent_message, abort_reason) = match task_result {
             Ok(last_agent_message) => (last_agent_message, None),
             Err(err) if matches!(err.details(), CodexErrorDetails::TurnAborted) => {
@@ -942,6 +945,9 @@ impl Session {
         session_task
             .abort(Arc::clone(self), Arc::clone(&task.turn_context))
             .await;
+        if let Err(err) = self.hold_abandoned_external_input_claims().await {
+            warn!(%err, "external input claim recovery required after task abort");
+        }
 
         if reason == TurnAbortReason::Interrupted
             && let Some(marker) = interrupted_turn_history_marker(
