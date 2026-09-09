@@ -2097,6 +2097,7 @@ async fn resume_candidate_matches_cwd(
             | RolloutItem::InterAgentCommunicationMetadata { .. }
             | RolloutItem::Compacted(_)
             | RolloutItem::WorldState(_)
+            | RolloutItem::ExternalInput(_)
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::SecurityRiskScore(_)

@@ -22,6 +22,9 @@ use serde::Serialize;
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(super) enum RolloutItemWire<'a> {
+    ExternalInput {
+        payload: Cow<'a, codex_protocol::external_input_record::Record>,
+    },
     SessionMeta {
         payload: Cow<'a, SessionMetaLine>,
     },
@@ -62,6 +65,9 @@ pub(super) enum RolloutItemWire<'a> {
 impl<'a> From<&'a RolloutItem> for RolloutItemWire<'a> {
     fn from(item: &'a RolloutItem) -> Self {
         match item {
+            RolloutItem::ExternalInput(payload) => Self::ExternalInput {
+                payload: Cow::Borrowed(payload),
+            },
             RolloutItem::SessionMeta(payload) => Self::SessionMeta {
                 payload: Cow::Borrowed(payload),
             },
@@ -107,6 +113,7 @@ impl<'a> From<&'a RolloutItem> for RolloutItemWire<'a> {
 impl From<RolloutItemWire<'_>> for RolloutItem {
     fn from(item: RolloutItemWire<'_>) -> Self {
         match item {
+            RolloutItemWire::ExternalInput { payload } => Self::ExternalInput(payload.into_owned()),
             RolloutItemWire::SessionMeta { payload } => Self::SessionMeta(payload.into_owned()),
             RolloutItemWire::ResponseItem { payload, metadata } => {
                 Self::ResponseItem(ResponseItemEnvelope {

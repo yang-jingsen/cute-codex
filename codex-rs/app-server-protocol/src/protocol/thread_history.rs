@@ -398,6 +398,7 @@ impl ThreadHistoryBuilder {
             | RolloutItem::TurnContext(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::WorldState(_)
+            | RolloutItem::ExternalInput(_)
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::SessionMeta(_) => {}

@@ -100,6 +100,7 @@ impl Borrow<ResponseItem> for ResponseItemEnvelope {
 /// Persisted rollout item used by core history and rollout storage.
 #[derive(Debug, Clone)]
 pub enum RolloutItem {
+    ExternalInput(codex_protocol::external_input_record::Record),
     SessionMeta(SessionMetaLine),
     ResponseItem(ResponseItemEnvelope),
     InterAgentCommunication(InterAgentCommunication),
@@ -439,6 +440,7 @@ fn multi_agent_version_from_items(
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::WorldState(_)
             | RolloutItem::SecurityRiskScore(_)
+            | RolloutItem::ExternalInput(_)
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::EventMsg(_) => None,
         })

@@ -299,6 +299,7 @@ impl Session {
                 }
                 RolloutItem::EventMsg(_)
                 | RolloutItem::SessionMeta(_)
+                | RolloutItem::ExternalInput(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::SecurityRiskScore(_)
                 | RolloutItem::TokenUsageRecord(_)
@@ -393,6 +394,7 @@ impl Session {
                 }
                 RolloutItem::EventMsg(_)
                 | RolloutItem::TurnContext(_)
+                | RolloutItem::ExternalInput(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::WorldState(_)
                 | RolloutItem::SecurityRiskScore(_)
@@ -435,6 +437,7 @@ impl Session {
                 | RolloutItem::InterAgentCommunication(_)
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
                 | RolloutItem::TurnContext(_)
+                | RolloutItem::ExternalInput(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::SecurityRiskScore(_)

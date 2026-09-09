@@ -26,6 +26,8 @@ mod environment;
 pub mod error;
 pub mod exec_output;
 pub mod external_input;
+pub mod external_input_record;
+pub mod external_input_status;
 pub mod items;
 mod legacy_events;
 pub mod local_media;

@@ -1367,6 +1367,7 @@ impl Session {
                     | RolloutItem::InterAgentCommunicationMetadata { .. }
                     | RolloutItem::TurnContext(_)
                     | RolloutItem::WorldState(_)
+                    | RolloutItem::ExternalInput(_)
                     | RolloutItem::RealtimeItem(_)
                     | RolloutItem::TokenUsageRecord(_)
                     | RolloutItem::SecurityRiskScore(_) => {}

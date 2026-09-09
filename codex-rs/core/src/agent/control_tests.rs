@@ -276,6 +276,7 @@ async fn persisted_originator(thread: &CodexThread) -> String {
             | RolloutItem::EventMsg(_)
             | RolloutItem::Compacted(_)
             | RolloutItem::WorldState(_)
+            | RolloutItem::ExternalInput(_)
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::TokenUsageRecord(_)

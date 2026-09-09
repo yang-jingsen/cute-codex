@@ -304,6 +304,7 @@ impl ThreadMetadataSync {
                 | RolloutItem::InterAgentCommunication(_)
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
                 | RolloutItem::Compacted(_)
+                | RolloutItem::ExternalInput(_)
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::SecurityRiskScore(_)

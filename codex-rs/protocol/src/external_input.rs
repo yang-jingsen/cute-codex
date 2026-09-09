@@ -4,11 +4,13 @@
 use crate::ResponseItemId;
 use crate::models::FunctionCallOutputPayload;
 use crate::models::ResponseItem;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 use std::collections::BTreeMap;
+use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -23,26 +25,34 @@ pub enum Error {
     Corrupt,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename = "ExternalInputSourceKind", export_to = "v2/")]
+#[schemars(rename = "ExternalInputSourceKind")]
 pub enum SourceKind {
     Agent,
     Service,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(rename = "ExternalInputSource", export_to = "v2/")]
+#[schemars(rename = "ExternalInputSource")]
 pub struct Source {
     pub kind: SourceKind,
     pub id: String,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename = "ExternalInputDelivery", export_to = "v2/")]
+#[schemars(rename = "ExternalInputDelivery")]
 pub enum Delivery {
     AfterTurn,
     Passive,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(rename = "ExternalInputMessage", export_to = "v2/")]
+#[schemars(rename = "ExternalInputMessage")]
 pub struct Message {
     pub id: String,
     pub source: Source,
@@ -51,8 +61,10 @@ pub struct Message {
     pub delivery: Delivery,
     pub text: String,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(rename = "ExternalInputEnvelope", export_to = "v2/")]
+#[schemars(rename = "ExternalInputEnvelope")]
 pub struct Envelope {
     pub version: u32,
     pub owner_id: String,
@@ -165,8 +177,10 @@ impl Envelope {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(rename = "ExternalInputReceipt", export_to = "v2/")]
+#[schemars(rename = "ExternalInputReceipt")]
 pub struct Receipt {
     pub schema: String,
     pub receipt_id: String,
@@ -215,14 +229,16 @@ impl Receipt {
 
 /// Mechanical records are deliberately separate from ResponseItem and RolloutItem.
 /// The later writer must persist Commit immediately followed by its canonical item.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Commit {
     pub envelope: Envelope,
     pub receipt: Receipt,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(rename = "ExternalInputHoldReason", export_to = "v2/")]
+#[schemars(rename = "ExternalInputHoldReason")]
 pub enum HoldReason {
     PlanMode,
     Interrupted,
@@ -230,30 +246,34 @@ pub enum HoldReason {
     NoOutput,
     ContextMissing,
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "phase", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProcessingPhase {
     Claim {
         #[serde(rename = "attemptId")]
+        #[schemars(with = "String")]
         attempt_id: Uuid,
     },
     Output {
         #[serde(rename = "attemptId")]
+        #[schemars(with = "String")]
         attempt_id: Uuid,
     },
     Hold {
         #[serde(rename = "attemptId")]
+        #[schemars(with = "Option<String>")]
         attempt_id: Option<Uuid>,
         reason: HoldReason,
     },
     Retry {
         #[serde(rename = "expectedAttemptId")]
+        #[schemars(with = "Option<String>")]
         expected_attempt_id: Option<Uuid>,
         #[serde(rename = "retryId")]
         retry_id: String,
     },
 }
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProcessingRecord {
     pub version: u32,
