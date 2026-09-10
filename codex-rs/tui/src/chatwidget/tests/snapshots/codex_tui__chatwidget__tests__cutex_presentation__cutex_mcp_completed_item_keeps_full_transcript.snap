@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/cutex_presentation_tests.rs
+assertion_line: 29
+expression: observed
+---
+[
+    (
+        "• Call completed · Job query · job-123\n  running\n",
+        "• Called cutex_job.query({\"jobId\":\"job-123\"})\n  └ running\n",
+        "Called cutex_job.query({\"jobId\":\"job-123\"})\nrunning\n",
+    ),
+]

@@ -104,6 +104,8 @@ const RAW_TOOL_OUTPUT_WIDTH: usize = 10_000;
 
 mod approvals;
 mod base;
+mod cutex_mcp_display;
+mod event_presentation;
 mod exec;
 mod hook_cell;
 mod markdown_render_cache;

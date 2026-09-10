@@ -1,0 +1,25 @@
+---
+source: tui/src/history_cell/cutex_mcp_display_tests.rs
+assertion_line: 31
+expression: "format!(\"running:\\n{running}\\nnormal:\\n{normal}\\nnarrow:\\n{narrow}\\ntranscript:\\n{}\\nraw:\\n{}\",rendered(before.0),\nrendered(before.1))"
+---
+running:
+• Calling · Job submit · job-action-🦀
+normal:
+• Call completed · Job submit · job-
+  action-🦀
+  accepted_pending; execution not
+  confirmed
+narrow:
+• Call completed ·
+  Job submit · job-
+  action-🦀
+  accepted_pending;
+  execution not
+  confirmed
+transcript:
+• Called cutex_job.submit({"actionId":"job-action-🦀","argv":["echo","full argument retained"],"cwd":"/private"})
+  └ accepted_pending; execution not confirmed
+raw:
+Called cutex_job.submit({"actionId":"job-action-🦀","argv":["echo","full argument retained"],"cwd":"/private"})
+accepted_pending; execution not confirmed

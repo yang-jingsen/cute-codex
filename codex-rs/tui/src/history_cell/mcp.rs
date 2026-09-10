@@ -7,6 +7,9 @@ use codex_protocol::mcp::is_node_repl_backed_server;
 #[path = "mcp_result.rs"]
 mod result;
 
+#[path = "mcp_compact.rs"]
+mod compact;
+
 use crate::style::StatusTone;
 use crate::style::accent_style;
 use crate::style::status_style;
@@ -129,6 +132,11 @@ impl McpToolCallCell {
     }
 
     fn render_lines(&self, width: u16, mode: McpToolCallRenderMode) -> Vec<Line<'static>> {
+        if mode == McpToolCallRenderMode::Display
+            && let Some(lines) = compact::render(self, width)
+        {
+            return lines;
+        }
         let mut lines: Vec<Line<'static>> = Vec::new();
         let status = self.success();
         let node_repl = self.result_kind() == McpResultKind::NodeRepl;

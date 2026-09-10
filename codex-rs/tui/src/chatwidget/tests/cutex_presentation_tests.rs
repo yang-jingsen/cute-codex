@@ -1,0 +1,53 @@
+use super::*;
+use pretty_assertions::assert_eq;
+
+#[tokio::test]
+async fn cutex_mcp_completed_item_keeps_full_transcript() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    let _ = drain_insert_history(&mut rx);
+    // The same ThreadItem is emitted by direct and CodeMode nested MCP dispatch.
+    // Core's code_mode_can_print_structured_mcp_tool_result_fields proves the producer.
+    let item = AppServerThreadItem::McpToolCall {
+        id: "exec-nested-call".into(),
+        server: "cutex_job".into(),
+        tool: "query".into(),
+        arguments: json!({"jobId":"job-123"}),
+        status: codex_app_server_protocol::McpToolCallStatus::Completed,
+        app_context: None,
+        mcp_app_resource_uri: None,
+        plugin_id: None,
+        read_only_hint: None,
+        result: Some(Box::new(codex_app_server_protocol::McpToolCallResult {
+            content: vec![json!({"type":"text","text":"running"})],
+            structured_content: None,
+            meta: None,
+        })),
+        error: None,
+        duration_ms: Some(1),
+    };
+    chat.on_mcp_tool_call_completed(item.clone());
+    let mut observed = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            observed.push((
+                lines_to_single_string(&cell.display_lines(80)),
+                lines_to_single_string(&cell.transcript_lines(80)),
+                lines_to_single_string(&cell.raw_lines()),
+            ));
+        }
+    }
+    assert_eq!(observed.len(), 1);
+    insta::assert_debug_snapshot!(observed);
+    chat.replay_thread_item(item, "turn-1".into(), ReplayKind::ThreadSnapshot);
+    let mut replay = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        if let AppEvent::InsertHistoryCell(cell) = event {
+            replay.push((
+                lines_to_single_string(&cell.display_lines(80)),
+                lines_to_single_string(&cell.transcript_lines(80)),
+                lines_to_single_string(&cell.raw_lines()),
+            ));
+        }
+    }
+    assert_eq!(replay, observed);
+}
