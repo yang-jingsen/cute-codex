@@ -3010,6 +3010,14 @@ delivery, and text, in that order. Each field is preceded by its byte length as
 an unsigned 64-bit big-endian integer. The final domain byte is NUL; generation
 is excluded. There is no normalization. This digest checks identity, not authority.
 
+Provider requests omit optional response-item IDs that exceed 64 UTF-8 bytes,
+just as they omit unprefixed legacy IDs. This projection does not change stored
+external message IDs, canonical items, semantic digests, receipts, or deduplication.
+Existing histories are read unchanged and projected when sent; no migration or
+replacement message is needed. Names, namespaces, call IDs, and content are not
+changed. Removing this invalid optional field does not establish that a provider
+accepts every other aspect of an external item or authorize retrying a held item.
+
 `status` takes `messages: [{messageId, semanticSha256}]` with 1–100 entries and
 returns the same order. Submit returns the same response with one `statuses`
 entry. Responses echo the current binding. Delivery states are `unknown`,

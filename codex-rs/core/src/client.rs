@@ -1036,7 +1036,13 @@ impl ModelClient {
 
     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem]) {
         for item in input {
-            if item.id().is_some_and(|id| !id.is_prefixed()) {
+            // Item IDs are optional request metadata, not local history identity.
+            // Keep legacy/oversized IDs in history, but omit them from provider input.
+            // A byte bound also bounds the provider's 64-character string limit.
+            if item
+                .id()
+                .is_some_and(|id| !id.is_prefixed() || id.len() > 64)
+            {
                 item.set_id(/*new_id*/ None);
             }
             if !self.state.content_item_kinds_enabled {
