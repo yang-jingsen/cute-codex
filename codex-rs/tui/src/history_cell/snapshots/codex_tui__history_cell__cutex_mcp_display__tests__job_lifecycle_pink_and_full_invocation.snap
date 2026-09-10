@@ -1,0 +1,28 @@
+---
+source: tui/src/history_cell/cutex_mcp_display_tests.rs
+assertion_line: 31
+expression: "format!(\"running:\\n{running}\\nnormal:\\n{}\\nnarrow:\\n{narrow}\\nraw:\\n{}\",render(display),render(detailed.1))"
+---
+running:
+• Submitting job · action-🦀
+normal:
+• Submitted job · job-1 · launch_pending
+  {"status": "committed", "job":
+  {"schema": "cutex/job-service-core/
+  v1", "jobId": "job-1", "revision": 1,
+  "state": "launch_pending", "request":
+  {"actionId": "action-🦀"}},
+  "deduplicated...
+narrow:
+• Submitted job ·
+  job-1 ·
+  launch_pending
+  {"status":
+  "committed",
+  "job": {"schema":
+  "cutex/job-
+  service-core/v1",
+  "jobId": "j...
+raw:
+Called cutex_job.submit({"actionId":"action-🦀","argv":["echo","full argument retained"],"cwd":"/private"})
+{"status": "committed", "job": {"schema": "cutex/job-service-core/v1", "jobId": "job-1", "revision": 1, "state": "launch_pending", "request": {"actionId": "action-🦀"}}, "deduplicated": false}

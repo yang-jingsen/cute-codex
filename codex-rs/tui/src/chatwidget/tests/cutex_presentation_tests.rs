@@ -18,14 +18,25 @@ async fn cutex_mcp_completed_item_keeps_full_transcript() {
         plugin_id: None,
         read_only_hint: None,
         result: Some(Box::new(codex_app_server_protocol::McpToolCallResult {
-            content: vec![json!({"type":"text","text":"running"})],
+            content: vec![
+                json!({"type":"text","text":json!({"schema":"cutex/job-service-core/v1","jobId":"job-123","revision":1,"state":"running"}).to_string()}),
+            ],
             structured_content: None,
             meta: None,
         })),
         error: None,
         duration_ms: Some(1),
     };
+    let mut started = item.clone();
+    if let AppServerThreadItem::McpToolCall { status, result, .. } = &mut started {
+        *status = codex_app_server_protocol::McpToolCallStatus::InProgress;
+        *result = None;
+    }
+    chat.on_mcp_tool_call_started(started);
+    assert!(drain_insert_history(&mut rx).is_empty());
+    assert!(chat.transcript.active_cell.is_some());
     chat.on_mcp_tool_call_completed(item.clone());
+    assert!(chat.transcript.active_cell.is_none());
     let mut observed = Vec::new();
     while let Ok(event) = rx.try_recv() {
         if let AppEvent::InsertHistoryCell(cell) = event {
