@@ -406,36 +406,9 @@ pub(super) fn title(invocation: &McpInvocation) -> Option<String> {
     })
 }
 
-/// An explicitly versioned but unknown result must keep the upstream presentation.
-pub(super) fn known_result_version(text: &str) -> bool {
-    let Ok(value) = serde_json::from_str::<Value>(text) else {
-        return true;
-    };
-    match value.get("schema") {
-        None => true,
-        Some(Value::String(schema)) => matches!(
-            schema.as_str(),
-            "cutex/agent-management/v1"
-                | "cutex/task-service-tool-receipt/v1"
-                | "cutex/task-service-director-tool-receipt/v1"
-        ),
-        Some(_) => false,
-    }
-}
-
-/// Only known returned receipt schemas can refine the display status. Never inspect arguments.
-pub(super) fn outcome_uncertain(text: &str) -> bool {
-    let Ok(value) = serde_json::from_str::<Value>(text) else {
-        return false;
-    };
-    match value.get("schema").and_then(Value::as_str) {
-        Some("cutex/agent-management/v1") => value["outcome"]["code"] == "response_uncertain",
-        Some(
-            "cutex/task-service-tool-receipt/v1" | "cutex/task-service-director-tool-receipt/v1",
-        ) => value["status"] == "response_uncertain",
-        _ => false,
-    }
-}
+#[path = "cutex_mcp_receipt.rs"]
+mod receipt;
+pub(super) use receipt::outcome;
 
 #[cfg(test)]
 #[path = "cutex_mcp_display_tests.rs"]
