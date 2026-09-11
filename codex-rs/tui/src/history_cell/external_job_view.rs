@@ -40,10 +40,14 @@ pub(super) fn render(view: &View, id_label: Option<&str>) -> Option<(String, Vec
     if facts.job_revision == 0
         || facts.job_id.is_empty()
         || facts.job_id.len() > 256
-        || [facts.action_id.as_ref(), facts.output_reference.as_ref()]
-            .into_iter()
-            .flatten()
-            .any(|value| value.is_empty() || value.len() > 256)
+        || facts
+            .action_id
+            .as_ref()
+            .is_some_and(|value| value.is_empty() || value.len() > 256)
+        || facts
+            .output_reference
+            .as_ref()
+            .is_some_and(|value| value.is_empty() || value.len() > 2048)
         || facts
             .terminal_reason
             .as_ref()
