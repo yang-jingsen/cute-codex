@@ -58,7 +58,7 @@ impl PresentationHistoryCell {
         lines.extend(
             super::event_presentation::render_event(None, &detail, bullet, width)
                 .into_iter()
-                .map(|line| line.dim()),
+                .map(ratatui::prelude::Stylize::dim),
         );
         if markdown && p.format == PresentationFormat::Markdown {
             let clean = super::messages::sanitize_user_text(p.body.as_str().into());
