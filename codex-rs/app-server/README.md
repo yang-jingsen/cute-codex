@@ -3205,3 +3205,27 @@ projection is read-only and does not migrate the original history. Display reads
 validate complete source data and currently require O(history) work; no large-history
 throughput guarantee is made. Ordinary unmarked history readers keep their existing
 compatibility behavior.
+
+The native Terminal client consumes presentation v1 on bound remote connections.
+It pages the timeline on attach/resume/fork and renders it in source order, including
+idle notices. Live notifications use the same validated record renderer and original
+origin-thread/ID identity; conflicting records report an error and retain the original.
+The client reconciles from a fresh cursor on attachment, reconnect, event lag, turn
+completion, revert notification, and explicit transcript opening. It does not poll.
+A recovered late fact is an independent supplement; terminal-native scrollback is
+not rewritten. Explicit references are labeled linked supplements, without heuristic
+matching or adjacent card merging. The raw transcript retains each independent fact.
+
+Notice headers are neutral. Markdown uses the existing safe renderer after control
+sanitization; plainText preserves Markdown syntax as text. Raw detail uses the shared
+no-bullet variant. These cells are not user/assistant items and are excluded from
+TUI recap model prompts as well as the native model history. Ordinary approval and
+MCP invocation detail paths remain unchanged. Missing/unknown presentation capability
+does not trigger timeline calls or a fallback model message. Embedded launches do
+not have the private receiver binding and do not advertise this consumer capability.
+
+This first consumer loads complete history through finite 100-entry pages for ordered
+replay; it retains O(history) client state instead of applying the ordinary initial
+turn-tail loading budget on presentation-enabled connections. No large-history memory
+or throughput guarantee is made. A later bounded viewport optimization must preserve
+thread-level facts and canonical ordering, including idle entries.

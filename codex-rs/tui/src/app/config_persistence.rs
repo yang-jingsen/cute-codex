@@ -1593,6 +1593,7 @@ enabled = false
             .handle_thread_session(crate::session_state::ThreadSessionState {
                 thread_id: ThreadId::new(),
                 forked_from_id: None,
+                presentation_timeline: None,
                 fork_parent_title: None,
                 thread_name: None,
                 model: "gpt-test".to_string(),

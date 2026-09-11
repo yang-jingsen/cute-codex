@@ -4666,6 +4666,7 @@ async fn side_thread_snapshot_hides_forked_parent_transcript() {
     let mut store = ThreadEventStore::new(/*capacity*/ 4);
     let session = ThreadSessionState {
         forked_from_id: Some(parent_thread_id),
+        presentation_timeline: None,
         fork_parent_title: None,
         ..test_thread_session(side_thread_id, test_path_buf("/tmp/side"))
     };
@@ -4730,6 +4731,7 @@ async fn side_thread_snapshot_skips_session_header_preamble() {
     let snapshot = ThreadEventSnapshot {
         session: Some(ThreadSessionState {
             forked_from_id: Some(parent_thread_id),
+            presentation_timeline: None,
             fork_parent_title: None,
             ..test_thread_session(side_thread_id, test_path_buf("/tmp/side"))
         }),
@@ -5294,6 +5296,7 @@ async fn render_clear_ui_header_after_long_transcript_for_snapshot() -> String {
         let session = ThreadSessionState {
             thread_id: ThreadId::new(),
             forked_from_id: None,
+            presentation_timeline: None,
             fork_parent_title: None,
             thread_name: None,
             model: "gpt-test".to_string(),
@@ -5805,6 +5808,7 @@ fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState 
     ThreadSessionState {
         thread_id,
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "gpt-test".to_string(),
@@ -6642,6 +6646,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
         let session = ThreadSessionState {
             thread_id: ThreadId::new(),
             forked_from_id: None,
+            presentation_timeline: None,
             fork_parent_title: None,
             thread_name: None,
             model: "gpt-test".to_string(),
@@ -6713,6 +6718,7 @@ async fn backtrack_selection_preserves_selected_prompt_and_requests_branch() {
         .handle_thread_session(crate::session_state::ThreadSessionState {
             thread_id: base_id,
             forked_from_id: None,
+            presentation_timeline: None,
             fork_parent_title: None,
             thread_name: None,
             model: "gpt-test".to_string(),
@@ -7788,6 +7794,7 @@ async fn new_session_requests_shutdown_for_previous_conversation() {
         let event = crate::session_state::ThreadSessionState {
             thread_id,
             forked_from_id: None,
+            presentation_timeline: None,
             fork_parent_title: None,
             thread_name: None,
             model: "gpt-test".to_string(),
@@ -8489,6 +8496,7 @@ async fn clear_only_ui_reset_preserves_chat_session_state() {
         .handle_thread_session(crate::session_state::ThreadSessionState {
             thread_id,
             forked_from_id: None,
+            presentation_timeline: None,
             fork_parent_title: None,
             thread_name: Some("keep me".to_string()),
             model: "gpt-test".to_string(),

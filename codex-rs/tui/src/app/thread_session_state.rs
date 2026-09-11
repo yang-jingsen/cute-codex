@@ -90,6 +90,7 @@ impl App {
             ThreadSessionState {
                 thread_id,
                 forked_from_id: None,
+                presentation_timeline: None,
                 fork_parent_title: None,
                 thread_name: None,
                 model: self.chat_widget.current_model().to_string(),
@@ -174,6 +175,7 @@ mod tests {
         ThreadSessionState {
             thread_id,
             forked_from_id: None,
+            presentation_timeline: None,
             fork_parent_title: None,
             thread_name: None,
             model: "gpt-test".to_string(),

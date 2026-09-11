@@ -1304,6 +1304,7 @@ impl App {
         }
         self.config.approvals_reviewer = session.approvals_reviewer;
 
+        let has_presentation_timeline = session.presentation_timeline.is_some();
         let thread_id = session.thread_id;
         if self.primary_thread_id != Some(thread_id) {
             self.recap.reset_for_new_thread(Instant::now());
@@ -1334,7 +1335,7 @@ impl App {
                 self.chat_widget.handle_prompt_edit_thread_session(session);
             }
         }
-        let should_buffer_initial_replay = !turns.is_empty();
+        let should_buffer_initial_replay = !turns.is_empty() || has_presentation_timeline;
         if should_buffer_initial_replay {
             self.app_event_tx
                 .send(AppEvent::BeginInitialHistoryReplayBuffer);
@@ -1375,6 +1376,10 @@ impl App {
         self.chat_widget
             .set_initial_user_message_submit_suppressed(/*suppressed*/ false);
         self.chat_widget.submit_initial_user_message_if_pending();
+        if has_presentation_timeline {
+            self.app_event_tx
+                .send(AppEvent::ReconcilePresentations { thread_id });
+        }
         Ok(())
     }
 
@@ -1554,6 +1559,10 @@ impl App {
         mut snapshot: ThreadEventSnapshot,
         resume_restored_queue: bool,
     ) {
+        let has_presentation_timeline = snapshot
+            .session
+            .as_ref()
+            .is_some_and(|session| session.presentation_timeline.is_some());
         let request_changes = snapshot
             .events
             .iter()
@@ -1608,10 +1617,8 @@ impl App {
                 preserve_in_flight_turn: true,
             },
         );
-        if !snapshot.turns.is_empty() {
-            self.chat_widget
-                .replay_thread_turns(snapshot.turns, ReplayKind::ThreadSnapshot);
-        }
+        self.chat_widget
+            .replay_thread_turns(snapshot.turns, ReplayKind::ThreadSnapshot);
         for (event, changes) in snapshot.events.into_iter().zip(request_changes) {
             if suppress_replay_notices && replay_filter::event_is_notice(&event) {
                 continue;
@@ -1635,6 +1642,10 @@ impl App {
         self.chat_widget
             .set_initial_user_message_submit_suppressed(/*suppressed*/ false);
         self.chat_widget.submit_initial_user_message_if_pending();
+        if has_presentation_timeline && let Some(thread_id) = self.chat_widget.thread_id() {
+            self.app_event_tx
+                .send(AppEvent::ReconcilePresentations { thread_id });
+        }
         if resume_restored_queue {
             self.chat_widget.maybe_send_next_queued_input();
         }

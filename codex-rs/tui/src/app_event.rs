@@ -319,6 +319,14 @@ pub(crate) enum AppEvent {
     },
 
     /// One background-loaded page of older Ctrl+T transcript history.
+    /// Read-only recovery at a finite synchronization point.
+    ReconcilePresentations {
+        thread_id: ThreadId,
+    },
+    PresentationTimelineLoaded {
+        thread_id: ThreadId,
+        result: Result<Vec<codex_app_server_protocol::ThreadTimelineEntry>, String>,
+    },
     OlderThreadHistoryLoaded {
         thread_id: ThreadId,
         cursor: String,

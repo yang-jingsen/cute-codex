@@ -161,6 +161,21 @@ impl App {
                     self.request_older_history_page(app_server, thread_id);
                 }
             }
+            AppEvent::ReconcilePresentations { thread_id } => {
+                app_server.request_presentation_reconcile(thread_id, self.app_event_tx.clone());
+            }
+            AppEvent::PresentationTimelineLoaded { thread_id, result } => {
+                if self.chat_widget.thread_id() == Some(thread_id) {
+                    match result {
+                        Ok(timeline) => for entry in timeline {
+                            if let codex_app_server_protocol::ThreadTimelineEntry::Presentation { position, item } = entry {
+                                self.enqueue_thread_notification(thread_id, codex_app_server_protocol::ServerNotification::ThreadPresentationAppended(codex_app_server_protocol::PresentationAppendedNotification { thread_id: thread_id.to_string(), position, item })).await?;
+                            }
+                        },
+                        Err(error) => self.chat_widget.add_error_message(format!("Could not reconcile durable notices: {error}")),
+                    }
+                }
+            }
             AppEvent::OlderThreadHistoryLoaded {
                 thread_id,
                 cursor,

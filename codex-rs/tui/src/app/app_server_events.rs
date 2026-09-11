@@ -67,6 +67,10 @@ impl App {
                 );
                 self.refresh_mcp_startup_expected_servers_from_config();
                 self.chat_widget.finish_mcp_startup_after_lag();
+                if let Some(thread_id) = self.chat_widget.thread_id() {
+                    app_server_client
+                        .request_presentation_reconcile(thread_id, self.app_event_tx.clone());
+                }
                 self.refresh_agents_overview_threads(app_server_client);
             }
             AppServerEvent::ServerNotification(notification) => {
@@ -93,6 +97,20 @@ impl App {
         app_server_client: &AppServerSession,
         notification: ServerNotification,
     ) {
+        if let ServerNotification::TurnCompleted(turn) = &notification
+            && self
+                .chat_widget
+                .thread_id()
+                .is_some_and(|id| id.to_string() == turn.thread_id)
+            && let Ok(id) = ThreadId::from_string(&turn.thread_id)
+        {
+            app_server_client.request_presentation_reconcile(id, self.app_event_tx.clone());
+        }
+        if let ServerNotification::ThreadReverted(reverted) = &notification
+            && let Ok(id) = ThreadId::from_string(&reverted.thread_id)
+        {
+            app_server_client.request_presentation_reconcile(id, self.app_event_tx.clone());
+        }
         if let ServerNotification::ThreadStatusChanged(status) = &notification {
             let _ = self.dynamic_tool_status_updates.send(status.clone());
         }

@@ -216,6 +216,10 @@ impl App {
 
     /// Open transcript overlay (enters alternate screen and shows full transcript).
     pub(crate) fn open_transcript_overlay(&mut self, tui: &mut tui::Tui) {
+        if let Some(thread_id) = self.chat_widget.thread_id() {
+            self.app_event_tx
+                .send(AppEvent::ReconcilePresentations { thread_id });
+        }
         let _ = tui.enter_alt_screen();
         self.overlay = Some(Overlay::new_transcript(
             self.transcript_cells.clone(),
