@@ -708,7 +708,16 @@ pub(crate) use self::thread_summary::thread_settings_from_config_snapshot;
 pub(crate) fn build_legacy_api_turns_from_rollout_items(items: &[RolloutItem]) -> Vec<Turn> {
     let mut builder = ThreadHistoryBuilder::new();
     for item in items {
-        if is_persisted_rollout_item(item, codex_protocol::protocol::ThreadHistoryMode::Legacy) {
+        // Historical K items were written in legacy mode even though current producers
+        // do not persist this item lifecycle there. Read them without changing write policy.
+        let historical_inter_agent = matches!(
+            item,
+            RolloutItem::EventMsg(EventMsg::ItemCompleted(event))
+                if matches!(event.item, codex_protocol::items::TurnItem::LegacyInterAgentMessage(_))
+        );
+        if historical_inter_agent
+            || is_persisted_rollout_item(item, codex_protocol::protocol::ThreadHistoryMode::Legacy)
+        {
             builder.handle_rollout_item(item);
         }
     }
@@ -718,3 +727,7 @@ pub(crate) fn build_legacy_api_turns_from_rollout_items(items: &[RolloutItem]) -
 pub(crate) use external_input_processor::ExternalInputRequestProcessor;
 
 mod presentation_processor;
+
+#[cfg(test)]
+#[path = "request_processors/legacy_inter_agent_tests.rs"]
+mod legacy_inter_agent_tests;

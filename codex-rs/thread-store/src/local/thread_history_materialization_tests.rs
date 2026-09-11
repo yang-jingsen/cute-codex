@@ -2739,3 +2739,51 @@ fn append_suffix(rollout_path: &std::path::Path, suffix: &str) {
     file.write_all(suffix.as_bytes()).expect("append suffix");
     file.flush().expect("flush suffix");
 }
+
+#[tokio::test]
+async fn legacy_inter_agent_revision_rebuilds_stale_rows() {
+    let home = TempDir::new().expect("temp dir");
+    let store = projection_store(home.path()).await;
+    let thread_id = ThreadId::default();
+    create_paginated_thread(&store, thread_id).await;
+    store
+        .append_items(AppendThreadItemsParams {
+            thread_id,
+            items: vec![turn_started("turn-1")],
+        })
+        .await
+        .expect("append turn start");
+
+    let pool = codex_state::open_thread_history_db(&codex_state::SqliteConfig::new_for_testing(
+        home.path().abs(),
+    ))
+    .await
+    .expect("open thread history db");
+    sqlx::query(
+        "UPDATE thread_history_projection_state SET external_input_version = 2 WHERE thread_id = ?",
+    )
+    .bind(thread_id.to_string())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE thread_turns SET status = 'sentinel' WHERE thread_id = ?")
+        .bind(thread_id.to_string())
+        .execute(&pool)
+        .await
+        .expect("mark projected turn");
+    let rollout_path = store
+        .live_rollout_path(thread_id)
+        .await
+        .expect("rollout path");
+    super::materialize_to_sqlite(&store, thread_id, rollout_path.as_path())
+        .await
+        .expect("catch up synchronized rollout");
+
+    let status =
+        sqlx::query_scalar::<_, String>("SELECT status FROM thread_turns WHERE thread_id = ?")
+            .bind(thread_id.to_string())
+            .fetch_one(&pool)
+            .await
+            .expect("read projected turn");
+    assert_eq!(status, "inProgress");
+}

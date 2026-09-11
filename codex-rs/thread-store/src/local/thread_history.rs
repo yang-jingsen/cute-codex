@@ -156,6 +156,22 @@ WHERE thread_id = ?
         });
     }
 
+    if projection_state.is_some_and(|(_, _, version)| version < 3) {
+        // Item IDs and reasoning partitions can change when previously unreadable
+        // historical events become visible. Rebuild this thread's derived rows in
+        // the same transaction as its checkpoint; never retain stale item positions.
+        for statement in [
+            "DELETE FROM thread_items WHERE thread_id = ?",
+            "DELETE FROM thread_turns WHERE thread_id = ?",
+        ] {
+            sqlx::query(statement)
+                .bind(thread_id.as_str())
+                .execute(&mut *transaction)
+                .await
+                .map_err(thread_history_error)?;
+        }
+    }
+
     for projection in projections {
         match projection {
             RolloutProjectionStep::Line(projection) => {

@@ -3291,6 +3291,9 @@ in transcript/raw details; model-facing terminal history summaries exclude it.
 
 Derived history projection revision 3 rebuilds older cached indexes from the
 unchanged authoritative rollout, including previously skipped legacy records.
+The affected thread's derived turn/item rows and checkpoint are replaced in one
+transaction, because restoring interleaved events can split reasoning display
+partitions. Other threads, rollout bytes, and model history are unchanged.
 The existing SQLite column name `external_input_version` stores this internal
 projection revision; it does not change the public ExternalInput version.
 Older readers that reject revision 3 must not be used as writers for this index.
