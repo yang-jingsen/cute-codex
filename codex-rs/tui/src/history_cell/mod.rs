@@ -105,6 +105,7 @@ const RAW_TOOL_OUTPUT_WIDTH: usize = 10_000;
 mod approvals;
 mod base;
 mod cutex_mcp_display;
+mod job_output;
 mod event_presentation;
 mod external_input;
 mod presentation;

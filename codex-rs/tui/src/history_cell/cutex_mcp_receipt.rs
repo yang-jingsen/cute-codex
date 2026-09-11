@@ -3,6 +3,9 @@ use super::*;
 
 pub(in crate::history_cell) struct Outcome {
     pub(in crate::history_cell) text: String,
+    pub(in crate::history_cell) job_id: Option<String>,
+    pub(in crate::history_cell) detail: Vec<String>,
+    pub(in crate::history_cell) output: Option<super::super::job_output::OutputPage>,
     pub(in crate::history_cell) failed: bool,
     pub(in crate::history_cell) uncertain: bool,
 }
@@ -11,23 +14,16 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
     let preset = lookup(invocation)?;
     let value: Value = serde_json::from_str(body).ok()?;
     let args = invocation.arguments.as_ref()?;
+    let mut job_id = None;
+    let mut detail = Vec::new();
+    let mut output = None;
     let mut failed = false;
     let mut uncertain = false;
     let summary = if preset.server == "cutex_job" {
         if preset.tool == "read_output" {
-            if value["jobId"] != args["jobId"]
-                || value["stream"] != args["stream"]
-                || value["fromOffset"].as_u64().is_none()
-                || value["nextOffset"].as_u64().is_none()
-                || value["bytesHex"].as_str().is_none()
-            {
-                return None;
-            }
-            format!(
-                "Read job output · {} · {}",
-                value["jobId"].as_str()?,
-                value["stream"].as_str()?
-            )
+            job_id = Some(value["jobId"].as_str()?.into());
+            output = Some(super::super::job_output::OutputPage::parse(&value, args)?);
+            format!("Read job output · {}", value["jobId"].as_str()?)
         } else {
             let job = if preset.tool == "submit" {
                 if value["status"] != "committed" || !value["deduplicated"].is_boolean() {
@@ -41,6 +37,7 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
                 return None;
             }
             let id = job["jobId"].as_str()?;
+            job_id = Some(id.into());
             if preset.tool == "submit" && job["request"]["actionId"] != args["actionId"] {
                 return None;
             }
@@ -68,7 +65,15 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
                 "cancel" => "Job cancellation returned",
                 _ => "Queried job",
             };
-            format!("{verb} · {id} · {state}")
+            detail.push(format!("State: {state}"));
+            if let Some(code) = job["exitCode"].as_i64() {
+                detail.push(format!("Exit code: {code}"));
+            }
+            if preset.tool == "submit" {
+                format!("{verb} · {} · {id}", args["actionId"].as_str()?)
+            } else {
+                format!("{verb} · {id}")
+            }
         }
     } else if preset.tool == "send" {
         if value["ok"] != true || value["to"] != args["to"] || value["id"].as_str().is_none() {
@@ -189,6 +194,9 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
     };
     Some(Outcome {
         text: summary.trim_end_matches(" · ").into(),
+        job_id,
+        detail,
+        output,
         failed,
         uncertain,
     })
