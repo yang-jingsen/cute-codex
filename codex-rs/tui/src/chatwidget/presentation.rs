@@ -4,6 +4,34 @@ use codex_app_server_protocol::ThreadTimelineEntry;
 use codex_protocol::presentation::PresentationAppended;
 
 impl ChatWidget {
+    pub(super) fn group_pending_presentation(
+        &mut self,
+        cell: Box<dyn HistoryCell>,
+    ) -> Box<dyn HistoryCell> {
+        if self
+            .transcript
+            .pending_presentation_group
+            .as_ref()
+            .is_some_and(|group| group.matches(cell.as_ref()))
+        {
+            if let Some(mcp) = cell.as_any().downcast_ref::<McpToolCallCell>() {
+                self.transcript
+                    .grouped_mcp_seen
+                    .insert(mcp.call_id().into(), mcp.has_result());
+            }
+            if let Some(group) = self.transcript.pending_presentation_group.take() {
+                return match group.combine(cell) {
+                    Ok(cell) => cell,
+                    Err((cell, error)) => {
+                        self.add_error_message(format!("Invalid display group: {error}"));
+                        cell
+                    }
+                };
+            }
+        }
+        cell
+    }
+
     pub(super) fn on_presentation(&mut self, record: PresentationAppended) {
         if let Err(error) = record.validate() {
             self.add_error_message(format!("Invalid durable notice: {error}"));
@@ -19,6 +47,25 @@ impl ChatWidget {
                     "Conflicting durable notice identity; original notice retained.".into(),
                 );
             }
+            return;
+        }
+        let group = history_cell::PendingPresentationGroup {
+            record: record.clone(),
+            counterpart_first: true,
+        };
+        if self
+            .thread_id
+            .is_some_and(|id| id.to_string() == record.origin_thread_id)
+            && self.transcript.pending_presentation_group.is_none()
+            && self
+                .transcript
+                .active_cell
+                .as_ref()
+                .is_some_and(|cell| group.matches(cell.as_ref()))
+        {
+            self.transcript.presentations_seen.insert(identity, record);
+            self.transcript.pending_presentation_group = Some(group);
+            self.bump_active_cell_revision();
             return;
         }
         match history_cell::PresentationHistoryCell::new(record.clone()) {
@@ -41,7 +88,100 @@ impl ChatWidget {
             .filter(|pair| crate::app_backtrack::is_hidden_nested_review_turn(&pair[0], &pair[1]))
             .map(|pair| pair[1].id.clone())
             .collect();
-        for entry in timeline {
+        let mut timeline = timeline.into_iter().peekable();
+        while let Some(entry) = timeline.next() {
+            let pair = match (&entry, timeline.peek()) {
+                (
+                    ThreadTimelineEntry::Item { item, .. },
+                    Some(ThreadTimelineEntry::Presentation { item: record, .. }),
+                ) => Some((item.as_ref(), record, true)),
+                (
+                    ThreadTimelineEntry::Presentation { item: record, .. },
+                    Some(ThreadTimelineEntry::Item { item, .. }),
+                ) => Some((item.as_ref(), record, false)),
+                _ => None,
+            };
+            if let Some((item, record, counterpart_first)) = pair
+                && record.validate().is_ok()
+                && self
+                    .thread_id
+                    .is_some_and(|id| id.to_string() == record.origin_thread_id)
+                && !self.transcript.presentations_seen.contains_key(&(
+                    record.origin_thread_id.clone(),
+                    record.presentation.id.clone(),
+                ))
+                && record.presentation.references.iter().any(|reference| {
+                    match (reference.kind.clone(), item) {
+                        (
+                            codex_protocol::presentation::PresentationReferenceKind::ExternalInput,
+                            ThreadItem::FunctionCallOutput {
+                                id,
+                                name,
+                                namespace,
+                                output,
+                                ..
+                            },
+                        ) => {
+                            reference.id == *id
+                                && history_cell::ExternalInputHistoryCell::parse(
+                                    id,
+                                    name,
+                                    namespace.as_deref(),
+                                    output,
+                                )
+                                .is_some()
+                        }
+                        (
+                            codex_protocol::presentation::PresentationReferenceKind::McpInvocation,
+                            ThreadItem::McpToolCall {
+                                id,
+                                server,
+                                tool,
+                                arguments,
+                                ..
+                            },
+                        ) => {
+                            reference.id == *id
+                                && McpInvocation {
+                                    server: server.clone(),
+                                    tool: tool.clone(),
+                                    arguments: Some(arguments.clone()),
+                                }
+                                .supports_compact_presentation()
+                        }
+                        _ => false,
+                    }
+                })
+            {
+                let record = record.clone();
+                let Some(next) = timeline.next() else {
+                    self.on_presentation(record);
+                    break;
+                };
+                let item_entry = if counterpart_first { entry } else { next };
+                if let ThreadTimelineEntry::Item { turn_id, item, .. } = item_entry {
+                    self.transcript.pending_presentation_group =
+                        Some(history_cell::PendingPresentationGroup {
+                            record: record.clone(),
+                            counterpart_first,
+                        });
+                    self.replay_thread_item(*item, turn_id, replay_kind);
+                    if self.transcript.pending_presentation_group.take().is_some() {
+                        // A duplicate/non-rendered counterpart cannot justify hiding this fact.
+                        self.on_presentation(record);
+                    } else {
+                        self.transcript.presentations_seen.insert(
+                            (
+                                record.origin_thread_id.clone(),
+                                record.presentation.id.clone(),
+                            ),
+                            record,
+                        );
+                    }
+                }
+                continue;
+            }
+
             match entry {
                 ThreadTimelineEntry::Presentation { item, .. } => self.on_presentation(item),
                 ThreadTimelineEntry::Item { turn_id, item, .. } => {

@@ -1,9 +1,10 @@
 ---
 source: tui/src/chatwidget/tests/presentation_tests.rs
+assertion_line: 132
 expression: display
 ---
-• Notice · service/build
-  Report 世界
+• Report 世界 · service/
+  build
   Related MCP
   invocation: call-17
   (linked supplement)

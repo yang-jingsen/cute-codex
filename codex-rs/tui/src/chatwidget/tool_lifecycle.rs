@@ -165,6 +165,11 @@ impl ChatWidget {
     }
 
     pub(crate) fn handle_mcp_tool_call_started_now(&mut self, item: ThreadItem) {
+        if let ThreadItem::McpToolCall { id, .. } = &item
+            && self.transcript.grouped_mcp_seen.get(id) == Some(&true)
+        {
+            return;
+        }
         let ThreadItem::McpToolCall {
             id,
             server,
@@ -199,6 +204,11 @@ impl ChatWidget {
 
     pub(crate) fn handle_mcp_tool_call_completed_now(&mut self, item: ThreadItem) {
         let receipt_label = self.transcript.job_labels.observe(&item);
+        if let ThreadItem::McpToolCall { id, .. } = &item
+            && self.transcript.grouped_mcp_seen.get(id) == Some(&true)
+        {
+            return;
+        }
         self.flush_answer_stream_with_separator();
 
         let ThreadItem::McpToolCall {
@@ -241,6 +251,7 @@ impl ChatWidget {
             (None, None) => Err("MCP tool call completed without a result".to_string()),
         };
 
+        let completed_id = id.clone();
         let extra_cell = match self
             .transcript
             .active_cell
@@ -267,7 +278,9 @@ impl ChatWidget {
         };
 
         self.flush_active_cell();
-
+        if let Some(completed) = self.transcript.grouped_mcp_seen.get_mut(&completed_id) {
+            *completed = true;
+        }
         if let Some(extra) = extra_cell {
             self.add_boxed_history(extra);
         }

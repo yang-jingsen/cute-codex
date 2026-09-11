@@ -1225,6 +1225,7 @@ impl ChatWidget {
     fn flush_active_cell(&mut self) {
         if let Some(active) = self.transcript.take_active_cell() {
             self.transcript.needs_final_message_separator = true;
+            let active = self.group_pending_presentation(active);
             self.app_event_tx.send(AppEvent::InsertHistoryCell(active));
             self.request_pending_usage_output_insertion();
         }
@@ -1281,6 +1282,7 @@ impl ChatWidget {
         {
             self.flush_completed_command_activity();
         }
+        let cell = self.group_pending_presentation(cell);
         self.app_event_tx.send(AppEvent::InsertHistoryCell(cell));
     }
 
