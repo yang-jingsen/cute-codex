@@ -9,6 +9,7 @@ impl ChatWidget {
         display: SessionConfiguredDisplay,
         fork_parent_title: Option<String>,
     ) {
+        self.transcript.presentation_timeline = session.presentation_timeline.clone();
         self.transcript.reset_copy_history();
         let history_metadata = session.message_history.unwrap_or_default();
         self.bottom_pane.set_history_metadata(
@@ -25,6 +26,7 @@ impl ChatWidget {
         self.bottom_pane
             .set_queue_submissions(/*queue_submissions*/ false);
         if previous_thread_id != self.thread_id {
+            self.transcript.presentations_seen.clear();
             self.backend_banner_notice_model = None;
             self.pending_automatic_thread_names.clear();
             self.review.recent_auto_review_denials = RecentAutoReviewDenials::default();

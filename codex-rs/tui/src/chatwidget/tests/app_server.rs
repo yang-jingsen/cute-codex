@@ -46,6 +46,7 @@ fn configured_thread_session(thread_id: ThreadId) -> crate::session_state::Threa
     crate::session_state::ThreadSessionState {
         thread_id,
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "gpt-5.2".to_string(),

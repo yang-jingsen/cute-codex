@@ -542,6 +542,7 @@ fn session_configured_event(model: &str) -> ThreadSessionState {
     ThreadSessionState {
         thread_id: ThreadId::new(),
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: model.to_string(),

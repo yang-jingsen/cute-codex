@@ -636,6 +636,7 @@ async fn required_windows_sandbox_setup_defers_configured_initial_prompt() {
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         thread_id: ThreadId::new(),
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "gpt-test".to_string(),
@@ -1050,6 +1051,7 @@ async fn permissions_selection_marks_auto_review_current_after_session_configure
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         thread_id: ThreadId::new(),
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "gpt-test".to_string(),
@@ -1099,6 +1101,7 @@ async fn permissions_selection_marks_auto_review_current_with_custom_workspace_w
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
         thread_id: ThreadId::new(),
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "gpt-test".to_string(),

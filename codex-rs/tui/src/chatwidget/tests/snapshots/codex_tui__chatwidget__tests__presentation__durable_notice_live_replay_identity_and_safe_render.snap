@@ -1,0 +1,8 @@
+---
+source: tui/src/chatwidget/tests/presentation_tests.rs
+expression: display
+---
+• Notice · service/build
+  Report 世界
+  safe bold
+  第二行

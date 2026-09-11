@@ -1,0 +1,80 @@
+//! A durable display fact, independent of model conversation items.
+use super::*;
+use codex_protocol::presentation::PresentationAppended;
+use codex_protocol::presentation::PresentationFormat;
+use codex_protocol::presentation::PresentationReferenceKind;
+
+#[derive(Debug)]
+pub(crate) struct PresentationHistoryCell {
+    record: PresentationAppended,
+}
+impl PresentationHistoryCell {
+    pub(crate) fn new(record: PresentationAppended) -> Result<Self, &'static str> {
+        record.validate()?;
+        Ok(Self { record })
+    }
+    fn render(
+        &self,
+        width: u16,
+        bullet: Option<Span<'static>>,
+        markdown: bool,
+    ) -> Vec<Line<'static>> {
+        let p = &self.record.presentation;
+        let kind = match p.source.kind {
+            codex_protocol::external_input::SourceKind::Agent => "agent",
+            codex_protocol::external_input::SourceKind::Service => "service",
+        };
+        let header = format!("Notice · {kind}/{}", p.source.id);
+        let mut detail = Vec::new();
+        if !p.title.is_empty() {
+            detail.push(p.title.clone());
+        }
+        for reference in &p.references {
+            let kind = match reference.kind {
+                PresentationReferenceKind::ExternalInput => "external input",
+                PresentationReferenceKind::McpInvocation => "MCP invocation",
+            };
+            detail.push(format!(
+                "Related {kind}: {} (linked supplement)",
+                reference.id
+            ));
+        }
+        let indent = bullet.is_some();
+        let mut lines =
+            super::event_presentation::render_event(Some(&header), &detail, bullet, width);
+        if markdown && p.format == PresentationFormat::Markdown {
+            let clean = super::messages::sanitize_user_text(p.body.as_str().into());
+            let mut body = Vec::new();
+            append_markdown(
+                &clean,
+                Some(usize::from(
+                    width.saturating_sub(if indent { 2 } else { 0 }).max(1),
+                )),
+                None,
+                &mut body,
+            );
+            for mut line in body {
+                if indent {
+                    line.spans.insert(0, "  ".into());
+                }
+                lines.push(line);
+            }
+        } else {
+            lines.extend(super::event_presentation::render_event(
+                None,
+                std::slice::from_ref(&p.body),
+                if indent { Some("•".dim()) } else { None },
+                width,
+            ));
+        }
+        lines
+    }
+}
+impl HistoryCell for PresentationHistoryCell {
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.render(width, Some("•".dim()), true)
+    }
+    fn raw_lines(&self) -> Vec<Line<'static>> {
+        self.render(u16::MAX, None, false)
+    }
+}

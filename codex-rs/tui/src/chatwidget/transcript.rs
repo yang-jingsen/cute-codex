@@ -27,6 +27,11 @@ pub(super) struct ActiveCellLayoutCache {
 
 #[derive(Default)]
 pub(super) struct TranscriptState {
+    pub(super) presentation_timeline: Option<Vec<codex_app_server_protocol::ThreadTimelineEntry>>,
+    pub(super) presentations_seen: std::collections::BTreeMap<
+        (String, String),
+        codex_protocol::presentation::PresentationAppended,
+    >,
     pub(super) external_inputs_seen: std::collections::HashSet<(String, String)>,
     pub(super) active_cell: Option<Box<dyn HistoryCell>>,
     /// Monotonic-ish counter used to invalidate transcript overlay caching.

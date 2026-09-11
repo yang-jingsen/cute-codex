@@ -17,6 +17,7 @@ fn plan_test_session(thread_id: ThreadId) -> crate::session_state::ThreadSession
     crate::session_state::ThreadSessionState {
         thread_id,
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "test-model".to_string(),
@@ -1251,6 +1252,7 @@ async fn submit_user_message_emits_structured_plugin_mentions_from_bindings() {
     let configured = crate::session_state::ThreadSessionState {
         thread_id,
         forked_from_id: None,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name: None,
         model: "test-model".to_string(),

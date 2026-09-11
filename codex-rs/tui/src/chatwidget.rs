@@ -407,6 +407,7 @@ use self::rate_limits::is_app_server_cyber_policy_error;
 mod recap;
 mod reset_credits;
 pub(crate) use self::rate_limits::limit_label_for_window;
+mod presentation;
 mod reasoning_shortcuts;
 mod rendering;
 mod replay;

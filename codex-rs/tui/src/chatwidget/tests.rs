@@ -276,3 +276,5 @@ pub(super) use helpers::*;
 
 #[path = "tests/inbound_presentation_tests.rs"]
 mod inbound_presentation;
+#[path = "tests/presentation_tests.rs"]
+mod presentation;

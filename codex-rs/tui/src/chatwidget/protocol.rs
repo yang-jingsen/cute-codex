@@ -31,7 +31,14 @@ impl ChatWidget {
             self.restore_retry_status_header_if_present();
         }
         match notification {
-            ServerNotification::ThreadPresentationAppended(_) => {} // Consumer is a separate stage.
+            ServerNotification::ThreadPresentationAppended(notification) => {
+                if self
+                    .thread_id()
+                    .is_some_and(|id| id.to_string() == notification.thread_id)
+                {
+                    self.on_presentation(notification.item);
+                }
+            }
 
             ServerNotification::ThreadTokenUsageUpdated(notification) => {
                 self.set_token_info(Some(token_usage_info_from_app_server(
