@@ -8,6 +8,10 @@ use codex_utils_cli::SharedCliOptions;
 #[derive(Parser, Clone, Debug)]
 #[command(version)]
 pub struct Cli {
+    /// Load reviewed static statusline display values (v1 JSON), once for this TUI.
+    #[arg(long, value_name = "ABS_PATH")]
+    pub status_items_file: Option<std::path::PathBuf>,
+
     /// Optional user prompt to start the session.
     #[arg(value_name = "PROMPT", value_hint = clap::ValueHint::Other)]
     pub prompt: Option<String>,

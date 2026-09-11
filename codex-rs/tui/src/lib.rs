@@ -121,6 +121,7 @@ pub(crate) mod custom_terminal;
 mod pets;
 pub use custom_terminal::Terminal;
 mod auto_review_denials;
+mod custom_status_items;
 mod cwd_prompt;
 mod debug_config;
 mod diff_model;
@@ -942,6 +943,7 @@ pub async fn run_main(
     loader_overrides: LoaderOverrides,
     explicit_remote_endpoint: Option<RemoteAppServerEndpoint>,
 ) -> std::io::Result<AppExitInfo> {
+    custom_status_items::initialize(cli.status_items_file.as_deref())?;
     match startup_orchestration::run_main_inner(
         cli,
         arg0_paths,

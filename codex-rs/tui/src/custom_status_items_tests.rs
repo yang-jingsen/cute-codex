@@ -1,0 +1,193 @@
+use super::*;
+use pretty_assertions::assert_eq;
+use serde_json::json;
+
+fn document(text: &str) -> Vec<u8> {
+    serde_json::to_vec(&json!({"version":1,"items":[
+        {"id":"custom:profile","text":text,"style":{"fg":"#FFFFFF","bold":true}},
+        {"id":"custom:bon-voyage","text":"Bon voyage !","style":{"fg":"#F6A3C8","bold":true}}
+    ]}))
+    .unwrap()
+}
+
+#[test]
+#[allow(clippy::disallowed_methods)]
+fn exact_styles_and_inherited_label_are_inert() {
+    let items = StatusItems::parse(&document("  inherited\nlabel  ")).unwrap();
+    assert_eq!(
+        items.value(StatusLineItem::CustomProfile),
+        "inherited label"
+    );
+    assert_eq!(items.value(StatusLineItem::CustomBonVoyage), "Bon voyage !");
+    assert_eq!(
+        items.style(StatusLineItem::CustomBonVoyage),
+        Some(
+            Style::default()
+                .fg(Color::Rgb(246, 163, 200))
+                .add_modifier(Modifier::BOLD)
+        )
+    );
+    assert_eq!(
+        items.style(StatusLineItem::CustomProfile),
+        Some(
+            Style::default()
+                .fg(Color::Rgb(255, 255, 255))
+                .add_modifier(Modifier::BOLD)
+        )
+    );
+    let inert = StatusItems::parse(&document("$(command) ${TOKEN} {account} /other/file")).unwrap();
+    assert_eq!(
+        inert.value(StatusLineItem::CustomProfile),
+        "$(command) ${TOKEN} {account} /other/file"
+    );
+}
+
+#[test]
+fn bounds_controls_and_unsupported_sources() {
+    assert!(StatusItems::parse(&document(&"é".repeat(128))).is_ok());
+    assert!(StatusItems::parse(&document(&format!("{}x", "é".repeat(128)))).is_err());
+    assert!(StatusItems::parse(&document("")).is_err());
+    assert!(StatusItems::parse(&document("\n\u{1b}\u{202e}")).is_err());
+    let items = StatusItems::parse(&document("abc\u{1b}[31m\u{202e}中文\r\nnext")).unwrap();
+    assert_eq!(
+        items.value(StatusLineItem::CustomProfile),
+        "abc [31m 中文 next"
+    );
+    for bad in [
+        json!({"version":2,"items":[]}),
+        json!({"version":1.0,"items":[]}),
+        json!({"version":1,"items":[],"source":"env"}),
+        json!({"version":1,"items":[{"id":"custom:other","text":"x"}]}),
+        json!({"version":1,"items":[{"id":"custom:profile","text":"x","source":{"kind":"launch_profile"}}]}),
+        json!({"version":1,"items":[{"id":"custom:profile","text":"x","style":{"fg":"red"}}]}),
+        json!({"version":1,"items":[{"id":"custom:profile","text":"x","style":{"bold":null}}]}),
+        json!({"version":1,"items":[{"id":"custom:profile","text":"x"},{"id":"custom:profile","text":"y"}]}),
+    ] {
+        assert!(StatusItems::parse(&serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    let mut exact = br#"{"version":1,"items":[]}"#.to_vec();
+    exact.resize(8192, b' ');
+    assert!(StatusItems::parse(&exact).is_ok());
+    exact.push(b' ');
+    assert!(StatusItems::parse(&exact).is_err());
+}
+
+#[test]
+fn selected_file_isolation_missing_and_malformed() {
+    let dir = tempfile::tempdir().unwrap();
+    let first = dir.path().join("first.json");
+    let second = dir.path().join("second.json");
+    std::fs::write(&first, document("first")).unwrap();
+    std::fs::write(&second, document("second")).unwrap();
+    let loaded = StatusItems::load(&first).unwrap();
+    std::fs::write(&first, document("replacement")).unwrap();
+    assert_eq!(loaded.value(StatusLineItem::CustomProfile), "first");
+    assert_eq!(
+        StatusItems::load(&second)
+            .unwrap()
+            .value(StatusLineItem::CustomProfile),
+        "second"
+    );
+    assert!(StatusItems::load(&dir.path().join("missing")).is_err());
+    assert!(StatusItems::load(Path::new("relative.json")).is_err());
+    std::fs::write(&first, "malformed").unwrap();
+    assert!(StatusItems::load(&first).is_err());
+    assert!(StatusItems::load(dir.path()).is_err());
+    #[cfg(unix)]
+    {
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&second, &link).unwrap();
+        assert!(StatusItems::load(&link).is_err());
+    }
+    assert_eq!(
+        StatusItems::default().value(StatusLineItem::CustomProfile),
+        "[custom:profile unavailable]"
+    );
+    assert!("custom:other".parse::<StatusLineItem>().is_err());
+}
+
+#[test]
+fn status_items_process_renderer() {
+    // The real loaded-once store runs in a separate child so parallel/default
+    // statusline snapshots cannot inherit a selected profile from this test.
+    if let Some(path) = std::env::var_os("CODEX_TEST_STATUS_FIXTURE") {
+        initialize(Some(Path::new(&path))).unwrap();
+        assert!(initialize(None).is_err());
+        let line = crate::bottom_pane::status_line_from_segments(
+            [
+                (
+                    StatusLineItem::CustomBonVoyage,
+                    value(StatusLineItem::CustomBonVoyage),
+                ),
+                (
+                    StatusLineItem::CustomProfile,
+                    value(StatusLineItem::CustomProfile),
+                ),
+                (StatusLineItem::ModelName, "model low".to_owned()),
+            ],
+            /*use_theme_colors*/ false,
+        )
+        .unwrap();
+        assert_eq!(
+            line.spans[0].style,
+            style(StatusLineItem::CustomBonVoyage).unwrap()
+        );
+        assert_eq!(
+            line.spans[2].style,
+            style(StatusLineItem::CustomProfile).unwrap()
+        );
+        assert!(line.spans[4].style.add_modifier.contains(Modifier::DIM));
+        let preview = crate::bottom_pane::StatusSurfacePreviewData::default()
+            .status_line_for_items(
+                [
+                    StatusLineItem::CustomBonVoyage,
+                    StatusLineItem::CustomProfile,
+                ],
+                /*use_theme_colors*/ true,
+            )
+            .unwrap();
+        assert_eq!(preview.spans[..3], line.spans[..3]);
+        // Render through the same native ratatui width handling as the footer.
+        let draw = |width| {
+            let mut buffer =
+                ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, width, 1));
+            ratatui::widgets::Widget::render(line.clone(), buffer.area, &mut buffer);
+            let mut text = String::new();
+            let mut x = 0;
+            while x < width {
+                let symbol = buffer[(x, 0)].symbol();
+                text.push_str(symbol);
+                x += unicode_width::UnicodeWidthStr::width(symbol).max(1) as u16;
+            }
+            text.trim_end().to_owned()
+        };
+        insta::assert_snapshot!(
+            "reviewed_status_items",
+            format!("{}\n{}", draw(70), draw(24))
+        );
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("display.json");
+    std::fs::write(&path, document("继承 profile")).unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "custom_status_items::tests::status_items_process_renderer",
+            "--nocapture",
+        ])
+        .env("CODEX_TEST_STATUS_FIXTURE", path)
+        .env("CODEX_LAUNCH_PROFILE", "wrong-default-profile")
+        .env(
+            "CODEX_CUSTOM_STATUS_ITEMS_FILE",
+            "/not-selected/catalog.json",
+        )
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

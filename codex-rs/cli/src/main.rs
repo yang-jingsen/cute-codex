@@ -1058,6 +1058,14 @@ async fn cli_main(
         mut interactive,
         subcommand,
     } = MultitoolCli::parse();
+    if interactive.status_items_file.is_some()
+        && !matches!(
+            &subcommand,
+            None | Some(Subcommand::Resume(_) | Subcommand::Fork(_))
+        )
+    {
+        anyhow::bail!("--status-items-file requires an interactive, resume, or fork TUI launch");
+    }
     if auth_file.is_some() {
         let local_supported = matches!(
             &subcommand,
@@ -2844,6 +2852,7 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
     let TuiCli {
         shared,
         strict_config,
+        status_items_file,
         approval_policy,
         web_search,
         no_alt_screen,
@@ -2851,6 +2860,9 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
         mut config_overrides,
         ..
     } = subcommand_cli;
+    if status_items_file.is_some() {
+        interactive.status_items_file = status_items_file;
+    }
     let subcommand_auto_review = shared.auto_review;
     interactive
         .shared
@@ -2894,6 +2906,34 @@ mod tests {
     use codex_protocol::ThreadId;
     use codex_tui::TokenUsage;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn reviewed_status_items_follow_resume_and_fork_cli_selection() {
+        let resume = finalize_resume_from_args(&[
+            "codex",
+            "--status-items-file",
+            "/reviewed/parent.json",
+            "resume",
+            "--last",
+            "--status-items-file",
+            "/reviewed/selected.json",
+        ]);
+        assert_eq!(
+            resume.status_items_file,
+            Some(PathBuf::from("/reviewed/selected.json"))
+        );
+        let fork = finalize_fork_from_args(&[
+            "codex",
+            "--status-items-file",
+            "/reviewed/inherited.json",
+            "fork",
+            "--last",
+        ]);
+        assert_eq!(
+            fork.status_items_file,
+            Some(PathBuf::from("/reviewed/inherited.json"))
+        );
+    }
 
     #[test]
     fn interactive_tui_future_stays_bounded() {
@@ -3047,6 +3087,7 @@ mod tests {
             subcommand,
             feature_toggles: _,
             remote: _,
+            auth_file: _,
         } = cli;
         interactive
             .shared
@@ -3084,6 +3125,7 @@ mod tests {
             subcommand,
             feature_toggles: _,
             remote: _,
+            auth_file: _,
         } = cli;
         interactive
             .shared
@@ -3128,6 +3170,7 @@ mod tests {
             subcommand,
             feature_toggles: _,
             remote: _,
+            auth_file: _,
         } = cli;
 
         let Subcommand::Archive(SessionArchiveCommand {

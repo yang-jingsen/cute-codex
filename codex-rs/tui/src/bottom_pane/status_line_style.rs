@@ -30,6 +30,7 @@ enum StatusLineAccent {
 impl StatusLineAccent {
     fn for_item(item: StatusLineItem) -> Self {
         match item {
+            StatusLineItem::CustomProfile | StatusLineItem::CustomBonVoyage => Self::Metadata,
             StatusLineItem::ModelName
             | StatusLineItem::ModelWithReasoning
             | StatusLineItem::Reasoning => Self::Model,
@@ -116,6 +117,7 @@ where
         } else {
             Style::default().dim()
         };
+        let style = crate::custom_status_items::style(item).unwrap_or(style);
         let style = if item == StatusLineItem::PullRequestNumber {
             style.underlined()
         } else {

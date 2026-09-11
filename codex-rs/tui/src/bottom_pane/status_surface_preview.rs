@@ -7,6 +7,8 @@ use super::status_line_setup::StatusLineItem;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) enum StatusSurfacePreviewItem {
+    CustomProfile,
+    CustomBonVoyage,
     AppName,
     ProjectName,
     ProjectRoot,
@@ -43,6 +45,8 @@ pub(crate) enum StatusSurfacePreviewItem {
 impl StatusSurfacePreviewItem {
     fn placeholder(self) -> &'static str {
         match self {
+            Self::CustomProfile => "[custom:profile unavailable]",
+            Self::CustomBonVoyage => "[custom:bon-voyage unavailable]",
             StatusSurfacePreviewItem::AppName => "codex",
             StatusSurfacePreviewItem::ProjectName => "my-project",
             StatusSurfacePreviewItem::ProjectRoot => "my-project",
@@ -79,6 +83,8 @@ impl StatusSurfacePreviewItem {
 
     pub(crate) fn iter() -> impl Iterator<Item = Self> {
         [
+            Self::CustomProfile,
+            Self::CustomBonVoyage,
             Self::AppName,
             Self::ProjectName,
             Self::ProjectRoot,
@@ -236,6 +242,9 @@ impl StatusSurfacePreviewData {
         I: IntoIterator<Item = StatusLineItem>,
     {
         let segments = items.into_iter().filter_map(|item| {
+            if crate::custom_status_items::is_custom(item) {
+                return Some((item, crate::custom_status_items::value(item)));
+            }
             self.value_for(item.preview_item())
                 .map(|value| (item, value.to_string()))
         });

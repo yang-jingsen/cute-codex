@@ -54,6 +54,12 @@ const STATUS_LINE_USE_THEME_COLORS_ITEM_ID: &str = "status-line-use-theme-colors
 #[derive(EnumIter, EnumString, Display, Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 #[strum(serialize_all = "kebab_case")]
 pub(crate) enum StatusLineItem {
+    /// Inert reviewed launch label, never account identity.
+    #[strum(to_string = "custom:profile")]
+    CustomProfile,
+    /// Inert reviewed static greeting.
+    #[strum(to_string = "custom:bon-voyage")]
+    CustomBonVoyage,
     /// The current model name.
     #[strum(to_string = "model", serialize = "model-name")]
     ModelName,
@@ -158,6 +164,8 @@ impl StatusLineItem {
     /// User-visible description shown in the popup.
     pub(crate) fn description(self) -> &'static str {
         match self {
+            Self::CustomProfile => "Reviewed launch display label (not account identity)",
+            Self::CustomBonVoyage => "Reviewed static greeting",
             StatusLineItem::ModelName => "Current model name",
             StatusLineItem::ModelWithReasoning => "Current model name with reasoning level",
             StatusLineItem::Reasoning => "Current reasoning level",
@@ -216,6 +224,8 @@ impl StatusLineItem {
 
     pub(crate) fn preview_item(self) -> StatusSurfacePreviewItem {
         match self {
+            Self::CustomProfile => StatusSurfacePreviewItem::CustomProfile,
+            Self::CustomBonVoyage => StatusSurfacePreviewItem::CustomBonVoyage,
             StatusLineItem::ModelName => StatusSurfacePreviewItem::Model,
             StatusLineItem::ModelWithReasoning => StatusSurfacePreviewItem::ModelWithReasoning,
             StatusLineItem::Reasoning => StatusSurfacePreviewItem::Reasoning,
@@ -310,7 +320,10 @@ impl StatusLineSetupView {
 
         for item in StatusLineItem::iter() {
             let item_id = item.to_string();
-            if used_ids.contains(&item_id) {
+            if used_ids.contains(&item_id)
+                || (crate::custom_status_items::is_custom(item)
+                    && crate::custom_status_items::style(item).is_none())
+            {
                 continue;
             }
             items.push(Self::status_line_select_item(
