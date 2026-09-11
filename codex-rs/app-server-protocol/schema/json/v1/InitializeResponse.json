@@ -42,6 +42,18 @@
         "null"
       ]
     },
+    "externalInputVersions": {
+      "description": "Supported submit envelope versions; control status/retry remains v1.",
+      "items": {
+        "format": "uint32",
+        "minimum": 0.0,
+        "type": "integer"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "platformFamily": {
       "description": "Platform family for the running app-server target, for example `\"unix\"` or `\"windows\"`.",
       "type": "string"

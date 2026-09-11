@@ -3326,6 +3326,18 @@
             "null"
           ]
         },
+        "externalInputVersions": {
+          "description": "Supported submit envelope versions; control status/retry remains v1.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "platformFamily": {
           "description": "Platform family for the running app-server target, for example `\"unix\"` or `\"windows\"`.",
           "type": "string"
@@ -11695,6 +11707,20 @@
           "threadId"
         ],
         "title": "ExternalInputStatusChangedNotification",
+        "type": "object"
+      },
+      "ExternalInputView": {
+        "additionalProperties": false,
+        "properties": {
+          "data": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "schema"
+        ],
         "type": "object"
       },
       "FeedbackRequirements": {
@@ -21462,6 +21488,17 @@
           },
           {
             "properties": {
+              "externalInputView": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/v2/ExternalInputView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
               "id": {
                 "type": "string"
               },

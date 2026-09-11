@@ -443,6 +443,20 @@
       ],
       "type": "string"
     },
+    "ExternalInputView": {
+      "additionalProperties": false,
+      "properties": {
+        "data": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "data",
+        "schema"
+      ],
+      "type": "object"
+    },
     "FileUpdateChange": {
       "properties": {
         "diff": {
@@ -1046,6 +1060,17 @@
         },
         {
           "properties": {
+            "externalInputView": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExternalInputView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "id": {
               "type": "string"
             },

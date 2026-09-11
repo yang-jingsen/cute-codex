@@ -7521,6 +7521,20 @@
       "title": "ExternalInputStatusChangedNotification",
       "type": "object"
     },
+    "ExternalInputView": {
+      "additionalProperties": false,
+      "properties": {
+        "data": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "data",
+        "schema"
+      ],
+      "type": "object"
+    },
     "FeedbackRequirements": {
       "properties": {
         "enabled": {
@@ -19140,6 +19154,17 @@
         },
         {
           "properties": {
+            "externalInputView": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExternalInputView"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "id": {
               "type": "string"
             },

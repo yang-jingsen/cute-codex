@@ -10,6 +10,10 @@ export type InitializeResponse = {
  */
 externalInputVersion?: number,
 /**
+ * Supported submit envelope versions; control status/retry remains v1.
+ */
+externalInputVersions?: Array<number>,
+/**
  * Durable display-only append/status and timeline support on the bound receiver.
  */
 presentationVersion?: number,

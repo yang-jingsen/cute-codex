@@ -170,6 +170,7 @@ export type { ExternalInputSource } from "./ExternalInputSource";
 export type { ExternalInputSourceKind } from "./ExternalInputSourceKind";
 export type { ExternalInputStatus } from "./ExternalInputStatus";
 export type { ExternalInputStatusChangedNotification } from "./ExternalInputStatusChangedNotification";
+export type { ExternalInputView } from "./ExternalInputView";
 export type { FeedbackRequirements } from "./FeedbackRequirements";
 export type { FeedbackUploadParams } from "./FeedbackUploadParams";
 export type { FeedbackUploadResponse } from "./FeedbackUploadResponse";
