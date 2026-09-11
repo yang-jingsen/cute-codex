@@ -72,11 +72,11 @@ impl JobLabels {
                 }
             })
             .or_insert_with(|| Some(action.into()));
-        Some(self.label(&id))
+        Some(self.id_label(&id))
     }
-    pub(crate) fn label(&self, id: &str) -> String {
+    fn id_label(&self, id: &str) -> String {
         let short = short_id(id);
-        let display = if self
+        if self
             .0
             .keys()
             .any(|other| other != id && short_id(other) == short)
@@ -84,7 +84,10 @@ impl JobLabels {
             id.to_owned()
         } else {
             short
-        };
+        }
+    }
+    pub(crate) fn label(&self, id: &str) -> String {
+        let display = self.id_label(id);
         match self.0.get(id).and_then(Option::as_ref) {
             Some(action) => format!("{action} · {display}"),
             None => display,

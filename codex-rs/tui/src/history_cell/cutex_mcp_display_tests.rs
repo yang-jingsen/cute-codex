@@ -52,6 +52,15 @@ fn job_lifecycle_pink_and_full_invocation() {
     );
     let detailed = (call.transcript_lines(120), call.raw_lines());
     let display = call.display_lines(40);
+    assert!(
+        display
+            .iter()
+            .find(|line| line.to_string().contains("State:"))
+            .unwrap()
+            .style
+            .add_modifier
+            .contains(ratatui::style::Modifier::DIM)
+    );
     assert_eq!(
         display[0].spans[0].style.fg,
         Some(crate::terminal_palette::rgb_color((0xF6, 0xA3, 0xC8)))
@@ -379,4 +388,20 @@ fn conflicting_structured_result_preserves_upstream_detail() {
         }),
     );
     assert_eq!(call.display_lines(80), call.transcript_lines(80));
+}
+
+#[test]
+fn submit_action_survives_ambiguous_history_label() {
+    let mut call = cell(
+        "cutex_job",
+        "submit",
+        json!({"actionId":"action-🦀","argv":["fixed"],"cwd":"/private"}),
+    );
+    call.set_job_label("job-1".into());
+    finish(
+        &mut call,
+        json!({"status":"committed","deduplicated":false,"job":job("running")}),
+        false,
+    );
+    assert!(render(call.display_lines(80)).contains("Submitted job · action-🦀 · job-1"));
 }

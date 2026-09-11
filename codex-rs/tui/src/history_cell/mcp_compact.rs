@@ -42,22 +42,13 @@ pub(super) fn render(cell: &McpToolCallCell, width: u16) -> Option<Vec<Line<'sta
                 if let Some(id) = &outcome.job_id
                     && let Some(prefix) = outcome.text.strip_suffix(id)
                 {
-                    let label = if cell.invocation.tool == "submit" {
-                        super::super::job_labels::short_id(id)
-                    } else {
-                        cell.job_label
-                            .clone()
-                            .unwrap_or_else(|| super::super::job_labels::short_id(id))
-                    };
-                    outcome.text = if cell.invocation.tool == "submit" && cell.job_label.is_some() {
-                        format!(
-                            "{} · {}",
-                            prefix.split(" · ").next().unwrap_or(prefix),
-                            cell.job_label.as_deref().unwrap_or(&label)
-                        )
-                    } else {
-                        format!("{prefix}{label}")
-                    };
+                    let label = cell
+                        .job_label
+                        .clone()
+                        .unwrap_or_else(|| super::super::job_labels::short_id(id));
+                    // The submit prefix already contains this exact request's actionId. A
+                    // historical mapping conflict must never remove that current-call fact.
+                    outcome.text = format!("{prefix}{label}");
                 }
                 outcome
             });
@@ -97,8 +88,18 @@ pub(super) fn render(cell: &McpToolCallCell, width: u16) -> Option<Vec<Line<'sta
             None => Vec::new(),
         }
     };
-    let mut lines =
-        super::super::event_presentation::render_event(Some(&header), &body, Some(bullet), width);
+    let mut lines = super::super::event_presentation::render_event(
+        Some(&header),
+        &[],
+        Some(bullet.clone()),
+        width,
+    );
+    let details = super::super::event_presentation::render_event(None, &body, Some(bullet), width);
+    lines.extend(
+        details
+            .into_iter()
+            .map(|line| if summary.is_some() { line.dim() } else { line }),
+    );
     if let Some(output) = summary.and_then(|summary| summary.output) {
         lines.extend(output.lines(width));
     }

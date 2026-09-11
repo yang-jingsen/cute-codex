@@ -54,7 +54,12 @@ impl PresentationHistoryCell {
         }
         let indent = bullet.is_some();
         let mut lines =
-            super::event_presentation::render_event(Some(&header), &detail, bullet, width);
+            super::event_presentation::render_event(Some(&header), &[], bullet.clone(), width);
+        lines.extend(
+            super::event_presentation::render_event(None, &detail, bullet, width)
+                .into_iter()
+                .map(|line| line.dim()),
+        );
         if markdown && p.format == PresentationFormat::Markdown {
             let clean = super::messages::sanitize_user_text(p.body.as_str().into());
             let mut body = Vec::new();
