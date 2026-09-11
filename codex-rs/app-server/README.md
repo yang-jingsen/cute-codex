@@ -3038,6 +3038,23 @@ records never become model text or ordinary display items. The typed non-message
 adapter in `core/context` uses a reviewed, task-scoped exception to the
 contextual-user-fragment trait so it cannot invent a Human or privileged role.
 
+Display projects only a complete, matching commit/canonical-item pair into the
+existing `ThreadItem::FunctionCallOutput`, preserving the original business ID
+and receipt turn association. After the original persistence/context barrier,
+`item/completed` publishes that same view without writing a second event record.
+This typed notification works on resumed subscriptions without enabling the raw
+provider stream. Status-only notifications do not manufacture message bodies;
+idle passive admission without A4 has no persisted display item.
+
+Full and paginated history expose this view. Older derived indexes are replayed
+from authoritative history on first access, with item updates and the projection
+version committed together; canonical JSONL is not rewritten. Corrupt or partial
+pairs fail projection, and a generic unpaired function output is not proof of
+external admission. The TUI renders source/type/text as neutral external input,
+using original thread/item identity for replay deduplication. Source labels are
+not authenticated privilege, and a displayed input is not a processed result.
+No new wire fields or presentation carrier are introduced.
+
 A4 requires the complete pair, writer flush, pending metadata publication, and
 canonical in-memory context publication. It promises process-restart recovery,
 not fsync or power-loss durability. Partial or conflicting history fails closed.
