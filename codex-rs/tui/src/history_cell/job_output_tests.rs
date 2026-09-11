@@ -65,3 +65,25 @@ fn output_page_binary_empty_and_preview_window() {
         assert!(lines.len() <= 8);
     }
 }
+
+#[test]
+fn output_page_exact_byte_cap_and_grapheme_boundary() {
+    let exact = parsed(&page("x".repeat(2048).as_bytes()))
+        .unwrap()
+        .lines(4096);
+    assert_eq!(exact.len(), 2);
+    assert_eq!(exact[1].to_string(), format!("  {}", "x".repeat(2048)));
+    let over = parsed(&page("x".repeat(2049).as_bytes()))
+        .unwrap()
+        .lines(4096);
+    assert_eq!(over[1], exact[1]);
+    assert!(over[2].to_string().contains("Preview shortened"));
+    let combined = format!("{}e\u{301}", "x".repeat(2047));
+    let lines = parsed(&page(combined.as_bytes())).unwrap().lines(4096);
+    assert_eq!(lines[1].to_string(), format!("  {}", "x".repeat(2047)));
+    assert!(lines[2].to_string().contains("Preview shortened"));
+    let mut overflow = page(b"x");
+    overflow["fromOffset"] = json!(u64::MAX);
+    overflow["nextOffset"] = json!(0);
+    assert!(parsed(&overflow).is_none());
+}
