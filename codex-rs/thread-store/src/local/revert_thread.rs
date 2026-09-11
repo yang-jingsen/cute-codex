@@ -106,6 +106,11 @@ pub(super) async fn revert(
                 cutoff.min(history_base.map_or(0, |base| base.end_ordinal_exclusive))
             });
 
+    let retained_displays = super::presentation_retention::suffix(
+        &lineage,
+        history_base.map_or(0, |base| base.end_ordinal_exclusive),
+    )
+    .await?;
     let rollout_id = ThreadId::new();
     let recorder = create_replacement_recorder(
         store,
@@ -116,6 +121,10 @@ pub(super) async fn revert(
     )
     .await?;
     let replacement_path = recorder.rollout_path().to_path_buf();
+    recorder
+        .record_canonical_items(&retained_displays)
+        .await
+        .map_err(thread_store_io_error)?;
     recorder.persist().await.map_err(thread_store_io_error)?;
     recorder.shutdown().await.map_err(thread_store_io_error)?;
 

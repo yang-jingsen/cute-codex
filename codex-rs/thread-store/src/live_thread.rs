@@ -314,6 +314,15 @@ impl LiveThread {
         self.thread_store.discard_thread(self.thread_id).await
     }
 
+    pub async fn load_presentation_history(&self) -> ThreadStoreResult<StoredThreadHistory> {
+        self.thread_store
+            .load_presentation_history(LoadThreadHistoryParams {
+                thread_id: self.thread_id,
+                include_archived: false,
+            })
+            .await
+    }
+
     pub async fn load_history(
         &self,
         include_archived: bool,

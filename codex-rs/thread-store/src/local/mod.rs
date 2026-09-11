@@ -8,6 +8,8 @@ mod model_context;
 mod move_thread_to_section;
 mod paginated_fork;
 mod pending_thread_metadata;
+mod presentation_history;
+mod presentation_retention;
 mod projects;
 mod read_thread;
 mod revert_thread;
@@ -491,6 +493,13 @@ impl ThreadStore for LocalThreadStore {
         params: LoadThreadHistoryParams,
     ) -> ThreadStoreFuture<'_, StoredThreadHistory> {
         Box::pin(LocalThreadStore::load_history(self, params))
+    }
+
+    fn load_presentation_history(
+        &self,
+        params: LoadThreadHistoryParams,
+    ) -> ThreadStoreFuture<'_, StoredThreadHistory> {
+        Box::pin(presentation_history::load(self, params))
     }
 
     fn load_latest_model_context(
