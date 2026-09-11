@@ -365,3 +365,18 @@ fn transport_error_and_contradictory_receipt() {
     finish(&mut call, job("running"), true);
     assert_eq!(call.display_lines(80), call.transcript_lines(80));
 }
+
+#[test]
+fn conflicting_structured_result_preserves_upstream_detail() {
+    let mut call = cell("cutex_job", "query", json!({"jobId":"job-1"}));
+    call.complete(
+        Duration::ZERO,
+        Ok(codex_protocol::mcp::CallToolResult {
+            content: vec![json!({"type":"text","text":job("running").to_string()})],
+            structured_content: Some(job("failed")),
+            is_error: Some(false),
+            meta: None,
+        }),
+    );
+    assert_eq!(call.display_lines(80), call.transcript_lines(80));
+}

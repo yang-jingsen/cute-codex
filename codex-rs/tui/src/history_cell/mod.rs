@@ -106,6 +106,8 @@ mod approvals;
 mod base;
 mod cutex_mcp_display;
 mod job_output;
+mod job_labels;
+pub(crate) use job_labels::JobLabels;
 mod event_presentation;
 mod external_input;
 mod presentation;

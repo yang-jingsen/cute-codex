@@ -45,6 +45,8 @@ fn mcp_auth_status_label(status: McpAuthStatus) -> &'static str {
 #[derive(Debug)]
 pub(crate) struct McpToolCallCell {
     call_id: String,
+    job_label: Option<String>,
+    compact_result_consistent: bool,
     invocation: McpInvocation,
     start_time: Instant,
     duration: Option<Duration>,
@@ -57,6 +59,12 @@ pub(crate) struct McpInvocation {
     pub(crate) server: String,
     pub(crate) tool: String,
     pub(crate) arguments: Option<serde_json::Value>,
+}
+
+impl McpInvocation {
+    pub(crate) fn supports_compact_presentation(&self) -> bool {
+        super::cutex_mcp_display::title(self).is_some()
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -81,6 +89,8 @@ impl McpToolCallCell {
     ) -> Self {
         Self {
             call_id,
+            job_label: None,
+            compact_result_consistent: true,
             invocation,
             start_time: Instant::now(),
             duration: None,
@@ -93,11 +103,33 @@ impl McpToolCallCell {
         &self.call_id
     }
 
+    pub(super) fn supports_compact_presentation(&self) -> bool {
+        self.invocation.supports_compact_presentation()
+    }
+
+    pub(crate) fn has_result(&self) -> bool {
+        self.result.is_some()
+    }
+
+    pub(crate) fn set_job_label(&mut self, label: String) {
+        self.job_label = Some(label);
+    }
+
     pub(crate) fn complete(
         &mut self,
         duration: Duration,
         result: Result<codex_protocol::mcp::CallToolResult, String>,
     ) -> Option<Box<dyn HistoryCell>> {
+        self.compact_result_consistent = result.as_ref().ok().is_none_or(|result| {
+            result.structured_content.as_ref().is_none_or(|structured| {
+                result.content.len() == 1
+                    && result.content[0]["text"]
+                        .as_str()
+                        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+                        .as_ref()
+                        == Some(structured)
+            })
+        });
         let result = result.map(|result| McpToolResult::new(result, self.result_kind()));
         let image_cell = result
             .as_ref()
