@@ -46,6 +46,9 @@ pub(super) fn server_notification_thread_target(
     notification: &ServerNotification,
 ) -> ServerNotificationThreadTarget {
     let thread_id = match notification {
+        ServerNotification::ThreadPresentationAppended(notification) => {
+            Some(notification.thread_id.as_str())
+        }
         ServerNotification::Error(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ThreadStarted(notification) => Some(notification.thread.id.as_str()),
         ServerNotification::ThreadExternalInputStatusChanged(notification) => {

@@ -23,7 +23,7 @@ use tokio::sync::Mutex;
 pub(crate) struct ExternalInputRequestProcessor {
     binding: Option<ExternalInputBinding>,
     threads: Arc<ThreadManager>,
-    outgoing: Arc<OutgoingMessageSender>,
+    pub(super) outgoing: Arc<OutgoingMessageSender>,
     listener: Mutex<Option<(Weak<CodexThread>, tokio::task::JoinHandle<()>)>>,
 }
 
@@ -41,7 +41,7 @@ impl ExternalInputRequestProcessor {
         }
     }
 
-    async fn require_thread(
+    pub(super) async fn require_thread(
         &self,
         version: u32,
         owner: &str,

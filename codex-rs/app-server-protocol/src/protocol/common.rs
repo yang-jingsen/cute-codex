@@ -583,6 +583,19 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadGoalClearResponse,
     },
+    #[experimental("thread/presentation/append")]
+    ThreadPresentationAppend => "thread/presentation/append" {
+        params: v2::PresentationAppendParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::PresentationResponse,
+    },
+    #[experimental("thread/presentation/status")]
+    ThreadPresentationStatus => "thread/presentation/status" {
+        params: v2::PresentationStatusParams,
+        serialization: thread_id(params.thread_id),
+        manual_payload_conversion: manual,
+        response: v2::PresentationResponse,
+    },
     #[experimental("thread/externalInput/submit")]
     ThreadExternalInputSubmit => "thread/externalInput/submit" {
         params: v2::ExternalInputSubmitParams,
@@ -1872,6 +1885,7 @@ server_notification_definitions! {
     ThreadGoalUpdated => "thread/goal/updated" (v2::ThreadGoalUpdatedNotification),
     ThreadGoalCleared => "thread/goal/cleared" (v2::ThreadGoalClearedNotification),
     #[experimental("thread/queue/changed")]
+    ThreadPresentationAppended => "thread/presentation/appended" (v2::PresentationAppendedNotification),
     ThreadExternalInputStatusChanged => "thread/externalInput/statusChanged" (v2::ExternalInputStatusChangedNotification),
     ThreadQueueChanged => "thread/queue/changed" (v2::ThreadQueueChangedNotification),
     #[experimental("project/changed")]

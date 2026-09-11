@@ -60,6 +60,8 @@ async fn initialize_uses_client_info_name_as_originator() -> Result<()> {
         platform_family,
         platform_os,
         external_input_version,
+        presentation_version,
+        ..
     } = to_response::<InitializeResponse>(response)?;
 
     assert!(user_agent.starts_with("codex_vscode/"));
@@ -67,6 +69,7 @@ async fn initialize_uses_client_info_name_as_originator() -> Result<()> {
     assert_eq!(platform_family, std::env::consts::FAMILY);
     assert_eq!(platform_os, std::env::consts::OS);
     assert_eq!(external_input_version, None);
+    assert_eq!(presentation_version, None);
     Ok(())
 }
 
@@ -174,6 +177,8 @@ async fn initialize_respects_originator_override_env_var() -> Result<()> {
         platform_family,
         platform_os,
         external_input_version,
+        presentation_version,
+        ..
     } = to_response::<InitializeResponse>(response)?;
 
     assert!(user_agent.starts_with("codex_originator_via_env_var/"));
@@ -181,6 +186,7 @@ async fn initialize_respects_originator_override_env_var() -> Result<()> {
     assert_eq!(platform_family, std::env::consts::FAMILY);
     assert_eq!(platform_os, std::env::consts::OS);
     assert_eq!(external_input_version, None);
+    assert_eq!(presentation_version, None);
     Ok(())
 }
 

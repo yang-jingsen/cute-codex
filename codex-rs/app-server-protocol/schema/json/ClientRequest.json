@@ -2673,6 +2673,71 @@
       ],
       "type": "object"
     },
+    "Presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "default": "",
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/definitions/PresentationFormat"
+        },
+        "id": {
+          "type": "string"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/definitions/PresentationReference"
+          },
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/definitions/ExternalInputSource"
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "id",
+        "references",
+        "source"
+      ],
+      "type": "object"
+    },
+    "PresentationFormat": {
+      "enum": [
+        "plainText",
+        "markdown"
+      ],
+      "type": "string"
+    },
+    "PresentationReference": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/PresentationReferenceKind"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "PresentationReferenceKind": {
+      "enum": [
+        "externalInput",
+        "mcpInvocation"
+      ],
+      "type": "string"
+    },
     "ProcessTerminalSize": {
       "description": "PTY size in character cells for `process/spawn` PTY sessions.",
       "properties": {

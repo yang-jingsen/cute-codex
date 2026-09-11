@@ -1231,6 +1231,22 @@ impl MessageProcessor {
                     .thread_goal_clear(request_id.clone(), params)
                     .await
             }
+            ClientRequest::ThreadPresentationAppend { params, .. } => self
+                .external_input_processor
+                .presentation_append(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ThreadPresentationStatus { params, .. } => self
+                .external_input_processor
+                .presentation_status(params)
+                .await
+                .map(|response| {
+                    Some(
+                        codex_app_server_protocol::ClientResponsePayload::ThreadPresentationStatus(
+                            response,
+                        ),
+                    )
+                }),
             ClientRequest::ThreadExternalInputSubmit { params, .. } => self
                 .external_input_processor
                 .submit(params)

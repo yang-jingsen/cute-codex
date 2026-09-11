@@ -3334,6 +3334,15 @@
           "description": "Operating system for the running app-server target, for example `\"macos\"`, `\"linux\"`, or `\"windows\"`.",
           "type": "string"
         },
+        "presentationVersion": {
+          "description": "Durable display-only append/status and timeline support on the bound receiver.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "userAgent": {
           "type": "string"
         }
@@ -4736,6 +4745,26 @@
             "params"
           ],
           "title": "Thread/goal/clearedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "thread/presentation/appended"
+              ],
+              "title": "Thread/presentation/appendedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/PresentationAppendedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/presentation/appendedNotification",
           "type": "object"
         },
         {
@@ -17352,6 +17381,129 @@
         ],
         "type": "object"
       },
+      "Presentation": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "default": "",
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/definitions/v2/PresentationFormat"
+          },
+          "id": {
+            "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/definitions/v2/PresentationReference"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/v2/ExternalInputSource"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "id",
+          "references",
+          "source"
+        ],
+        "type": "object"
+      },
+      "PresentationAppended": {
+        "additionalProperties": false,
+        "properties": {
+          "originThreadId": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "presentation": {
+            "$ref": "#/definitions/v2/Presentation"
+          },
+          "receiptId": {
+            "type": "string"
+          },
+          "semanticSha256": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "originThreadId",
+          "ownerId",
+          "presentation",
+          "receiptId",
+          "semanticSha256",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PresentationAppendedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/definitions/v2/PresentationAppended"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "position",
+          "threadId"
+        ],
+        "title": "PresentationAppendedNotification",
+        "type": "object"
+      },
+      "PresentationFormat": {
+        "enum": [
+          "plainText",
+          "markdown"
+        ],
+        "type": "string"
+      },
+      "PresentationReference": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/v2/PresentationReferenceKind"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "PresentationReferenceKind": {
+        "enum": [
+          "externalInput",
+          "mcpInvocation"
+        ],
+        "type": "string"
+      },
       "ProcessExitedNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "description": "Final process exit notification for `process/spawn`.",
@@ -24052,6 +24204,32 @@
       "ThreadTimelineEntry": {
         "description": "EXPERIMENTAL - one item or turn boundary in canonical rollout order.",
         "oneOf": [
+          {
+            "properties": {
+              "item": {
+                "$ref": "#/definitions/v2/PresentationAppended"
+              },
+              "position": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "presentation"
+                ],
+                "title": "PresentationThreadTimelineEntryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "item",
+              "position",
+              "type"
+            ],
+            "title": "PresentationThreadTimelineEntry",
+            "type": "object"
+          },
           {
             "properties": {
               "item": {

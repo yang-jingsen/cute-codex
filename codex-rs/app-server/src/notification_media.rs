@@ -133,6 +133,7 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
         | ServerNotification::ThreadRealtimeClosed(_)
         | ServerNotification::WindowsWorldWritableWarning(_)
         | ServerNotification::WindowsSandboxSetupCompleted(_)
+        | ServerNotification::ThreadPresentationAppended(_)
         | ServerNotification::AccountLoginCompleted(_) => notification,
     }
 }

@@ -10,6 +10,10 @@ export type InitializeResponse = {
  */
 externalInputVersion?: number,
 /**
+ * Durable display-only append/status and timeline support on the bound receiver.
+ */
+presentationVersion?: number,
+/**
  * Supported delivery modes for the private bound receiver. Absent on older servers.
  */
 externalInputDeliveries?: Array<ExternalInputDelivery>, userAgent: string,

@@ -50,6 +50,15 @@
       "description": "Operating system for the running app-server target, for example `\"macos\"`, `\"linux\"`, or `\"windows\"`.",
       "type": "string"
     },
+    "presentationVersion": {
+      "description": "Durable display-only append/status and timeline support on the bound receiver.",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "userAgent": {
       "type": "string"
     }

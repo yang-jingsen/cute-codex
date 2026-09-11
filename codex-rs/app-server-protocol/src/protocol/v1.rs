@@ -72,6 +72,10 @@ pub struct InitializeResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub external_input_version: Option<u32>,
+    /// Durable display-only append/status and timeline support on the bound receiver.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub presentation_version: Option<u32>,
     /// Supported delivery modes for the private bound receiver. Absent on older servers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

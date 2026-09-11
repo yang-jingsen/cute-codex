@@ -3136,3 +3136,72 @@ First consumption of any ExternalInput, including passive, applies the native
 `memories.disable_on_external_context` policy used for standalone `toolOutput`.
 The native memory-mode helper retains its existing best-effort database semantics;
 this does not introduce a transaction spanning the rollout and memory database.
+
+### Experimental durable presentation v1
+
+`presentationVersion: 1` in `initialize` enables `thread/presentation/append`
+and `thread/presentation/status` on the already-loaded thread selected by the
+private owner/thread/runtime-generation launch binding. These are controller
+RPCs, not model or MCP tools. A descriptive `source` is not an identity grant.
+Missing capability is unsupported; never fall back to a user message.
+
+Append parameters are `version`, `ownerId`, `threadId`, `runtimeGeneration`,
+`presentation`, and `semanticSha256`. Presentation contains `id`, `source`
+(`agent` or `service`, plus `id`), `title`, `body`, `format` (`plainText` or
+`markdown`), and ordered `references`. Title/body default to empty; at least one
+must be nonempty. Limits are UTF-8 bytes: body 65536, title 256, all identities
+256, at most two references. Over-limit data is rejected, not truncated. This
+is a transport limit, not a model-token guarantee. Text is data for safe client
+rendering; it grants no HTML, terminal escape, script, button or styling authority.
+
+The semantic SHA-256 domain is `codex:presentation:semantic:v1\0`, followed by
+u64 big-endian byte-length-prefixed UTF-8 fields, in this order: owner ID, origin
+thread ID, presentation ID, source kind, source ID, title, body, format; then
+reference kind and ID for each reference in order. The distinct receipt domain
+is `codex:presentation:receipt:v1\0`, followed by the same framing for owner ID,
+origin thread ID, presentation ID, semantic digest. Runtime generation is only
+current request authorization; it is absent from both digests.
+
+Status parameters replace `presentation` with `presentationId`. Both responses
+carry current owner/thread/generation and `receipt`: the original versioned
+`PresentationAppended` record, or null for known absence on a successful status
+read. Same identity and payload returns the original receipt; changed payload
+conflicts. A writer/read error does not establish absence or successful append:
+retain the exact identity and retry/status after recovery. Persistence uses the
+existing fallible recorder/flush and metadata publication, without an additional
+fsync or power-loss guarantee. A receipt means persisted display data only, not
+A4, rendered, seen, model processing, or business success.
+
+The sole authoritative data is `EventMsg::PresentationAppended`. After persistence,
+`thread/presentation/appended` sends the record and its current rollout `position`.
+`thread/timeline/list` returns `type: presentation` alongside ordinary history;
+there is no synthetic turn or ResponseItem. `thread/read.turns` remains a list of
+turns, not the thread-level display collection. Clients page the timeline and
+deduplicate using original presentation identity/digest. Cursor kind 4 identifies
+presentations; existing kinds 0..3 retain their ordering. No online TUI is needed.
+The TUI renderer and Cutex adapter are separate stages.
+
+References are explicit `externalInput` or `mcpInvocation` IDs that must already
+exist in the same thread; the bound controller validates the relation. References
+on inherited fork history are rejected in this version rather than guessing an
+invocation's origin. Ordinary source text, names and timestamps are never matching
+keys. Input and display are independently optional and may contain different bodies.
+Do not append display duplicates solely to style an existing MCP/input event.
+
+Presentation bodies never enter model context reconstruction, normal sampling or
+compaction/replacement history. Forked history retains actual prefix records and
+origin thread/receipt identity, not fresh acceptance authority. Rollback preserves
+display facts; a model-history change does not claim an external business reversal.
+Derived presentation rows and projection checkpoints are rebuilt transactionally
+from rollout source; they are not a second authoritative ledger. Old stock readers
+may skip the new event but must not take over writing this experimental history.
+
+Positions describe the current selected rollout lineage, not receipt identity;
+a revert can relocate retained display facts. Refresh timeline cursors after
+changing that lineage. Notifications are best effort: recovering an uncertain
+append by exact retry can return its receipt without another notification.
+Clients recover authoritative display data through the timeline. Legacy timeline
+projection is read-only and does not migrate the original history. Display reads
+validate complete source data and currently require O(history) work; no large-history
+throughput guarantee is made. Ordinary unmarked history readers keep their existing
+compatibility behavior.
