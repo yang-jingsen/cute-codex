@@ -141,12 +141,14 @@ pub(crate) fn thread_items_to_transcript_cells(
                 name,
                 namespace,
                 output,
+                external_input_view,
             } => {
                 if let Some(cell) = crate::history_cell::ExternalInputHistoryCell::parse(
                     &id,
                     &name,
                     namespace.as_deref(),
                     &output,
+                    external_input_view.as_ref(),
                 ) {
                     if external_ids.insert(id) {
                         cells.push(Arc::new(cell));

@@ -282,7 +282,7 @@ async fn replayed_review_prompt_does_not_seed_composer_history() {
 async fn replayed_delegated_tool_output_is_attributed_without_seeding_composer_history() {
     let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
 
-    let item = AppServerThreadItem::FunctionCallOutput {
+    let item = AppServerThreadItem::FunctionCallOutput { external_input_view: None,
         id: "delegation-1".to_string(),
         name: "send_message_to_thread".to_string(),
         namespace: Some("codex_tui".to_string()),

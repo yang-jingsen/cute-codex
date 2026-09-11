@@ -119,6 +119,7 @@ impl ChatWidget {
                                 name,
                                 namespace,
                                 output,
+                                external_input_view,
                                 ..
                             },
                         ) => {
@@ -128,6 +129,7 @@ impl ChatWidget {
                                     name,
                                     namespace.as_deref(),
                                     output,
+                                    external_input_view.as_ref(),
                                 )
                                 .is_some()
                         }

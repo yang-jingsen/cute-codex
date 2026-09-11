@@ -210,12 +210,14 @@ impl ChatWidget {
                 name,
                 namespace,
                 output,
+                external_input_view,
             } => {
-                if let Some(cell) = history_cell::ExternalInputHistoryCell::parse(
+                if let Some(mut cell) = history_cell::ExternalInputHistoryCell::parse(
                     &id,
                     &name,
                     namespace.as_deref(),
                     &output,
+                    external_input_view.as_ref(),
                 ) {
                     if let Some(thread_id) = self.thread_id
                         && self
@@ -223,6 +225,7 @@ impl ChatWidget {
                             .external_inputs_seen
                             .insert((thread_id.to_string(), id))
                     {
+                        cell.observe_display_id(&mut self.transcript.job_labels);
                         self.add_to_history(cell);
                     }
                     return;

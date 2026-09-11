@@ -6,7 +6,7 @@ async fn inbound_presentation_live_replay_identity_and_plain_body() {
     let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
     chat.thread_id = Some(ThreadId::new());
     let _ = drain_insert_history(&mut rx);
-    let item=AppServerThreadItem::FunctionCallOutput {id:"jsc_".to_owned()+&"a".repeat(64),name:"external_event".into(),namespace:Some("external".into()),output:codex_protocol::models::FunctionCallOutputBody::Text(json!({"source":{"kind":"agent","id":"worker\u{1b}[31m"},"type":"message","text":"First line.\n第二行 with control\u{1b}[31m."}).to_string())};
+    let item=AppServerThreadItem::FunctionCallOutput { external_input_view: None,id:"jsc_".to_owned()+&"a".repeat(64),name:"external_event".into(),namespace:Some("external".into()),output:codex_protocol::models::FunctionCallOutputBody::Text(json!({"source":{"kind":"agent","id":"worker\u{1b}[31m"},"type":"message","text":"First line.\n第二行 with control\u{1b}[31m."}).to_string())};
     let notification = codex_app_server_protocol::ServerNotification::ItemCompleted(
         codex_app_server_protocol::ItemCompletedNotification {
             thread_id: chat.thread_id.unwrap().to_string(),

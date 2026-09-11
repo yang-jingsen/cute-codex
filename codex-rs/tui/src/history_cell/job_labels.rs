@@ -5,7 +5,10 @@ use codex_app_server_protocol::ThreadItem;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
-pub(crate) struct JobLabels(BTreeMap<String, Option<String>>);
+pub(crate) struct JobLabels(
+    BTreeMap<String, Option<String>>,
+    std::collections::BTreeSet<String>,
+);
 
 pub(super) fn short_id(id: &str) -> String {
     let chars: Vec<_> = id.chars().collect();
@@ -74,11 +77,16 @@ impl JobLabels {
             .or_insert_with(|| Some(action.into()));
         Some(self.id_label(&id))
     }
+    pub(crate) fn observe_display_id(&mut self, id: &str) -> String {
+        self.1.insert(id.into());
+        self.id_label(id)
+    }
     fn id_label(&self, id: &str) -> String {
         let short = short_id(id);
         if self
             .0
             .keys()
+            .chain(self.1.iter())
             .any(|other| other != id && short_id(other) == short)
         {
             id.to_owned()
