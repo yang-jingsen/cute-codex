@@ -136,6 +136,11 @@ pub(crate) fn thread_items_to_transcript_cells(
                     )));
                 }
             }
+            ThreadItem::LegacyInterAgentMessage(item) => {
+                cells.push(Arc::new(crate::history_cell::LegacyInterAgentHistoryCell(
+                    item,
+                )));
+            }
             ThreadItem::FunctionCallOutput {
                 id,
                 name,
@@ -316,6 +321,7 @@ fn fallback_transcript_cell(item: &ThreadItem) -> Option<PlainHistoryCell> {
         }
         ThreadItem::UserMessage { .. }
         | ThreadItem::AgentMessage { .. }
+        | ThreadItem::LegacyInterAgentMessage(_)
         | ThreadItem::FunctionCallOutput { .. }
         | ThreadItem::Plan { .. }
         | ThreadItem::Reasoning { .. }

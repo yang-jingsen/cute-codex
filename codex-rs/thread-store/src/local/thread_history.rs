@@ -48,6 +48,9 @@ pub(super) enum RolloutProjectionStep {
     },
 }
 
+// The existing external_input_version column is the derived history projection
+// revision: 3 adds non-executing K InterAgentMessage replay. This is unrelated
+// to the public ExternalInput envelope version. Older indexes rebuild from JSONL.
 pub(super) struct RolloutProjectionState {
     pub external_input_version: i64,
     pub next_byte_offset: u64,
@@ -83,7 +86,7 @@ WHERE thread_id = ?
     .map_err(thread_history_error)?;
     state
         .map(|(next_byte_offset, next_ordinal, external_input_version)| {
-            if !(0..=2).contains(&external_input_version) {
+            if !(0..=3).contains(&external_input_version) {
                 return Err(thread_history_error(
                     "unsupported external input projection version",
                 ));
@@ -138,8 +141,8 @@ WHERE thread_id = ?
     .await
     .map_err(thread_history_error)?;
     let (expected_offset, mut next_ordinal) = match projection_state {
-        Some((offset, ordinal, 2)) => (offset, ordinal),
-        Some((_, _, 0 | 1)) | None => (0, sqlite_integer(initial_ordinal, "rollout ordinal")?),
+        Some((offset, ordinal, 3)) => (offset, ordinal),
+        Some((_, _, 0 | 1 | 2)) | None => (0, sqlite_integer(initial_ordinal, "rollout ordinal")?),
         _ => {
             return Err(thread_history_error(
                 "unsupported external input projection version",
@@ -255,11 +258,11 @@ INSERT INTO thread_history_projection_state (
     next_rollout_byte_offset,
     next_rollout_ordinal,
     external_input_version
-) VALUES (?, ?, ?, 2)
+) VALUES (?, ?, ?, 3)
 ON CONFLICT(thread_id) DO UPDATE SET
     next_rollout_byte_offset = excluded.next_rollout_byte_offset,
     next_rollout_ordinal = excluded.next_rollout_ordinal,
-    external_input_version = 2
+    external_input_version = 3
         "#,
     )
     .bind(thread_id.as_str())
@@ -573,6 +576,7 @@ WHERE thread_id = ?
                 ..
             }
             | ThreadItem::HookPrompt { .. }
+            | ThreadItem::LegacyInterAgentMessage(_)
             | ThreadItem::FunctionCallOutput { .. }
             | ThreadItem::Plan { .. }
             | ThreadItem::Reasoning { .. }

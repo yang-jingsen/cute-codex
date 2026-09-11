@@ -38,6 +38,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 use ts_rs::TS;
 
+#[path = "items_legacy_inter_agent.rs"]
+mod legacy_inter_agent;
+pub use legacy_inter_agent::LegacyInterAgentDeliveryMode;
+pub use legacy_inter_agent::LegacyInterAgentMessageItem;
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
 #[serde(tag = "type")]
@@ -47,6 +52,9 @@ pub enum TurnItem {
     FunctionCallOutput(FunctionCallOutputItem),
     HookPrompt(HookPromptItem),
     AgentMessage(AgentMessageItem),
+    /// Read-only K history compatibility; never produced by current ingress.
+    #[serde(rename = "InterAgentMessage")]
+    LegacyInterAgentMessage(LegacyInterAgentMessageItem),
     Plan(PlanItem),
     Reasoning(ReasoningItem),
     CommandExecution(CommandExecutionItem),
@@ -706,6 +714,7 @@ impl TurnItem {
             TurnItem::FunctionCallOutput(item) => item.id.clone(),
             TurnItem::HookPrompt(item) => item.id.clone(),
             TurnItem::AgentMessage(item) => item.id.clone(),
+            TurnItem::LegacyInterAgentMessage(item) => item.id.clone(),
             TurnItem::Plan(item) => item.id.clone(),
             TurnItem::Reasoning(item) => item.id.clone(),
             TurnItem::CommandExecution(item) => item.id.clone(),

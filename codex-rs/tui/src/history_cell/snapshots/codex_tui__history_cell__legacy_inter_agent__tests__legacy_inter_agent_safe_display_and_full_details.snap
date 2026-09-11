@@ -1,0 +1,9 @@
+---
+source: tui/src/history_cell/legacy_inter_agent_tests.rs
+assertion_line: 15
+expression: text
+---
+• Historical message · /
+  root/worker → /root
+  Historical 世界
+  plain **text**

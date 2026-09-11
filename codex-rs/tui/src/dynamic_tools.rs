@@ -1066,7 +1066,8 @@ async fn execute_inner(
                                         "name": "webSearch", "status": null
                                     })),
                                     ThreadItem::UserMessage { .. }
-                                    | ThreadItem::FunctionCallOutput { .. }
+                                    | ThreadItem::LegacyInterAgentMessage(_)
+        | ThreadItem::FunctionCallOutput { .. }
                                     | ThreadItem::HookPrompt { .. }
                                     | ThreadItem::AgentMessage { .. }
                                     | ThreadItem::Plan { .. }
@@ -1323,7 +1324,8 @@ fn turn_summary(turn: &Turn, include_outputs: bool, output_chars: usize) -> Valu
         .items
         .iter()
         .rev()
-        .map(|item| match item {
+        .filter_map(|item| Some(match item {
+            ThreadItem::LegacyInterAgentMessage(_) => return None,
             ThreadItem::UserMessage { id, content, .. } => json!({
                 "type": "userMessage",
                 "id": id,
@@ -1520,7 +1522,7 @@ fn turn_summary(turn: &Turn, include_outputs: bool, output_chars: usize) -> Valu
             ThreadItem::ContextCompaction { id } => json!({
                 "type": "contextCompaction", "id": id
             }),
-        })
+        }))
         .take(20)
         .collect();
     items.reverse();

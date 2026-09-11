@@ -522,6 +522,7 @@ impl TurnItem {
         match self {
             TurnItem::UserMessage(item) => vec![item.as_legacy_event()],
             TurnItem::FunctionCallOutput(_) | TurnItem::HookPrompt(_) => Vec::new(),
+            TurnItem::LegacyInterAgentMessage(_) => Vec::new(),
             TurnItem::AgentMessage(item) => item.as_legacy_events(),
             TurnItem::Plan(_) => Vec::new(),
             TurnItem::CommandExecution(_)

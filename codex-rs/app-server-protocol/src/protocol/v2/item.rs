@@ -259,6 +259,8 @@ pub enum ThreadItem {
         #[serde(default)]
         questions: Option<Vec<AsyncUserInputQuestion>>,
     },
+    /// Historical display-only item. Labels do not authenticate a current sender.
+    LegacyInterAgentMessage(codex_protocol::items::LegacyInterAgentMessageItem),
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
     FunctionCallOutput {
@@ -440,6 +442,7 @@ pub struct HookPromptFragment {
 impl ThreadItem {
     pub fn id(&self) -> &str {
         match self {
+            ThreadItem::LegacyInterAgentMessage(item) => &item.id,
             ThreadItem::UserMessage { id, .. }
             | ThreadItem::HookPrompt { id, .. }
             | ThreadItem::AgentMessage { id, .. }
@@ -888,6 +891,9 @@ impl From<CoreTurnItem> for ThreadItem {
                     delivery: agent.delivery,
                     questions: agent.questions,
                 }
+            }
+            CoreTurnItem::LegacyInterAgentMessage(item) => {
+                ThreadItem::LegacyInterAgentMessage(item)
             }
             CoreTurnItem::FunctionCallOutput(output) => ThreadItem::FunctionCallOutput {
                 id: output.id,

@@ -3273,3 +3273,26 @@ fall back to the original input; raw/transcript retains both original text and
 a separate display-facts section. Independent Presentation records keep their
 existing receipts and explicit references. Missing optional Job facts are
 omitted; exited without observed code0 is displayed as Job exited.
+
+### Historical K inter-agent display records
+
+The rollout reader accepts the historical `event_msg` / `item_completed` item
+`InterAgentMessage`. Its existing ID, author, recipient, otherRecipients, content,
+and deliveryMode are preserved. Full and paginated history project this as
+`ThreadItem` type `legacyInterAgentMessage`. It is historical display data:
+source labels are not current authentication, and `interrupt` is not an action.
+There is no new send/admission API or producer for this compatibility type.
+Current ingress continues using ExternalInput and Presentation.
+
+The event does not add model input. As in K, model reconstruction uses the
+separately persisted response items and communication records. The terminal
+shows a neutral historical message and makes the original fields inspectable
+in transcript/raw details; model-facing terminal history summaries exclude it.
+
+Derived history projection revision 3 rebuilds older cached indexes from the
+unchanged authoritative rollout, including previously skipped legacy records.
+The existing SQLite column name `external_input_version` stores this internal
+projection revision; it does not change the public ExternalInput version.
+Older readers that reject revision 3 must not be used as writers for this index.
+No original rollout rewrite, delivery acknowledgment, or model turn is implied
+by reading/resuming historical messages.

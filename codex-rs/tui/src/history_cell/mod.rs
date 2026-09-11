@@ -107,6 +107,8 @@ mod base;
 mod cutex_mcp_display;
 mod event_presentation;
 mod external_input;
+mod legacy_inter_agent;
+pub(crate) use legacy_inter_agent::LegacyInterAgentHistoryCell;
 mod job_labels;
 mod job_output;
 pub(crate) use job_labels::JobLabels;

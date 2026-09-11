@@ -30,8 +30,8 @@ pub(super) async fn materialize_to_sqlite(
         .map_or(0, |state| state.next_byte_offset);
     let rebuilding = projection_state
         .as_ref()
-        .is_some_and(|state| state.external_input_version < 2);
-    let projection_state = projection_state.filter(|state| state.external_input_version == 2);
+        .is_some_and(|state| state.external_input_version < 3);
+    let projection_state = projection_state.filter(|state| state.external_input_version == 3);
     let start_offset = projection_state
         .as_ref()
         .map_or(0, |state| state.next_byte_offset);

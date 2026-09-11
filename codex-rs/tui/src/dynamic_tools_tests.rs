@@ -704,3 +704,16 @@ async fn task_creation_and_followup_start_background_turns() -> color_eyre::Resu
     server.shutdown().await?;
     Ok(())
 }
+
+#[test]
+fn legacy_inter_agent_display_is_excluded_from_model_tool_summary() {
+    let turn: codex_app_server_protocol::Turn = serde_json::from_value(serde_json::json!({
+        "id":"old-turn","items":[{"type":"legacyInterAgentMessage","id":"old-id","author":"/root/worker","recipient":"/root","otherRecipients":[],"content":"DISPLAY_ONLY_SENTINEL","deliveryMode":"interrupt"}],
+        "status":"completed","error":null
+    })).unwrap();
+    let summary = super::turn_summary(
+        &turn, /*include_outputs*/ true, /*output_chars*/ 1000,
+    );
+    assert_eq!(summary["items"], serde_json::json!([]));
+    assert!(!summary.to_string().contains("DISPLAY_ONLY_SENTINEL"));
+}

@@ -194,6 +194,7 @@ fn activity_summary(item: &ThreadItem) -> Option<String> {
         ThreadItem::ContextCompaction { .. } => return Some("Compacted context".to_string()),
         ThreadItem::UserMessage { .. }
         | ThreadItem::HookPrompt { .. }
+        | ThreadItem::LegacyInterAgentMessage(_)
         | ThreadItem::FunctionCallOutput { .. }
         | ThreadItem::Sleep(_) => {
             return None;

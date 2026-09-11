@@ -205,6 +205,9 @@ impl ChatWidget {
             ThreadItem::ContextCompaction { .. } => {
                 self.add_info_message("Context compacted".to_string(), /*hint*/ None);
             }
+            ThreadItem::LegacyInterAgentMessage(item) => {
+                self.add_to_history(history_cell::LegacyInterAgentHistoryCell(item));
+            }
             ThreadItem::FunctionCallOutput {
                 id,
                 name,

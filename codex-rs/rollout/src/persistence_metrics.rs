@@ -266,6 +266,7 @@ fn turn_item_type(item: &TurnItem) -> &'static str {
         TurnItem::FunctionCallOutput(_) => "function_call_output",
         TurnItem::HookPrompt(_) => "hook_prompt",
         TurnItem::AgentMessage(_) => "agent_message",
+        TurnItem::LegacyInterAgentMessage(_) => "legacy_inter_agent_message",
         TurnItem::Plan(_) => "plan",
         TurnItem::Reasoning(_) => "reasoning",
         TurnItem::CommandExecution(_) => "command_execution",

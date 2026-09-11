@@ -2272,3 +2272,25 @@ async fn record_initial_history_resumed_replaced_incomplete_compacted_turn_clear
     );
     assert!(session.reference_context_item().await.is_none());
 }
+
+#[tokio::test]
+async fn legacy_inter_agent_display_does_not_change_model_reconstruction() {
+    let (session, turn_context) = make_session_and_context().await;
+    let original = vec![RolloutItem::ResponseItem(
+        assistant_message("Existing model bytes").into(),
+    )];
+    let expected = session
+        .reconstruct_history_from_rollout(&turn_context, &original)
+        .await;
+    let mut with_display = original;
+    with_display.push(RolloutItem::EventMsg(EventMsg::ItemCompleted(
+        serde_json::from_value(json!({"thread_id":"00000000-0000-0000-0000-000000000001","turn_id":"old-turn",
+            "item":{"type":"InterAgentMessage","id":"old-id","author":"/root/worker","recipient":"/root",
+            "otherRecipients":[],"content":"DISPLAY_ONLY_SENTINEL","deliveryMode":"interrupt"}})).unwrap(),
+    )));
+    let actual = session
+        .reconstruct_history_from_rollout(&turn_context, &with_display)
+        .await;
+    assert_eq!(actual.history, expected.history);
+    assert_eq!(actual.history.len(), 1);
+}
