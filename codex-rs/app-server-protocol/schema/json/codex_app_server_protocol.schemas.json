@@ -13827,6 +13827,16 @@
       "LegacyAppPathString": {
         "type": "string"
       },
+      "LegacyInterAgentDeliveryMode": {
+        "description": "Historical label only; in particular `interrupt` never interrupts a resumed thread.",
+        "enum": [
+          "after_turn",
+          "soon",
+          "passive",
+          "interrupt"
+        ],
+        "type": "string"
+      },
       "ListMcpServerStatusParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -21484,6 +21494,50 @@
               "type"
             ],
             "title": "AgentMessageThreadItem",
+            "type": "object"
+          },
+          {
+            "description": "Historical display-only item. Labels do not authenticate a current sender.",
+            "properties": {
+              "author": {
+                "$ref": "#/definitions/v2/AgentPath"
+              },
+              "content": {
+                "type": "string"
+              },
+              "deliveryMode": {
+                "$ref": "#/definitions/v2/LegacyInterAgentDeliveryMode"
+              },
+              "id": {
+                "type": "string"
+              },
+              "otherRecipients": {
+                "default": [],
+                "items": {
+                  "$ref": "#/definitions/v2/AgentPath"
+                },
+                "type": "array"
+              },
+              "recipient": {
+                "$ref": "#/definitions/v2/AgentPath"
+              },
+              "type": {
+                "enum": [
+                  "legacyInterAgentMessage"
+                ],
+                "title": "LegacyInterAgentMessageThreadItemType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "author",
+              "content",
+              "deliveryMode",
+              "id",
+              "recipient",
+              "type"
+            ],
+            "title": "LegacyInterAgentMessageThreadItem",
             "type": "object"
           },
           {

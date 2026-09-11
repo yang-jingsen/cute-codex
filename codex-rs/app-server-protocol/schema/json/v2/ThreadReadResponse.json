@@ -668,6 +668,16 @@
     "LegacyAppPathString": {
       "type": "string"
     },
+    "LegacyInterAgentDeliveryMode": {
+      "description": "Historical label only; in particular `interrupt` never interrupts a resumed thread.",
+      "enum": [
+        "after_turn",
+        "soon",
+        "passive",
+        "interrupt"
+      ],
+      "type": "string"
+    },
     "McpToolCallAppContext": {
       "properties": {
         "actionName": {
@@ -1431,6 +1441,50 @@
             "type"
           ],
           "title": "AgentMessageThreadItem",
+          "type": "object"
+        },
+        {
+          "description": "Historical display-only item. Labels do not authenticate a current sender.",
+          "properties": {
+            "author": {
+              "$ref": "#/definitions/AgentPath"
+            },
+            "content": {
+              "type": "string"
+            },
+            "deliveryMode": {
+              "$ref": "#/definitions/LegacyInterAgentDeliveryMode"
+            },
+            "id": {
+              "type": "string"
+            },
+            "otherRecipients": {
+              "default": [],
+              "items": {
+                "$ref": "#/definitions/AgentPath"
+              },
+              "type": "array"
+            },
+            "recipient": {
+              "$ref": "#/definitions/AgentPath"
+            },
+            "type": {
+              "enum": [
+                "legacyInterAgentMessage"
+              ],
+              "title": "LegacyInterAgentMessageThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "author",
+            "content",
+            "deliveryMode",
+            "id",
+            "recipient",
+            "type"
+          ],
+          "title": "LegacyInterAgentMessageThreadItem",
           "type": "object"
         },
         {
