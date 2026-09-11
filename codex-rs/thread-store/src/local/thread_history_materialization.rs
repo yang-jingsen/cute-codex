@@ -30,8 +30,8 @@ pub(super) async fn materialize_to_sqlite(
         .map_or(0, |state| state.next_byte_offset);
     let rebuilding = projection_state
         .as_ref()
-        .is_some_and(|state| state.external_input_version == 0);
-    let projection_state = projection_state.filter(|state| state.external_input_version == 1);
+        .is_some_and(|state| state.external_input_version < 2);
+    let projection_state = projection_state.filter(|state| state.external_input_version == 2);
     let start_offset = projection_state
         .as_ref()
         .map_or(0, |state| state.next_byte_offset);
@@ -313,6 +313,12 @@ async fn read_projection_steps(
                 end_byte_offset: line_end_offset,
                 fallback_created_at_ms,
                 changes,
+                presentation: match &line.item {
+                    RolloutItem::EventMsg(
+                        codex_protocol::protocol::EventMsg::PresentationAppended(record),
+                    ) => Some(record.clone()),
+                    _ => None,
+                },
                 realtime_item: match line.item {
                     RolloutItem::RealtimeItem(item) if !is_inherited_subagent_history => Some(item),
                     _ => None,

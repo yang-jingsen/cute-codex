@@ -9,6 +9,7 @@ use super::LocalThreadStore;
 use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
 
+mod legacy_timeline;
 mod read;
 mod realtime;
 mod search;
@@ -32,6 +33,7 @@ pub(super) struct ProjectedRolloutLine {
     pub fallback_created_at_ms: Option<i64>,
     pub changes: ThreadHistoryChangeSet,
     pub realtime_item: Option<RealtimeItem>,
+    pub presentation: Option<codex_protocol::presentation::PresentationAppended>,
 }
 
 /// One ordered update to apply while advancing a rollout projection checkpoint.
@@ -81,7 +83,7 @@ WHERE thread_id = ?
     .map_err(thread_history_error)?;
     state
         .map(|(next_byte_offset, next_ordinal, external_input_version)| {
-            if !(0..=1).contains(&external_input_version) {
+            if !(0..=2).contains(&external_input_version) {
                 return Err(thread_history_error(
                     "unsupported external input projection version",
                 ));
@@ -136,8 +138,8 @@ WHERE thread_id = ?
     .await
     .map_err(thread_history_error)?;
     let (expected_offset, mut next_ordinal) = match projection_state {
-        Some((offset, ordinal, 1)) => (offset, ordinal),
-        Some((_, _, 0)) | None => (0, sqlite_integer(initial_ordinal, "rollout ordinal")?),
+        Some((offset, ordinal, 2)) => (offset, ordinal),
+        Some((_, _, 0 | 1)) | None => (0, sqlite_integer(initial_ordinal, "rollout ordinal")?),
         _ => {
             return Err(thread_history_error(
                 "unsupported external input projection version",
@@ -172,6 +174,18 @@ WHERE thread_id = ?
                     projection.changes,
                 )
                 .await?;
+                if let Some(item) = projection.presentation {
+                    item.validate().map_err(thread_history_error)?;
+                    let json = serde_json::to_string(&item).map_err(thread_history_error)?;
+                    let previous = sqlx::query_scalar::<_, String>("SELECT item_json FROM thread_presentations WHERE thread_id = ? AND item_id = ?")
+                        .bind(&thread_id).bind(&item.presentation.id).fetch_optional(&mut *transaction).await.map_err(thread_history_error)?;
+                    if previous.as_ref().is_some_and(|old| old != &json) {
+                        return Err(thread_history_error("conflicting presentation index"));
+                    }
+                    sqlx::query("INSERT INTO thread_presentations(thread_id, item_id, rollout_ordinal, item_json) VALUES (?, ?, ?, ?) ON CONFLICT(thread_id, item_id) DO NOTHING")
+                        .bind(&thread_id).bind(&item.presentation.id).bind(ordinal).bind(json)
+                        .execute(&mut *transaction).await.map_err(thread_history_error)?;
+                }
                 if let Some(item) = projection.realtime_item {
                     let item_json = serde_json::to_string(&item).map_err(thread_history_error)?;
                     sqlx::query(
@@ -241,11 +255,11 @@ INSERT INTO thread_history_projection_state (
     next_rollout_byte_offset,
     next_rollout_ordinal,
     external_input_version
-) VALUES (?, ?, ?, 1)
+) VALUES (?, ?, ?, 2)
 ON CONFLICT(thread_id) DO UPDATE SET
     next_rollout_byte_offset = excluded.next_rollout_byte_offset,
     next_rollout_ordinal = excluded.next_rollout_ordinal,
-    external_input_version = 1
+    external_input_version = 2
         "#,
     )
     .bind(thread_id.as_str())
@@ -275,6 +289,11 @@ pub(super) async fn delete_thread(
         .await
         .map_err(thread_history_delete_error)?;
     let thread_id = thread_id.to_string();
+    sqlx::query("DELETE FROM thread_presentations WHERE thread_id = ?")
+        .bind(thread_id.to_string())
+        .execute(&mut *transaction)
+        .await
+        .map_err(thread_history_delete_error)?;
     sqlx::query("DELETE FROM thread_items WHERE thread_id = ?")
         .bind(thread_id.as_str())
         .execute(&mut *transaction)

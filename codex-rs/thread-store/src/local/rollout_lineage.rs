@@ -143,7 +143,7 @@ impl LocalThreadStore {
             }
             if super::thread_history::projection_state(self, rollout_id)
                 .await?
-                .is_none_or(|state| state.external_input_version == 0)
+                .is_none_or(|state| state.external_input_version < 2)
             {
                 super::thread_history_materialization::materialize_to_sqlite(
                     self,

@@ -62,6 +62,12 @@ impl RollbackPlan {
         ) {
             return Ok(None);
         }
+        if matches!(
+            &line.item,
+            RolloutItem::EventMsg(EventMsg::PresentationAppended(_))
+        ) {
+            return Ok(Some(line));
+        }
         // A rolled-back turn can still own the empty checkpoint that keeps cold resume from
         // replaying older history.
         if let Some(compacted) = self.compacted_items.get(&record_index) {

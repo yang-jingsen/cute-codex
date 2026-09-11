@@ -1173,6 +1173,12 @@ impl LocalThreadStore {
                         }
                         changes
                     },
+                    presentation: match &line.item {
+                        RolloutItem::EventMsg(
+                            codex_protocol::protocol::EventMsg::PresentationAppended(record),
+                        ) => Some(record.clone()),
+                        _ => None,
+                    },
                     realtime_item: match line.item {
                         RolloutItem::RealtimeItem(item) if !is_inherited_subagent_history => {
                             Some(item)

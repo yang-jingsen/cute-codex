@@ -1780,6 +1780,11 @@ pub struct ThreadTimelineListParams {
 )]
 #[ts(tag = "type", rename_all = "camelCase", export_to = "v2/")]
 pub enum ThreadTimelineEntry {
+    Presentation {
+        #[ts(type = "number")]
+        position: u64,
+        item: codex_protocol::presentation::PresentationAppended,
+    },
     Item {
         #[ts(type = "number")]
         position: u64,
