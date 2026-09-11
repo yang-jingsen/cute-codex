@@ -96,22 +96,18 @@ pub(super) fn render(view: &View, id_label: Option<&str>) -> Option<(String, Vec
             if stream.retained_bytes > stream.observed_bytes {
                 return None;
             }
-            details.push(
-                if stream.observed_bytes == stream.retained_bytes && !stream.truncated {
-                    format!("{name} {} B", stream.retained_bytes)
-                } else {
-                    format!(
-                        "{name} {}/{} B retained{}",
-                        stream.retained_bytes,
-                        stream.observed_bytes,
-                        if stream.truncated {
-                            " · truncated"
-                        } else {
-                            ""
-                        }
-                    )
-                },
-            );
+            let mut summary = if stream.observed_bytes == stream.retained_bytes {
+                format!("{name} {} B", stream.retained_bytes)
+            } else {
+                format!(
+                    "{name} {} B / {} B",
+                    stream.retained_bytes, stream.observed_bytes
+                )
+            };
+            if stream.truncated {
+                summary.push_str(" · truncated");
+            }
+            details.push(summary);
         }
     }
     let mut details = if details.is_empty() {

@@ -12,8 +12,8 @@ expression: "snapshots.join(\"\\n---\\n\")"
   stdout 19 B · stderr 0 B
 ---
 • Job exited · job_example
-  stdout 19/100 B retained · truncated · stderr 0 B
+  stdout 19 B / 100 B · truncated · stderr 0 B
 ---
 • Job exited · job_example
-  stdout 19/100 B retained ·
+  stdout 19 B / 100 B ·
   truncated · stderr 0 B

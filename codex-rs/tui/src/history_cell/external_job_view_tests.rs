@@ -62,3 +62,22 @@ fn structured_job_view_reference_and_action_byte_boundaries() {
         assert_eq!(render(&view, None).is_some(), accepted);
     }
 }
+
+#[test]
+fn stream_ratio_retained_then_observed_with_independent_truncation() {
+    let mut view = View {
+        schema: "cutex.job-completion.v1".into(),
+        data: json!({"jobId":"job-id","jobRevision":1,"terminalStatus":"exited",
+            "stdout":{"observedBytes":20,"retainedBytes":19,"truncated":false},
+            "stderr":{"observedBytes":0,"retainedBytes":0,"truncated":true}}),
+    };
+    assert_eq!(
+        render(&view, None).unwrap().1,
+        vec!["stdout 19 B / 20 B · stderr 0 B · truncated"]
+    );
+    view.data["stderr"] = json!({"observedBytes":10,"retainedBytes":2,"truncated":false});
+    assert_eq!(
+        render(&view, None).unwrap().1,
+        vec!["stdout 19 B / 20 B · stderr 2 B / 10 B"]
+    );
+}
