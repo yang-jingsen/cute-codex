@@ -6,6 +6,7 @@
 mod fs;
 mod history;
 mod models;
+mod presentation;
 mod rollout_history;
 
 pub(crate) use history::HISTORY_ITEM_PAGE_LIMIT;
@@ -931,6 +932,9 @@ impl AppServerSession {
         }
         let mut started =
             started_thread_from_fork_response(response, &config, self.thread_params_mode()).await?;
+        started.session.presentation_timeline = self
+            .presentation_timeline(started.session.thread_id)
+            .await?;
         started.session.fork_parent_title = fork_parent.and_then(|thread| thread.name);
         if self.task_tools_available(thread_id) {
             started.task_tools_available = true;
@@ -2251,6 +2255,7 @@ async fn thread_session_state_from_thread_response(
     Ok(ThreadSessionState {
         thread_id,
         forked_from_id,
+        presentation_timeline: None,
         fork_parent_title: None,
         thread_name,
         model,

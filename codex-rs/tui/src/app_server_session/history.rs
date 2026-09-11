@@ -215,6 +215,11 @@ impl AppServerSession {
             return Ok(());
         }
 
+        let scope = if self.client.presentation_version() == Some(1) {
+            HistoryHydrationScope::Complete
+        } else {
+            scope
+        };
         let page = self.thread_turns_page(thread_id, turn_cursor).await?;
         thread.turns = page.data.into_iter().rev().collect();
         let mut state = ThreadHistoryPagination {
@@ -226,8 +231,11 @@ impl AppServerSession {
         let width = crossterm::terminal::size()
             .map(|(width, _)| width.max(/*other*/ 1))
             .unwrap_or(/*default*/ 80);
-        let row_budget =
-            config.and_then(|config| resize_reflow_max_rows(config.terminal_resize_reflow));
+        let row_budget = if scope == HistoryHydrationScope::Complete {
+            None
+        } else {
+            config.and_then(|config| resize_reflow_max_rows(config.terminal_resize_reflow))
+        };
         let item_budget = match (scope, config, row_budget) {
             (HistoryHydrationScope::Complete, _, _)
             | (HistoryHydrationScope::Initial, Some(_), None) => None,

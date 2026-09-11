@@ -677,6 +677,14 @@ impl AppServerRequestHandle {
 }
 
 impl AppServerClient {
+    /// Version explicitly advertised by the receiver; embedded launches have no binding.
+    pub fn presentation_version(&self) -> Option<u32> {
+        match self {
+            Self::Remote(client) => client.presentation_version(),
+            Self::InProcess(_) => None,
+        }
+    }
+
     pub fn codex_home(&self, local_codex_home: &AbsolutePathBuf) -> Option<AppServerPath> {
         match self {
             Self::InProcess(_) => Some(AppServerPath::from_app_server(
@@ -1256,6 +1264,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn remote_retains_explicit_presentation_capability() {
+        let websocket_url = start_test_remote_server(|mut websocket| async move {
+            let JSONRPCMessage::Request(request) = read_websocket_message(&mut websocket).await
+            else {
+                panic!("expected initialize");
+            };
+            write_websocket_message(
+                &mut websocket,
+                JSONRPCMessage::Response(JSONRPCResponse {
+                    id: request.id,
+                    result: serde_json::json!({"presentationVersion": 1}),
+                }),
+            )
+            .await;
+            let _ = read_websocket_message(&mut websocket).await;
+            let _ = websocket.next().await;
+        })
+        .await;
+        let client = RemoteAppServerClient::connect(test_remote_connect_args(websocket_url))
+            .await
+            .expect("connect");
+        assert_eq!(client.presentation_version(), Some(1));
+        client.shutdown().await.expect("shutdown");
+    }
+
+    #[tokio::test]
     async fn remote_typed_request_roundtrip_works() {
         let websocket_url = start_test_remote_server(|mut websocket| async move {
             expect_remote_initialize(&mut websocket).await;
@@ -1283,6 +1317,7 @@ mod tests {
             .await
             .expect("remote client should connect");
 
+        assert_eq!(client.presentation_version(), None);
         assert_eq!(client.server_version(), Some("9.8.7-test"));
         assert_eq!(client.codex_home(), Some("/server/.codex"));
         let response: GetAccountResponse = client

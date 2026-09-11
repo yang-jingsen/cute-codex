@@ -153,6 +153,7 @@ pub struct RemoteAppServerClient {
     event_rx: mpsc::UnboundedReceiver<AppServerEvent>,
     pending_events: VecDeque<AppServerEvent>,
     server_version: Option<String>,
+    presentation_version: Option<u32>,
     codex_home: Option<String>,
     worker_handle: tokio::task::JoinHandle<()>,
 }
@@ -163,6 +164,10 @@ pub struct RemoteAppServerRequestHandle {
 }
 
 impl RemoteAppServerClient {
+    pub fn presentation_version(&self) -> Option<u32> {
+        self.presentation_version
+    }
+
     pub async fn connect(args: RemoteAppServerConnectArgs) -> IoResult<Self> {
         let channel_capacity = args.channel_capacity.max(1);
         let initialize_params = args.initialize_params();
@@ -202,13 +207,14 @@ impl RemoteAppServerClient {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let mut stream = stream;
-        let (pending_events, server_version, codex_home) = initialize_remote_connection(
-            &mut stream,
-            &endpoint,
-            initialize_params,
-            INITIALIZE_TIMEOUT,
-        )
-        .await?;
+        let (pending_events, server_version, codex_home, presentation_version) =
+            initialize_remote_connection(
+                &mut stream,
+                &endpoint,
+                initialize_params,
+                INITIALIZE_TIMEOUT,
+            )
+            .await?;
 
         let (command_tx, mut command_rx) = mpsc::channel::<RemoteClientCommand>(channel_capacity);
         let (event_tx, event_rx) = mpsc::unbounded_channel::<AppServerEvent>();
@@ -479,6 +485,7 @@ impl RemoteAppServerClient {
             event_rx,
             pending_events: pending_events.into(),
             server_version,
+            presentation_version,
             codex_home,
             worker_handle,
         })
@@ -605,6 +612,7 @@ impl RemoteAppServerClient {
             event_rx,
             pending_events: _pending_events,
             server_version: _server_version,
+            presentation_version: _,
             codex_home: _codex_home,
             worker_handle,
         } = self;
@@ -800,7 +808,12 @@ async fn initialize_remote_connection<S>(
     endpoint: &str,
     params: InitializeParams,
     initialize_timeout: Duration,
-) -> IoResult<(Vec<AppServerEvent>, Option<String>, Option<String>)>
+) -> IoResult<(
+    Vec<AppServerEvent>,
+    Option<String>,
+    Option<String>,
+    Option<u32>,
+)>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -808,6 +821,7 @@ where
     let mut pending_events = Vec::new();
     let mut server_version = None;
     let mut codex_home = None;
+    let mut presentation_version = None;
     write_jsonrpc_message(
         stream,
         JSONRPCMessage::Request(jsonrpc_request_from_client_request(
@@ -831,6 +845,7 @@ where
                     })?;
                     match message {
                         JSONRPCMessage::Response(response) if response.id == initialize_request_id => {
+                            presentation_version = response.result.get("presentationVersion").and_then(serde_json::Value::as_u64).and_then(|v| u32::try_from(v).ok());
                             server_version = response
                                 .result
                                 .get("userAgent")
@@ -937,7 +952,12 @@ where
     )
     .await?;
 
-    Ok((pending_events, server_version, codex_home))
+    Ok((
+        pending_events,
+        server_version,
+        codex_home,
+        presentation_version,
+    ))
 }
 
 fn app_server_event_from_notification(notification: JSONRPCNotification) -> Option<AppServerEvent> {
@@ -1028,6 +1048,7 @@ mod tests {
             event_rx,
             pending_events: VecDeque::new(),
             server_version: None,
+            presentation_version: None,
             codex_home: None,
             worker_handle,
         };
