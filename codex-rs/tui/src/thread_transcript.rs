@@ -92,6 +92,7 @@ pub(crate) fn thread_items_to_transcript_cells(
         thread_id.and_then(|thread_id| InlineVisualizationContext::from_config(config, thread_id))
     });
     let mut cells: TranscriptCells = Vec::new();
+    let mut external_ids = std::collections::HashSet::new();
     for item in items {
         match item {
             ThreadItem::UserMessage {
@@ -136,11 +137,22 @@ pub(crate) fn thread_items_to_transcript_cells(
                 }
             }
             ThreadItem::FunctionCallOutput {
+                id,
                 name,
                 namespace,
                 output,
-                ..
             } => {
+                if let Some(cell) = crate::history_cell::ExternalInputHistoryCell::parse(
+                    &id,
+                    &name,
+                    namespace.as_deref(),
+                    &output,
+                ) {
+                    if external_ids.insert(id) {
+                        cells.push(Arc::new(cell));
+                    }
+                    continue;
+                }
                 if let Some((source_thread_id, prompt)) =
                     crate::dynamic_tools::parse_delegated_tool_output(
                         &name,

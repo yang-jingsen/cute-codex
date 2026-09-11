@@ -106,6 +106,8 @@ mod approvals;
 mod base;
 mod cutex_mcp_display;
 mod event_presentation;
+mod external_input;
+pub(crate) use external_input::ExternalInputHistoryCell;
 mod exec;
 mod hook_cell;
 mod markdown_render_cache;

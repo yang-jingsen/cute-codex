@@ -202,11 +202,27 @@ impl ChatWidget {
                 self.add_info_message("Context compacted".to_string(), /*hint*/ None);
             }
             ThreadItem::FunctionCallOutput {
+                id,
                 name,
                 namespace,
                 output,
-                ..
             } => {
+                if let Some(cell) = history_cell::ExternalInputHistoryCell::parse(
+                    &id,
+                    &name,
+                    namespace.as_deref(),
+                    &output,
+                ) {
+                    if let Some(thread_id) = self.thread_id
+                        && self
+                            .transcript
+                            .external_inputs_seen
+                            .insert((thread_id.to_string(), id))
+                    {
+                        self.add_to_history(cell);
+                    }
+                    return;
+                }
                 if let Some((source_thread_id, prompt)) =
                     crate::dynamic_tools::parse_delegated_tool_output(
                         &name,
