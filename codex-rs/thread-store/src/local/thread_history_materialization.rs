@@ -25,6 +25,13 @@ pub(super) async fn materialize_to_sqlite(
         return Ok(());
     }
     let projection_state = super::thread_history::projection_state(store, thread_id).await?;
+    let previous_offset = projection_state
+        .as_ref()
+        .map_or(0, |state| state.next_byte_offset);
+    let rebuilding = projection_state
+        .as_ref()
+        .is_some_and(|state| state.external_input_version == 0);
+    let projection_state = projection_state.filter(|state| state.external_input_version == 1);
     let start_offset = projection_state
         .as_ref()
         .map_or(0, |state| state.next_byte_offset);
@@ -52,8 +59,14 @@ pub(super) async fn materialize_to_sqlite(
         expected_ordinal,
         thread_id,
         subagent_history_start_ordinal,
+        rebuilding,
     )
     .await?;
+    if rebuilding && next_offset < previous_offset {
+        return Err(ThreadStoreError::Internal {
+            message: "durable rollout shrank before index rebuild".into(),
+        });
+    }
     // Empty valid records can still consume bytes through blank complete lines.
     if projections.is_empty() && start_offset == next_offset {
         return Ok(());
@@ -75,6 +88,7 @@ async fn read_projection_steps(
     expected_ordinal: u64,
     thread_id: ThreadId,
     subagent_history_start_ordinal: Option<u64>,
+    rebuilding: bool,
 ) -> ThreadStoreResult<(Vec<RolloutProjectionStep>, u64)> {
     let path = rollout_path.to_path_buf();
     let file =
@@ -114,6 +128,7 @@ async fn read_projection_steps(
         .rposition(|byte| *byte == b'\n')
         .map_or(0, |index| index + 1);
     let mut projections = Vec::new();
+    let mut external = codex_app_server_protocol::ExternalInputProjection::default();
     let mut next_ordinal = expected_ordinal;
     let mut next_offset = start_offset;
     let mut pending_rejected_line_count = 0;
@@ -149,15 +164,27 @@ async fn read_projection_steps(
                     error = %err,
                     "deferring rejected rollout line until a later ordinal resolves it"
                 );
+                if rebuilding || external.is_pending() {
+                    return Err(ThreadStoreError::Internal {
+                        message: "unreadable history during external input projection".into(),
+                    });
+                }
                 pending_rejected_line_count += 1;
                 line_start_offset = line_end_offset;
                 continue;
             }
         };
         let value_ordinal = value.get("ordinal").and_then(serde_json::Value::as_u64);
+        let is_external_record =
+            value.get("type").and_then(serde_json::Value::as_str) == Some("external_input");
         let line = match codex_rollout::decode_rollout_line(value) {
             Ok(line) => Some(line),
             Err(err) => {
+                if rebuilding || is_external_record || external.is_pending() {
+                    return Err(ThreadStoreError::Internal {
+                        message: "unreadable external input history".into(),
+                    });
+                }
                 warn!(
                     thread_id = %thread_id,
                     rollout_path = %rollout_path.display(),
@@ -215,7 +242,17 @@ async fn read_projection_steps(
         let changes = if is_inherited_subagent_history {
             ThreadHistoryChangeSet::default()
         } else {
-            project_rollout_line(&line)
+            let mut changes = project_rollout_line(&line);
+            if let Some(item) =
+                external
+                    .observe(&line.item)
+                    .map_err(|e| ThreadStoreError::Internal {
+                        message: e.to_string(),
+                    })?
+            {
+                changes.changed_items.push(item);
+            }
+            changes
         };
         let fallback_created_at_ms = if changes
             .changed_items
@@ -285,6 +322,11 @@ async fn read_projection_steps(
         next_ordinal = next_line_ordinal;
         next_offset = line_end_offset;
         line_start_offset = line_end_offset;
+    }
+    if external.is_pending() || (rebuilding && complete_byte_count != bytes.len()) {
+        return Err(ThreadStoreError::Internal {
+            message: "partial history during external input projection".into(),
+        });
     }
     Ok((projections, next_offset))
 }

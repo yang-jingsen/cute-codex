@@ -47,6 +47,7 @@ pub(super) enum RolloutProjectionStep {
 }
 
 pub(super) struct RolloutProjectionState {
+    pub external_input_version: i64,
     pub next_byte_offset: u64,
     pub next_ordinal: u64,
 }
@@ -67,9 +68,9 @@ pub(super) async fn projection_state(
     }
 
     let pool = store.thread_history_db().await?;
-    let state = sqlx::query_as::<_, (i64, i64)>(
+    let state = sqlx::query_as::<_, (i64, i64, i64)>(
         r#"
-SELECT next_rollout_byte_offset, next_rollout_ordinal
+SELECT next_rollout_byte_offset, next_rollout_ordinal, external_input_version
 FROM thread_history_projection_state
 WHERE thread_id = ?
         "#,
@@ -79,8 +80,14 @@ WHERE thread_id = ?
     .await
     .map_err(thread_history_error)?;
     state
-        .map(|(next_byte_offset, next_ordinal)| {
+        .map(|(next_byte_offset, next_ordinal, external_input_version)| {
+            if !(0..=1).contains(&external_input_version) {
+                return Err(thread_history_error(
+                    "unsupported external input projection version",
+                ));
+            }
             Ok(RolloutProjectionState {
+                external_input_version,
                 next_byte_offset: u64::try_from(next_byte_offset).map_err(|_| {
                     ThreadStoreError::Internal {
                         message: format!(
@@ -117,9 +124,9 @@ pub(super) async fn apply_projection(
         .await
         .map_err(thread_history_error)?;
     let thread_id = thread_id.to_string();
-    let projection_state = sqlx::query_as::<_, (i64, i64)>(
+    let projection_state = sqlx::query_as::<_, (i64, i64, i64)>(
         r#"
-SELECT next_rollout_byte_offset, next_rollout_ordinal
+SELECT next_rollout_byte_offset, next_rollout_ordinal, external_input_version
 FROM thread_history_projection_state
 WHERE thread_id = ?
         "#,
@@ -128,8 +135,15 @@ WHERE thread_id = ?
     .fetch_optional(&mut *transaction)
     .await
     .map_err(thread_history_error)?;
-    let (expected_offset, mut next_ordinal) =
-        projection_state.unwrap_or((0, sqlite_integer(initial_ordinal, "rollout ordinal")?));
+    let (expected_offset, mut next_ordinal) = match projection_state {
+        Some((offset, ordinal, 1)) => (offset, ordinal),
+        Some((_, _, 0)) | None => (0, sqlite_integer(initial_ordinal, "rollout ordinal")?),
+        _ => {
+            return Err(thread_history_error(
+                "unsupported external input projection version",
+            ));
+        }
+    };
     let start_offset = sqlite_integer(start_offset, "rollout byte offset")?;
     if expected_offset != start_offset {
         return Err(ThreadStoreError::Internal {
@@ -225,11 +239,13 @@ ON CONFLICT(thread_id, item_id) DO NOTHING
 INSERT INTO thread_history_projection_state (
     thread_id,
     next_rollout_byte_offset,
-    next_rollout_ordinal
-) VALUES (?, ?, ?)
+    next_rollout_ordinal,
+    external_input_version
+) VALUES (?, ?, ?, 1)
 ON CONFLICT(thread_id) DO UPDATE SET
     next_rollout_byte_offset = excluded.next_rollout_byte_offset,
-    next_rollout_ordinal = excluded.next_rollout_ordinal
+    next_rollout_ordinal = excluded.next_rollout_ordinal,
+    external_input_version = 1
         "#,
     )
     .bind(thread_id.as_str())
@@ -438,6 +454,26 @@ WHERE thread_id = ?
                 })?;
         let item_id = item.item.id().to_string();
         let item_json = serde_json::to_string(&item.item).map_err(thread_history_error)?;
+        if matches!(&item.item, ThreadItem::FunctionCallOutput {name,namespace,..} if name == "external_event" && namespace.as_deref() == Some("external"))
+        {
+            let existing = sqlx::query_as::<_, (String, String)>(
+                "SELECT turn_id, item_json FROM thread_items WHERE thread_id = ? AND item_id = ?",
+            )
+            .bind(thread_id)
+            .bind(&item_id)
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(thread_history_error)?;
+            if let Some((turn_id, previous)) = existing {
+                let previous: ThreadItem =
+                    serde_json::from_str(&previous).map_err(thread_history_error)?;
+                if turn_id != item.turn_id || previous != item.item {
+                    return Err(thread_history_error(
+                        "conflicting external input display identity",
+                    ));
+                }
+            }
+        }
         // Completed items are immutable: local producers emit ItemCompleted exactly once per
         // item. Tolerate an unexpected duplicate defensively so it cannot poison materialization,
         // preserving the original creation ordinal and timestamp while updating its snapshot.

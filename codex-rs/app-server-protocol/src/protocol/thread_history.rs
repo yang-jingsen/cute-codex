@@ -223,6 +223,9 @@ impl ThreadHistoryChangeAccumulator {
 }
 
 pub struct ThreadHistoryBuilder {
+    external_projection: super::external_input_projection::ExternalInputProjection,
+    external_pending: Vec<ThreadHistoryItemChange>,
+    external_error: Option<codex_protocol::external_input::Error>,
     // Retain the builder representation so late completions can reuse each
     // finished turn's item index without adding it to the public Turn type.
     turns: Vec<PendingTurn>,
@@ -242,6 +245,9 @@ impl Default for ThreadHistoryBuilder {
 impl ThreadHistoryBuilder {
     pub fn new() -> Self {
         Self {
+            external_projection: Default::default(),
+            external_pending: Vec::new(),
+            external_error: None,
             turns: Vec::new(),
             current_turn: None,
             next_item_index: 1,
@@ -253,6 +259,17 @@ impl ThreadHistoryBuilder {
 
     pub fn reset(&mut self) {
         *self = Self::new();
+    }
+
+    /// Reject incomplete/corrupt external display history before returning public turns.
+    pub fn finish_checked(self) -> Result<Vec<Turn>, codex_protocol::external_input::Error> {
+        if let Some(error) = self.external_error.clone() {
+            return Err(error);
+        }
+        if self.external_projection.is_pending() || !self.external_pending.is_empty() {
+            return Err(codex_protocol::external_input::Error::Corrupt);
+        }
+        Ok(self.finish())
     }
 
     pub fn finish(mut self) -> Vec<Turn> {
@@ -389,6 +406,13 @@ impl ThreadHistoryBuilder {
     pub fn handle_rollout_item(&mut self, item: &RolloutItem) {
         self.current_rollout_index = self.next_rollout_index;
         self.next_rollout_index += 1;
+        match self.external_projection.observe(item) {
+            Ok(Some(item)) => self.external_pending.push(item),
+            Ok(None) => {}
+            Err(error) => {
+                self.external_error = Some(error);
+            }
+        }
         match item {
             RolloutItem::EventMsg(event) => self.handle_event(event),
             RolloutItem::Compacted(payload) => self.handle_compacted(payload),
@@ -402,6 +426,19 @@ impl ThreadHistoryBuilder {
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::SessionMeta(_) => {}
+        }
+        let pending = std::mem::take(&mut self.external_pending);
+        for change in pending {
+            if self
+                .current_turn
+                .as_ref()
+                .is_some_and(|turn| turn.id == change.turn_id)
+                || self.turns.iter().any(|turn| turn.id == change.turn_id)
+            {
+                self.upsert_item_in_turn_id(&change.turn_id, change.item);
+            } else {
+                self.external_pending.push(change);
+            }
         }
     }
 

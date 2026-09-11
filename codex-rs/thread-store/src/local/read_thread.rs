@@ -297,6 +297,33 @@ pub(super) async fn load_history_items(
         .map_err(|err| ThreadStoreError::Internal {
             message: format!("failed to load thread history {}: {err}", path.display()),
         })?;
+    let mut external = codex_app_server_protocol::ExternalInputProjection::default();
+    for item in &items {
+        external
+            .observe(item)
+            .map_err(|error| ThreadStoreError::Internal {
+                message: error.to_string(),
+            })?;
+    }
+    if external.is_pending() {
+        return Err(ThreadStoreError::Internal {
+            message: "partial external input history".into(),
+        });
+    }
+    if items
+        .iter()
+        .any(|item| matches!(item, codex_rollout::RolloutItem::ExternalInput(_)))
+    {
+        let mut builder = codex_app_server_protocol::ThreadHistoryBuilder::new();
+        for item in &items {
+            builder.handle_rollout_item(item);
+        }
+        builder
+            .finish_checked()
+            .map_err(|error| ThreadStoreError::Internal {
+                message: error.to_string(),
+            })?;
+    }
     Ok(items)
 }
 

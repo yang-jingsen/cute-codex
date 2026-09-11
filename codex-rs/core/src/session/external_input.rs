@@ -389,6 +389,40 @@ impl Session {
                 .send(runtime.pending[index].envelope.message.id.clone());
             runtime.pending.remove(index);
             runtime.poisoned = false;
+            // The canonical pair already owns persistence. Publish the existing UI item only
+            // after its original A4 barrier, without appending a second durable record.
+            if let codex_protocol::models::ResponseItem::FunctionCallOutput {
+                id: Some(id),
+                name: Some(name),
+                namespace,
+                output,
+                ..
+            } = &item
+            {
+                self.send_event_raw_with_persistence(
+                    codex_protocol::protocol::Event {
+                        id: turn.sub_id.clone(),
+                        msg: codex_protocol::protocol::EventMsg::ItemCompleted(
+                            codex_protocol::protocol::ItemCompletedEvent {
+                                thread_id: self.thread_id,
+                                turn_id: turn.sub_id.clone(),
+                                item: codex_protocol::items::TurnItem::FunctionCallOutput(
+                                    codex_protocol::items::FunctionCallOutputItem {
+                                        id: id.to_string(),
+                                        name: name.clone(),
+                                        namespace: namespace.clone(),
+                                        output: output.body.clone(),
+                                    },
+                                ),
+                                started_at_ms: None,
+                                completed_at_ms: chrono::Utc::now().timestamp_millis(),
+                            },
+                        ),
+                    },
+                    /*persist*/ false,
+                )
+                .await;
+            }
             self.send_raw_response_items(turn, std::slice::from_ref(&item))
                 .await;
         }
