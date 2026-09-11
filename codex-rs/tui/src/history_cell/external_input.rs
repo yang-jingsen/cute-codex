@@ -15,6 +15,7 @@ struct Body {
 }
 #[derive(Debug)]
 pub(crate) struct ExternalInputHistoryCell {
+    pub(super) id: String,
     header: String,
     body: String,
 }
@@ -53,6 +54,7 @@ impl ExternalInputHistoryCell {
             SourceKind::Service => "service",
         };
         Some(Self {
+            id: id.into(),
             header: format!(
                 "External input · {kind}/{} · {}",
                 body.source.id, body.event_type

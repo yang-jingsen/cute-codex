@@ -35,7 +35,7 @@ pub(super) fn render_event(
         for part in clean.lines() {
             lines.extend(
                 adaptive_wrap_line(
-                    &Line::from(part.to_owned().dim()),
+                    &Line::from(part.to_owned()),
                     RtOptions::new(usize::from(width).max(1))
                         .initial_indent(indent.into())
                         .subsequent_indent(indent.into()),
