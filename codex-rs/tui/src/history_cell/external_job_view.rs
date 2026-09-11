@@ -76,7 +76,7 @@ pub(super) fn render(view: &View, id_label: Option<&str>) -> Option<(String, Vec
     ));
     let mut details = Vec::new();
     if let Some(code) = facts.exit_code {
-        details.push(format!("Exit {code}"));
+        details.push(format!("exit {code}"));
     }
     if let Some(execution) = facts.execution {
         if execution.basis != "runner_release_to_wait_v1" {
@@ -88,11 +88,7 @@ pub(super) fn render(view: &View, id_label: Option<&str>) -> Option<(String, Vec
             execution.exit_observed_at_epoch_millis,
         );
         if let Some(duration) = execution.observed_run_duration_millis {
-            details.push(format!(
-                "Observed run {}.{:03} s",
-                duration / 1000,
-                duration % 1000
-            ));
+            details.push(format!("run {}.{:03} s", duration / 1000, duration % 1000));
         }
     }
     for (name, stream) in [("stdout", facts.stdout), ("stderr", facts.stderr)] {
@@ -100,18 +96,29 @@ pub(super) fn render(view: &View, id_label: Option<&str>) -> Option<(String, Vec
             if stream.retained_bytes > stream.observed_bytes {
                 return None;
             }
-            details.push(format!(
-                "{name} · {} B observed · {} B retained{}",
-                stream.observed_bytes,
-                stream.retained_bytes,
-                if stream.truncated {
-                    " · source truncated"
+            details.push(
+                if stream.observed_bytes == stream.retained_bytes && !stream.truncated {
+                    format!("{name} {} B", stream.retained_bytes)
                 } else {
-                    ""
-                }
-            ));
+                    format!(
+                        "{name} {}/{} B retained{}",
+                        stream.retained_bytes,
+                        stream.observed_bytes,
+                        if stream.truncated {
+                            " · truncated"
+                        } else {
+                            ""
+                        }
+                    )
+                },
+            );
         }
     }
+    let mut details = if details.is_empty() {
+        Vec::new()
+    } else {
+        vec![details.join(" · ")]
+    };
     if let Some(reason) = facts.terminal_reason {
         details.push(reason);
     }

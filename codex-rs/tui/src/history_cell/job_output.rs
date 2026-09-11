@@ -102,7 +102,7 @@ impl OutputPage {
                         textwrap::Options::new(usize::from(width).saturating_sub(2).max(1)),
                     )
                     .into_iter()
-                    .map(|part| Line::from(format!("  {part}")))
+                    .map(|part| Line::from(format!("  {part}")).dim())
                     .collect::<Vec<_>>()
                 })
                 .collect();

@@ -85,12 +85,14 @@ impl HistoryCell for ExternalInputHistoryCell {
             .as_ref()
             .and_then(|view| job_view::render(view, self.id_label.as_deref()))
         {
-            return super::event_presentation::render_event(
-                Some(&header),
-                &body,
-                Some("•".dim()),
-                width,
+            let mut lines =
+                super::event_presentation::render_event(Some(&header), &[], Some("•".dim()), width);
+            lines.extend(
+                super::event_presentation::render_event(None, &body, Some("•".dim()), width)
+                    .into_iter()
+                    .map(Stylize::dim),
             );
+            return lines;
         }
         super::event_presentation::render_event(
             Some(&self.header),

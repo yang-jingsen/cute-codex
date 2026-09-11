@@ -109,3 +109,19 @@ fn output_page_initial_and_later_metadata() {
             .join("\n")
     );
 }
+
+#[test]
+fn output_page_ordinary_preview_is_dim() {
+    use ratatui::style::Modifier;
+    let value = page("plain\n世界 e\u{301}".as_bytes());
+    let original = value.clone();
+    let output = parsed(&value).unwrap();
+    let lines = output.lines(12);
+    assert!(
+        lines
+            .iter()
+            .all(|line| line.style.add_modifier.contains(Modifier::DIM))
+    );
+    assert_eq!(output.bytes, "plain\n世界 e\u{301}".as_bytes());
+    assert_eq!(value, original);
+}

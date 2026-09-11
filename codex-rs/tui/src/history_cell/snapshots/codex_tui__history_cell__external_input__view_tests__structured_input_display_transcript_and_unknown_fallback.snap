@@ -1,7 +1,8 @@
 ---
 source: tui/src/history_cell/external_input_view_tests.rs
+assertion_line: 25
 expression: normal
 ---
 • Job completed · build世界
   · job_12345678…abcd
-  Exit 0
+  exit 0
