@@ -27,6 +27,7 @@ pub(super) struct ActiveCellLayoutCache {
 
 #[derive(Default)]
 pub(super) struct TranscriptState {
+    pub(super) job_labels: crate::history_cell::JobLabels,
     pub(super) presentation_timeline: Option<Vec<codex_app_server_protocol::ThreadTimelineEntry>>,
     pub(super) presentations_seen: std::collections::BTreeMap<
         (String, String),

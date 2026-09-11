@@ -27,6 +27,7 @@ impl ChatWidget {
             .set_queue_submissions(/*queue_submissions*/ false);
         if previous_thread_id != self.thread_id {
             self.transcript.presentations_seen.clear();
+            self.transcript.job_labels = Default::default();
             self.backend_banner_notice_model = None;
             self.pending_automatic_thread_names.clear();
             self.review.recent_auto_review_denials = RecentAutoReviewDenials::default();

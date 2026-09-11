@@ -177,7 +177,10 @@ impl ChatWidget {
         };
         self.flush_answer_stream_with_separator();
         self.flush_active_cell();
-        self.transcript.active_cell = Some(Box::new(history_cell::new_active_mcp_tool_call(
+        let label = arguments["jobId"]
+            .as_str()
+            .map(|id| self.transcript.job_labels.label(id));
+        let mut cell = history_cell::new_active_mcp_tool_call(
             id,
             McpInvocation {
                 server,
@@ -185,12 +188,17 @@ impl ChatWidget {
                 arguments: Some(arguments),
             },
             self.config.animations,
-        )));
+        );
+        if let Some(label) = label {
+            cell.set_job_label(label);
+        }
+        self.transcript.active_cell = Some(Box::new(cell));
         self.bump_active_cell_revision();
         self.request_redraw();
     }
 
     pub(crate) fn handle_mcp_tool_call_completed_now(&mut self, item: ThreadItem) {
+        let receipt_label = self.transcript.job_labels.observe(&item);
         self.flush_answer_stream_with_separator();
 
         let ThreadItem::McpToolCall {
@@ -212,6 +220,12 @@ impl ChatWidget {
             tool,
             arguments: Some(arguments),
         };
+        let label = invocation
+            .arguments
+            .as_ref()
+            .and_then(|args| args["jobId"].as_str())
+            .map(|id| self.transcript.job_labels.label(id))
+            .or(receipt_label);
         let duration = Duration::from_millis(duration_ms.unwrap_or_default().max(0) as u64);
         let result = match (result, error) {
             (_, Some(error)) => Err(error.message),
@@ -233,11 +247,19 @@ impl ChatWidget {
             .as_mut()
             .and_then(|cell| cell.as_any_mut().downcast_mut::<McpToolCallCell>())
         {
-            Some(cell) if cell.call_id() == id => cell.complete(duration, result),
+            Some(cell) if cell.call_id() == id => {
+                if let Some(label) = label {
+                    cell.set_job_label(label);
+                }
+                cell.complete(duration, result)
+            }
             _ => {
                 self.flush_active_cell();
                 let mut cell =
                     history_cell::new_active_mcp_tool_call(id, invocation, self.config.animations);
+                if let Some(label) = label {
+                    cell.set_job_label(label);
+                }
                 let extra_cell = cell.complete(duration, result);
                 self.transcript.active_cell = Some(Box::new(cell));
                 extra_cell
@@ -245,6 +267,7 @@ impl ChatWidget {
         };
 
         self.flush_active_cell();
+
         if let Some(extra) = extra_cell {
             self.add_boxed_history(extra);
         }

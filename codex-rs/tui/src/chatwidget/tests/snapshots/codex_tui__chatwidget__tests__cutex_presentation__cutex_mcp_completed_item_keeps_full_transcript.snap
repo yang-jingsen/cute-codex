@@ -1,11 +1,11 @@
 ---
 source: tui/src/chatwidget/tests/cutex_presentation_tests.rs
-assertion_line: 49
+assertion_line: 51
 expression: observed
 ---
 [
     (
-        "• Queried job · job-123 · running\n  {\"schema\": \"cutex/job-service-core/v1\", \"jobId\": \"job-123\", \"revision\": 1,\n  \"state\": \"running\"}\n",
+        "• Queried job · job-123\n  State: running\n",
         "• Called cutex_job.query({\"jobId\":\"job-123\"})\n  └ {\"schema\": \"cutex/job-service-core/v1\", \"jobId\": \"job-123\", \"revision\": 1,\n        \"state\": \"running\"}\n",
         "Called cutex_job.query({\"jobId\":\"job-123\"})\n{\"schema\": \"cutex/job-service-core/v1\", \"jobId\": \"job-123\", \"revision\": 1, \"state\": \"running\"}\n",
     ),
