@@ -50,7 +50,7 @@ fn output_page_binary_empty_and_preview_window() {
             .any(|line| line.to_string().contains("Binary output · 2 B"))
     );
     let empty = parsed(&page(b"")).unwrap().lines(80);
-    assert!(empty[0].to_string().contains("empty returned page"));
+    assert!(empty[0].to_string().contains("empty page"));
     for text in [
         "a\n".repeat(20),
         "🦀".repeat(1024),
@@ -86,4 +86,26 @@ fn output_page_exact_byte_cap_and_grapheme_boundary() {
     overflow["fromOffset"] = json!(u64::MAX);
     overflow["nextOffset"] = json!(0);
     assert!(parsed(&overflow).is_none());
+}
+
+#[test]
+fn output_page_initial_and_later_metadata() {
+    let mut initial = page(&[b'x'; 39]);
+    initial["fromOffset"] = json!(0);
+    initial["nextOffset"] = json!(39);
+    assert_eq!(
+        parsed(&initial).unwrap().lines(80)[0].to_string(),
+        "  stdout · 39 B"
+    );
+    let mut empty = page(b"");
+    empty["fromOffset"] = json!(0);
+    empty["nextOffset"] = json!(0);
+    let cases = [initial, page(b"abc"), empty, page(b"")];
+    insta::assert_snapshot!(
+        cases
+            .iter()
+            .map(|value| parsed(value).unwrap().lines(80)[0].to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 }

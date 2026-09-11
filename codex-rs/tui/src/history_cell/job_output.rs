@@ -51,16 +51,18 @@ impl OutputPage {
     }
 
     pub(super) fn lines(&self, width: u16) -> Vec<Line<'static>> {
-        let range = if self.bytes.is_empty() {
-            format!("offset {} · empty returned page", self.from)
-        } else {
-            format!("bytes {}–{} · returned page", self.from, self.next - 1)
-        };
-        let mut metadata = vec![format!(
-            "{} · {} B returned · {range}",
-            self.stream,
-            self.bytes.len()
-        )];
+        let mut summary = format!("{} · {} B", self.stream, self.bytes.len());
+        if self.from > 0 {
+            if self.bytes.is_empty() {
+                summary.push_str(&format!(" · offset {}", self.from));
+            } else {
+                summary.push_str(&format!(" · bytes {}–{}", self.from, self.next - 1));
+            }
+        }
+        if self.bytes.is_empty() {
+            summary.push_str(" · empty page");
+        }
+        let mut metadata = vec![summary];
         if self.gap {
             metadata.push("Output gap reported by source".into());
         }
