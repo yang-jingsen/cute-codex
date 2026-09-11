@@ -66,6 +66,7 @@ impl ExternalInputProjection {
                     name: name.clone(),
                     namespace: namespace.clone(),
                     output: output.body.clone(),
+                    external_input_view: envelope.view.clone(),
                 },
                 started_at_ms: None,
                 completed_at_ms: None,

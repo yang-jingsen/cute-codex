@@ -3,6 +3,7 @@ use pretty_assertions::assert_eq;
 
 fn envelope() -> Envelope {
     let mut envelope = Envelope {
+        view: None,
         version: 1,
         owner_id: "owner".into(),
         thread_id: "thread".into(),
@@ -88,7 +89,7 @@ fn strict_envelope_and_utf8_boundaries() {
         assert!(serde_json::from_value::<Envelope>(value).is_err());
     }
     let mut changed = e.clone();
-    changed.version = 2;
+    changed.version = 3;
     assert_eq!(changed.validate(), Err(Error::Version));
     changed = e.clone();
     changed.semantic_sha256 = changed.semantic_sha256.to_uppercase();
@@ -408,4 +409,47 @@ fn soon_digest_recovery_and_model_exclusion() {
         recovered.unwrap().messages["message"].processing,
         Processing::Pending(None)
     );
+}
+
+#[test]
+fn structured_view_v2_identity_recovery_and_model_exclusion() {
+    let legacy = envelope();
+    let mut e = legacy.clone();
+    e.version = 2;
+    e.view = Some(crate::external_input_view::View {
+        schema: "test.v1".into(),
+        data: serde_json::json!({"z":[true,null,7],"a":"🦀\n"}),
+    });
+    e.semantic_sha256 = e.digest();
+    assert_eq!(
+        e.digest(),
+        "871d2fc606fe6d2230e1c3cfc63c2f568f2105a214e6bf2668bf6ecfa2e0f05c"
+    );
+    let receipt = Receipt::new(&e, "turn".into(), 1).unwrap();
+    assert_eq!(
+        receipt.receipt_id,
+        "eir1_2b71c1110ad1352db5f49428c9c68da23f7356449519eccb961e3431d783eeb2"
+    );
+    assert_eq!(e.response_item().unwrap(), legacy.response_item().unwrap());
+    let serialized = serde_json::to_string(&e).unwrap();
+    let restored: Envelope = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(restored, e);
+    let mut next_generation = restored;
+    next_generation.runtime_generation += 1;
+    assert_eq!(
+        Receipt::new(&next_generation, "turn".into(), 1).unwrap(),
+        receipt
+    );
+    let mut changed = e.clone();
+    changed.view.as_mut().unwrap().data["a"] = serde_json::json!("changed");
+    assert_ne!(changed.digest(), e.digest());
+    assert!(changed.validate().is_err());
+    changed.version = 1;
+    assert!(changed.validate().is_err());
+    assert!(!serde_json::to_string(&legacy).unwrap().contains("\"view\""));
+    let mut none = legacy.clone();
+    none.version = 2;
+    none.semantic_sha256 = none.digest();
+    assert!(none.validate().is_ok());
+    assert_ne!(none.digest(), legacy.digest());
 }

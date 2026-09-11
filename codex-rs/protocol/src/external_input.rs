@@ -1,6 +1,5 @@
-//! Pure ExternalInput v1 foundations for the next ingress slice. No RPC, admission,
-//! writer, scheduling, or A4 acknowledgement is implemented here. Recovery requires
-//! complete ordered history supplied by a caller that has checked read errors.
+//! Common ExternalInput envelopes, identities and strict pair recovery.
+//! Structured view facts never enter the canonical model projection.
 use crate::ResponseItemId;
 use crate::models::FunctionCallOutputPayload;
 use crate::models::ResponseItem;
@@ -79,6 +78,9 @@ pub struct Envelope {
     pub runtime_generation: u64,
     pub message: Message,
     pub semantic_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub view: Option<crate::external_input_view::View>,
 }
 
 fn bounded(value: &str, limit: usize) -> Result<(), Error> {
@@ -98,34 +100,50 @@ fn hash_fields(domain: &[u8], fields: &[&str]) -> Sha256 {
 }
 impl Envelope {
     pub fn digest(&self) -> String {
-        format!(
-            "{:x}",
-            hash_fields(
-                b"codex:external-input:v1\0",
-                &[
-                    &self.owner_id,
-                    &self.thread_id,
-                    &self.message.id,
-                    match self.message.source.kind {
-                        SourceKind::Agent => "agent",
-                        SourceKind::Service => "service",
-                    },
-                    &self.message.source.id,
-                    &self.message.event_type,
-                    match self.message.delivery {
-                        Delivery::AfterTurn => "after_turn",
-                        Delivery::Soon => "soon",
-                        Delivery::Passive => "passive",
-                    },
-                    &self.message.text,
-                ]
-            )
-            .finalize()
-        )
+        let fields: &[&str] = &[
+            &self.owner_id,
+            &self.thread_id,
+            &self.message.id,
+            match self.message.source.kind {
+                SourceKind::Agent => "agent",
+                SourceKind::Service => "service",
+            },
+            &self.message.source.id,
+            &self.message.event_type,
+            match self.message.delivery {
+                Delivery::AfterTurn => "after_turn",
+                Delivery::Soon => "soon",
+                Delivery::Passive => "passive",
+            },
+            &self.message.text,
+        ];
+        let mut hash = hash_fields(
+            if self.version == 2 {
+                b"codex:external-input:v2\0"
+            } else {
+                b"codex:external-input:v1\0"
+            },
+            fields,
+        );
+        if self.version == 2 {
+            let view = self.view.as_ref().map_or_else(
+                || "null".to_string(),
+                super::external_input_view::View::canonical_json,
+            );
+            hash.update((view.len() as u64).to_be_bytes());
+            hash.update(view.as_bytes());
+        }
+        format!("{:x}", hash.finalize())
     }
     pub fn validate(&self) -> Result<(), Error> {
-        if self.version != 1 {
+        if !matches!(self.version, 1 | 2) {
             return Err(Error::Version);
+        }
+        if self.version == 1 && self.view.is_some() {
+            return Err(Error::Invalid("v1 view"));
+        }
+        if let Some(view) = &self.view {
+            view.validate()?;
         }
         for value in [
             &self.owner_id,

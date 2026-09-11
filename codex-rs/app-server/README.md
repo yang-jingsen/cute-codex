@@ -3229,3 +3229,47 @@ replay; it retains O(history) client state instead of applying the ordinary init
 turn-tail loading budget on presentation-enabled connections. No large-history memory
 or throughput guarantee is made. A later bounded viewport optimization must preserve
 thread-level facts and canonical ordering, including idle entries.
+
+### ExternalInput structured display facts (private experimental v2)
+
+A bound receiver advertises `externalInputVersions: [1, 2]` in initialize.
+The existing `externalInputVersion: 1` continues to describe status/retry control.
+Missing supported versions means only the previously advertised v1 submit format;
+senders must not downgrade a frozen v2 event.
+
+Submit envelope v2 adds optional top-level `view: {schema, data}`. Missing/null
+means no view; v1 accepts no non-null view. The schema is 1–128 ASCII bytes from
+letters, digits, dot, underscore and hyphen. Data must be an object, with only
+JSON null/boolean/string/integer/object/array values (i64/u64 integers, no floats).
+The data root is container depth1, maximum8; all object members plus array
+elements total at most1024. Canonical encoded entire view is at most16384 UTF-8
+bytes. These limits do not replace text, admission, request or receiver model-item
+byte policies. Invalid data rejects before admission; no truncation.
+
+Canonical view JSON recursively sorts object keys by UTF-8 lexical order,
+preserves array order, uses compact serde_json string escaping and shortest
+integer decimal representation. Send unique object keys. Wrapper order is data,
+schema. Absent view's canonical form for the digest is `null`.
+The v2 semantic SHA256 domain is `codex:external-input:v2` followed by NUL.
+It hashes the same eight v1 u64-big-endian-length-prefixed UTF-8 fields
+(ownerId, threadId, message.id, source.kind, source.id, type, delivery, text),
+followed by one equally framed canonical view JSON field. Runtime generation
+remains authorization only. The v1 digest and receipt algorithm are unchanged;
+the v2 digest participates in the existing receipt. Same ID with changed facts
+conflicts, including after restart.
+
+The mechanical commit persists view. Its adjacent canonical model ResponseItem
+still contains only source/type/text. Validated full, paginated and live
+`functionCallOutput` projections expose `externalInputView` separately; ordinary
+outputs have null. No second Presentation is appended. Existing v1 derived
+indexes deserialize missing view as null; new v2 pairs use the same authoritative
+projection on write/rebuild, so no separate index migration is required.
+Old writers must not open v2 histories: old envelope parsers reject the extension.
+
+Terminal understands `cutex.job-completion.v1` as descriptive facts, not
+permission or lookup authority. Known typed facts can change local display
+without changing committed model text. Unknown schema or invalid typed facts
+fall back to the original input; raw/transcript retains both original text and
+a separate display-facts section. Independent Presentation records keep their
+existing receipts and explicit references. Missing optional Job facts are
+omitted; exited without observed code0 is displayed as Job exited.

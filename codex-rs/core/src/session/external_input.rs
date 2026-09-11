@@ -344,6 +344,7 @@ impl Session {
                 turn.sub_id.clone(),
                 runtime.recovery.next_ordinal,
             )?;
+            let view = envelope.view.clone();
             let commit = Commit { envelope, receipt };
             let record = Record {
                 version: 1,
@@ -412,6 +413,7 @@ impl Session {
                                         name: name.clone(),
                                         namespace: namespace.clone(),
                                         output: output.body.clone(),
+                                        external_input_view: view,
                                     },
                                 ),
                                 started_at_ms: None,

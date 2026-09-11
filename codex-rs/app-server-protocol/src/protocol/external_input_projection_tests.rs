@@ -8,6 +8,7 @@ use codex_protocol::external_input_record::Record;
 use pretty_assertions::assert_eq;
 fn pair() -> [RolloutItem; 2] {
     let mut e = Envelope {
+        view: None,
         version: 1,
         owner_id: "owner".into(),
         thread_id: "thread".into(),
@@ -56,12 +57,14 @@ fn complete_pair_preserves_original_identity_and_body() {
         name,
         namespace,
         output,
+        external_input_view,
     } = item.item
     else {
         panic!("wrong item")
     };
     assert_eq!(id, "jsc_".to_owned() + &"a".repeat(64));
     assert_eq!(name, "external_event");
+    assert_eq!(external_input_view, None);
     assert_eq!(namespace, Some("external".into()));
     assert!(output.to_text().unwrap().contains("Body 世界"));
 }
@@ -137,4 +140,36 @@ fn exact_replay_matches_but_conflicting_identity_is_rejected() {
     let output = RolloutItem::ResponseItem(commit.envelope.response_item().unwrap().into());
     p.observe(&conflict).unwrap();
     assert_eq!(p.observe(&output), Err(Error::Conflict));
+}
+
+#[test]
+fn structured_view_complete_pair_projects_separately() {
+    let mut pair = pair();
+    let RolloutItem::ExternalInput(record) = &mut pair[0] else {
+        panic!("commit")
+    };
+    let codex_protocol::external_input_record::Fact::Commit { commit } = &mut record.fact else {
+        panic!("commit")
+    };
+    commit.envelope.version = 2;
+    commit.envelope.view = Some(codex_protocol::external_input_view::View {
+        schema: "test.v1".into(),
+        data: serde_json::json!({"sentinel":"NON_MODEL_VIEW"}),
+    });
+    commit.envelope.semantic_sha256 = commit.envelope.digest();
+    commit.receipt = codex_protocol::external_input::Receipt::new(
+        &commit.envelope,
+        commit.receipt.turn_id.clone(),
+        commit.receipt.ordinal,
+    )
+    .unwrap();
+    let mut projection = ExternalInputProjection::default();
+    assert!(projection.observe(&pair[0]).unwrap().is_none());
+    let item = projection.observe(&pair[1]).unwrap().unwrap().item;
+    let value = serde_json::to_value(item).unwrap();
+    assert_eq!(
+        value["externalInputView"]["data"]["sentinel"],
+        "NON_MODEL_VIEW"
+    );
+    assert!(!value["output"].to_string().contains("NON_MODEL_VIEW"));
 }

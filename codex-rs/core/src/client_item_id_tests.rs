@@ -17,7 +17,11 @@ fn provider_item_id_projection_preserves_recovered_external_identity() -> anyhow
     ];
     for (index, id) in ids.iter().enumerate() {
         let mut envelope = external::Envelope {
-            version: 1,
+            view: Some(codex_protocol::external_input_view::View {
+                schema: "test.v1".into(),
+                data: json!({"sentinel":"NON_MODEL_VIEW_SENTINEL"}),
+            }),
+            version: 2,
             owner_id: "owner".into(),
             thread_id: "thread".into(),
             runtime_generation: 1,
@@ -79,6 +83,7 @@ fn provider_item_id_projection_preserves_recovered_external_identity() -> anyhow
         )?;
         client.prepare_response_items_for_request(&mut request.input);
         let serialized = serde_json::to_value(&request)?;
+        assert!(!serialized.to_string().contains("NON_MODEL_VIEW_SENTINEL"));
         let mut expected = serde_json::to_value(&item)?;
         if index != 2 {
             expected.as_object_mut().unwrap().remove("id");

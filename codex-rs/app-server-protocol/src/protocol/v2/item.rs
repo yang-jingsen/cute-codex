@@ -266,6 +266,8 @@ pub enum ThreadItem {
         name: String,
         namespace: Option<String>,
         output: FunctionCallOutputBody,
+        #[serde(default)]
+        external_input_view: Option<codex_protocol::external_input_view::View>,
     },
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
@@ -892,6 +894,7 @@ impl From<CoreTurnItem> for ThreadItem {
                 name: output.name,
                 namespace: output.namespace,
                 output: output.output,
+                external_input_view: output.external_input_view,
             },
             CoreTurnItem::Plan(plan) => ThreadItem::Plan {
                 id: plan.id,

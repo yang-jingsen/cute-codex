@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 fn pair() -> (Commit, Vec<RolloutItem>) {
     let mut envelope = Envelope {
+        view: None,
         version: 1,
         owner_id: "owner".into(),
         thread_id: "thread".into(),

@@ -17,6 +17,8 @@ pub struct ExternalInputSubmitParams {
     pub thread_id: String,
     pub runtime_generation: u64,
     pub message: Message,
+    #[ts(optional = nullable)]
+    pub view: Option<codex_protocol::external_input_view::View>,
     pub semantic_sha256: String,
 }
 
@@ -28,6 +30,7 @@ impl From<ExternalInputSubmitParams> for Envelope {
             thread_id: value.thread_id,
             runtime_generation: value.runtime_generation,
             message: value.message,
+            view: value.view,
             semantic_sha256: value.semantic_sha256,
         }
     }

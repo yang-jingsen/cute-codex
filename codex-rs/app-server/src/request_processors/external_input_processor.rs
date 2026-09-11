@@ -132,7 +132,7 @@ impl ExternalInputRequestProcessor {
             .map_err(|error| invalid_request(error.to_string()))?;
         let thread = self
             .require_thread(
-                envelope.version,
+                /*version*/ 1,
                 &envelope.owner_id,
                 &envelope.thread_id,
                 envelope.runtime_generation,

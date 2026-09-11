@@ -6,6 +6,7 @@ use codex_protocol::external_input::SourceKind;
 
 fn envelope(text: String) -> Envelope {
     let mut envelope = Envelope {
+        view: None,
         version: 1,
         owner_id: "owner".into(),
         thread_id: "thread".into(),
