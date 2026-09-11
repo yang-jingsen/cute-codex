@@ -3631,6 +3631,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.9.3",
  "regex-lite",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "serial_test",

@@ -112,6 +112,9 @@ use codex_terminal_detection::TerminalName;
     override_usage = "codex [OPTIONS] [PROMPT]\n       codex [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct MultitoolCli {
+    /// Use this private auth file independently of CODEX_HOME (Linux, local launch only).
+    #[arg(long, global = true, value_name = "ABS_PATH")]
+    auth_file: Option<std::path::PathBuf>,
     #[clap(flatten)]
     pub config_overrides: CliConfigOverrides,
 
@@ -1048,12 +1051,32 @@ async fn cli_main(
     remote_control_disabled: bool,
 ) -> anyhow::Result<()> {
     let MultitoolCli {
+        auth_file,
         config_overrides: mut root_config_overrides,
         feature_toggles,
         remote,
         mut interactive,
         subcommand,
     } = MultitoolCli::parse();
+    if auth_file.is_some() {
+        let local_supported = matches!(
+            &subcommand,
+            None | Some(
+                Subcommand::Exec(_)
+                    | Subcommand::Review(_)
+                    | Subcommand::Resume(_)
+                    | Subcommand::Fork(_)
+                    | Subcommand::Login(_)
+                    | Subcommand::Logout(_)
+            )
+        ) || matches!(&subcommand, Some(Subcommand::AppServer(command)) if command.subcommand.is_none());
+        if remote.remote.is_some() || !local_supported {
+            anyhow::bail!(
+                "--auth-file requires a supported local launch, not remote or lifecycle dispatch"
+            );
+        }
+    }
+    codex_login::configure_auth_file(auth_file)?;
     // Fold --enable/--disable into config overrides so they flow to all subcommands.
     let toggle_overrides = feature_toggles.to_overrides()?;
     root_config_overrides.raw_overrides.extend(toggle_overrides);

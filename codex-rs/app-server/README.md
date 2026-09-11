@@ -3299,3 +3299,46 @@ projection revision; it does not change the public ExternalInput version.
 Older readers that reject revision 3 must not be used as writers for this index.
 No original rollout rewrite, delivery acknowledgment, or model turn is implied
 by reading/resuming historical messages.
+
+### Independent file-auth custody (Linux)
+
+`codex-app-server --auth-file /absolute/private/account.json` and
+`codex --auth-file /absolute/private/account.json ...` select an auth file
+independently of `CODEX_HOME`. This is a trusted launch option, not a config,
+environment, MCP, or per-turn override. It is initialized once before config/auth
+loading; the first auth access also seals the default when no option was supplied.
+All native file loads, login saves, refresh saves, reloads and logout deletes use
+the same selected storage. No tokens belong in argv or launch-review digests.
+
+Explicit selection requires `cli_auth_credentials_store = "file"`. Auto,
+keyring, ephemeral and external-auth/workload-identity callbacks conflict and
+are rejected. A missing selected file means unauthenticated; it never selects
+`CODEX_HOME/auth.json`, credential environment variables, or another store.
+Default launches retain their existing behavior. Provider-specific bearer
+configuration is a separate existing authority and is not overridden by this
+option; a reviewed account-preserving launch must not supply conflicting
+provider credentials.
+
+The selected absolute path must have no symlink components. Ancestors must be
+owned by the current UID or root and not group/other writable; the immediate
+parent must be current-UID 0700. An existing file must be current-UID, regular,
+0600, and single-link. No parent directories are created. File operations use a
+pinned parent handle, revalidate path identity, and reject unsafe replacements.
+Saves write a private sibling temporary file, flush it, and atomically rename it.
+A legitimate secure file/inode replacement remains readable for native token
+refresh. This does not add fsync/power-loss durability, a cross-process token CAS,
+or hostile same-UID isolation. Existing account-match recovery and cached-auth
+semantics remain; there is no continuous file watcher. Errors never trigger a
+fallback write. A failure after rename can mean the new bytes were already saved.
+
+The option supports local direct app-server, embedded Terminal/resume/fork,
+exec/review, and login/logout. Terminal does not reuse an implicit daemon with a
+selected auth file. Remote attach and other daemon/lifecycle dispatch reject the
+option; configure the receiver's own reviewed launch instead. Non-Linux builds
+reject explicit selection while retaining default auth behavior. Switching the
+selection requires a new process and the controller's own review/account binding;
+path ownership or a profile display label is not account authentication.
+
+No RPC/schema capability was added: consumers must pin a CLI/server that exposes
+this startup option. Existing histories, model data, and protocol receipts are
+unaffected.

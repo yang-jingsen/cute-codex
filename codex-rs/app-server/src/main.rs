@@ -20,6 +20,9 @@ const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_C
 #[derive(Debug, Parser)]
 #[command(version)]
 struct AppServerArgs {
+    /// Use this private auth file independently of CODEX_HOME (Linux only).
+    #[arg(long, value_name = "ABS_PATH")]
+    auth_file: Option<PathBuf>,
     /// Read a private, owner-only ExternalInput binding once at launch (Unix only).
     #[arg(long, value_name = "ABS_PATH")]
     external_input_binding_file: Option<PathBuf>,
@@ -69,6 +72,7 @@ fn main() -> anyhow::Result<()> {
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
         let AppServerArgs {
+            auth_file,
             external_input_binding_file,
             config_overrides,
             code_mode_host,
@@ -80,6 +84,7 @@ fn main() -> anyhow::Result<()> {
             disable_plugin_startup_tasks_for_tests,
             remote_control,
         } = AppServerArgs::parse();
+        codex_login::configure_auth_file(auth_file)?;
         let loader_overrides = if disable_managed_config_from_debug_env() {
             LoaderOverrides::without_managed_config_for_tests()
         } else {
