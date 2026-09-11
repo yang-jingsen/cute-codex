@@ -112,6 +112,9 @@ fn status_items_process_renderer() {
     // statusline snapshots cannot inherit a selected profile from this test.
     if let Some(path) = std::env::var_os("CODEX_TEST_STATUS_FIXTURE") {
         initialize(Some(Path::new(&path))).unwrap();
+        std::fs::write(&path, document("changed-after-load")).unwrap();
+        initialize(Some(Path::new(&path))).unwrap();
+        assert_eq!(value(StatusLineItem::CustomProfile), "继承 profile");
         assert!(initialize(None).is_err());
         let line = crate::bottom_pane::status_line_from_segments(
             [
@@ -190,4 +193,15 @@ fn status_items_process_renderer() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn default_status_items_reentry_does_not_read_a_catalog() {
+    initialize(None).unwrap();
+    initialize(None).unwrap();
+    assert_eq!(
+        value(StatusLineItem::CustomProfile),
+        "[custom:profile unavailable]"
+    );
+    assert!(initialize(Some(Path::new("/not-selected.json"))).is_err());
 }

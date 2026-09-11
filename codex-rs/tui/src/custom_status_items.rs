@@ -7,6 +7,7 @@ use std::fs::OpenOptions;
 use std::io;
 use std::io::Read;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use ratatui::style::Color;
@@ -17,7 +18,7 @@ use serde::Deserialize;
 use crate::bottom_pane::StatusLineItem;
 
 const MAX_FILE_BYTES: u64 = 8192;
-static ITEMS: OnceLock<StatusItems> = OnceLock::new();
+static ITEMS: OnceLock<(Option<PathBuf>, StatusItems)> = OnceLock::new();
 
 #[derive(Default)]
 pub(crate) struct StatusItems(BTreeMap<String, (String, Style)>);
@@ -50,21 +51,32 @@ struct ItemStyle {
 }
 
 pub(crate) fn initialize(path: Option<&Path>) -> io::Result<()> {
+    // Upstream local-database recovery can re-enter the TUI. Reuse the frozen
+    // selection, including the default, without reading changed display bytes.
+    if let Some((selected, _)) = ITEMS.get() {
+        return if selected.as_deref() == path {
+            Ok(())
+        } else {
+            Err(invalid(
+                "status items selection cannot change in this process",
+            ))
+        };
+    }
     let items = path.map(StatusItems::load).transpose()?.unwrap_or_default();
     ITEMS
-        .set(items)
+        .set((path.map(Path::to_path_buf), items))
         .map_err(|_| io::Error::other("status items already initialized"))
 }
 
 pub(crate) fn value(item: StatusLineItem) -> String {
     ITEMS.get().map_or_else(
         || format!("[{item} unavailable]"),
-        |items| items.value(item),
+        |(_, items)| items.value(item),
     )
 }
 
 pub(crate) fn style(item: StatusLineItem) -> Option<Style> {
-    ITEMS.get().and_then(|items| items.style(item))
+    ITEMS.get().and_then(|(_, items)| items.style(item))
 }
 
 pub(crate) fn is_custom(item: StatusLineItem) -> bool {
