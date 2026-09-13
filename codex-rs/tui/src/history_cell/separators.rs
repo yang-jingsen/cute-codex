@@ -9,6 +9,8 @@ use super::*;
 /// applying patches, making MCP tool calls), so purely conversational turns do not show an empty
 /// divider.
 pub struct FinalMessageSeparator {
+    // Capture local wall time once; redraws must not turn this into a clock.
+    occurred_at: String,
     elapsed_seconds: Option<u64>,
     runtime_metrics: Option<RuntimeMetricsSummary>,
 }
@@ -19,6 +21,7 @@ impl FinalMessageSeparator {
         runtime_metrics: Option<RuntimeMetricsSummary>,
     ) -> Self {
         Self {
+            occurred_at: chrono::Local::now().format("%H:%M").to_string(),
             elapsed_seconds,
             runtime_metrics,
         }
@@ -26,7 +29,7 @@ impl FinalMessageSeparator {
 }
 impl HistoryCell for FinalMessageSeparator {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut label_parts = Vec::new();
+        let mut label_parts = vec![self.occurred_at.clone()];
         if let Some(elapsed_seconds) = self
             .elapsed_seconds
             .filter(|seconds| *seconds > 60)
@@ -36,10 +39,6 @@ impl HistoryCell for FinalMessageSeparator {
         }
         if let Some(metrics_label) = self.runtime_metrics.and_then(runtime_metrics_label) {
             label_parts.push(metrics_label);
-        }
-
-        if label_parts.is_empty() {
-            return vec![Line::from_iter(["─".repeat(width as usize).dim()])];
         }
 
         let label = format!("─ {} ─", label_parts.join(" • "));
@@ -54,7 +53,7 @@ impl HistoryCell for FinalMessageSeparator {
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
-        let mut label_parts = Vec::new();
+        let mut label_parts = vec![self.occurred_at.clone()];
         if let Some(elapsed_seconds) = self
             .elapsed_seconds
             .filter(|seconds| *seconds > 60)
@@ -65,11 +64,7 @@ impl HistoryCell for FinalMessageSeparator {
         if let Some(metrics_label) = self.runtime_metrics.and_then(runtime_metrics_label) {
             label_parts.push(metrics_label);
         }
-        if label_parts.is_empty() {
-            Vec::new()
-        } else {
-            vec![Line::from(label_parts.join(" • "))]
-        }
+        vec![Line::from(label_parts.join(" • "))]
     }
 }
 
@@ -171,3 +166,7 @@ fn format_duration_ms(duration_ms: u64) -> String {
 fn pluralize(count: u64, singular: &'static str, plural: &'static str) -> &'static str {
     if count == 1 { singular } else { plural }
 }
+
+#[cfg(test)]
+#[path = "separators_tests.rs"]
+mod tests;

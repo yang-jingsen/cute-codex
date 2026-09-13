@@ -198,7 +198,9 @@ macro_rules! assert_chatwidget_snapshot {
         settings.set_prepend_module_to_snapshot(false);
         settings.set_snapshot_path(crate::chatwidget::tests::chatwidget_snapshot_dir());
         settings.bind(|| {
-            insta::assert_snapshot!(format!("codex_tui__chatwidget__tests__{}", $name), $value);
+            let value = regex_lite::Regex::new(r"─ [0-9]{2}:[0-9]{2}").unwrap()
+                .replace_all(&($value).to_string(), "─ HH:MM").into_owned();
+            insta::assert_snapshot!(format!("codex_tui__chatwidget__tests__{}", $name), value);
         });
     }};
     ($name:expr, $value:expr, @$snapshot:literal $(,)?) => {{
@@ -206,9 +208,11 @@ macro_rules! assert_chatwidget_snapshot {
         settings.set_prepend_module_to_snapshot(false);
         settings.set_snapshot_path(crate::chatwidget::tests::chatwidget_snapshot_dir());
         settings.bind(|| {
+            let value = regex_lite::Regex::new(r"─ [0-9]{2}:[0-9]{2}").unwrap()
+                .replace_all(&($value).to_string(), "─ HH:MM").into_owned();
             insta::assert_snapshot!(
                 format!("codex_tui__chatwidget__tests__{}", $name),
-                &($value),
+                &value,
                 @$snapshot
             );
         });
