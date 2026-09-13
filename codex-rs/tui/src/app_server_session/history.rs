@@ -276,7 +276,8 @@ impl AppServerSession {
             let items = self
                 .merge_thread_item_page(thread_id, page, &mut state, &mut thread.turns)
                 .await?;
-            if let Some(config) = config {
+            // Complete hydration has no row budget; defer rendering to transcript replay.
+            if let Some(config) = config.filter(|_| row_budget.is_some()) {
                 rendered_rows =
                     rendered_history_rows(thread_id, thread, items, config, width, rendered_rows);
             } else {
