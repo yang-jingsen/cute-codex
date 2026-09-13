@@ -133,6 +133,7 @@ pub struct LocalThreadStore {
     writer_lock_coordinator: Arc<WriterLockCoordinator>,
     state_db: Option<StateDbHandle>,
     thread_history_db: Arc<OnceCell<sqlx::SqlitePool>>,
+    presentation_validation: Arc<Mutex<Option<presentation_history::ValidationStamp>>>,
 }
 
 struct LiveRecorderEntry {
@@ -246,6 +247,7 @@ impl LocalThreadStore {
             writer_lock_coordinator,
             state_db,
             thread_history_db: Arc::new(OnceCell::new()),
+            presentation_validation: Arc::new(Mutex::new(None)),
         }
     }
 

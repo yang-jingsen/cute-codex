@@ -344,6 +344,26 @@ async fn presentation_rebuild_revert_and_corrupt_source_are_explicit() {
         .unwrap()
         .unwrap()
         .rollout_path;
+    // A warm page must still notice an in-place edit that keeps the file length.
+    let contents = std::fs::read_to_string(&path).unwrap();
+    let corrupted = contents.replace("Fact", "FAct");
+    assert_ne!(contents, corrupted);
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, corrupted).unwrap();
+    std::fs::File::open(&path)
+        .unwrap()
+        .set_modified(modified + std::time::Duration::from_secs(1))
+        .unwrap();
+    assert!(store.list_timeline(params()).await.is_err());
+    std::fs::write(&path, contents).unwrap();
+    std::fs::File::open(&path)
+        .unwrap()
+        .set_modified(modified + std::time::Duration::from_secs(2))
+        .unwrap();
+    assert_eq!(
+        store.list_timeline(params()).await.unwrap().items,
+        page.items
+    );
     use std::io::Write;
     let mut file = std::fs::OpenOptions::new().append(true).open(path).unwrap();
     file.write_all(b"{bad source\n").unwrap();

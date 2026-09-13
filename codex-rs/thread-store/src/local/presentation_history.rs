@@ -84,3 +84,53 @@ fn error(value: impl std::fmt::Display) -> ThreadStoreError {
         message: format!("presentation history: {value}"),
     }
 }
+
+/// One successful validation, retaining source metadata rather than decoded history.
+/// A single slot bounds retention even when a server visits many threads.
+#[derive(PartialEq, Eq)]
+pub(super) struct ValidationStamp {
+    thread_id: codex_protocol::ThreadId,
+    lineage: super::rollout_lineage::RolloutLineage,
+    files: Vec<(u64, std::time::SystemTime)>,
+}
+
+pub(super) async fn validate(
+    store: &LocalThreadStore,
+    thread_id: codex_protocol::ThreadId,
+    lineage: &super::rollout_lineage::RolloutLineage,
+) -> ThreadStoreResult<()> {
+    let mut files = Vec::with_capacity(lineage.segments().len());
+    for segment in lineage.segments() {
+        let metadata = tokio::fs::metadata(&segment.rollout_path)
+            .await
+            .map_err(error)?;
+        files.push((metadata.len(), metadata.modified().map_err(error)?));
+    }
+    let stamp = ValidationStamp {
+        thread_id,
+        lineage: lineage.clone(),
+        files,
+    };
+    if store.presentation_validation.lock().await.as_ref() == Some(&stamp) {
+        return Ok(());
+    }
+    load(
+        store,
+        LoadThreadHistoryParams {
+            thread_id,
+            include_archived: false,
+        },
+    )
+    .await?;
+    // Do not certify a source that changed while its records were being read.
+    for (segment, expected) in lineage.segments().iter().zip(&stamp.files) {
+        let metadata = tokio::fs::metadata(&segment.rollout_path)
+            .await
+            .map_err(error)?;
+        if (metadata.len(), metadata.modified().map_err(error)?) != *expected {
+            return Ok(());
+        }
+    }
+    *store.presentation_validation.lock().await = Some(stamp);
+    Ok(())
+}
