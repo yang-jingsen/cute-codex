@@ -399,6 +399,12 @@ fn target(invocation: &McpInvocation, preset: &Preset) -> String {
 pub(super) fn title(invocation: &McpInvocation) -> Option<String> {
     let p = lookup(invocation)?;
     let target = target(invocation, p);
+    if p.tool == "send" {
+        let mode = invocation.arguments.as_ref()?["delivery_mode"]
+            .as_str()?
+            .replace('_', "-");
+        return Some(format!("Sending message to {target} · {mode}"));
+    }
     Some(if target.is_empty() {
         p.running.into()
     } else {

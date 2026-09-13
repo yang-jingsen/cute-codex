@@ -76,13 +76,31 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
             }
         }
     } else if preset.tool == "send" {
-        if value["ok"] != true || value["to"] != args["to"] || value["id"].as_str().is_none() {
+        let matches_target = value["to_cutex_session_id"] == args["to"]
+            || value["to"] == args["to"]
+            || value["to_name"] == args["to"];
+        if value["ok"] != true || !matches_target || value["id"].as_str().is_none() {
             return None;
         }
         if value["queued"] != true {
             return None;
         }
-        format!("Queued message · {}", target(invocation, preset))
+        let name = value["to_name"]
+            .as_str()
+            .filter(|name| !name.is_empty())
+            .map(|name| super::super::messages::sanitize_user_text(name.into()))
+            .map(|name| {
+                name.split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .graphemes(true)
+                    .take(80)
+                    .collect::<String>()
+            })
+            .unwrap_or_else(|| target(invocation, preset));
+        let mode = args["delivery_mode"].as_str()?.replace('_', "-");
+        detail.push(args["message"].as_str()?.into());
+        format!("Sent message to {name} · {mode}")
     } else if preset.tool == "cutex_agent_list" {
         if value["ok"] != true || value["scope"] != "local_group_visible" {
             return None;

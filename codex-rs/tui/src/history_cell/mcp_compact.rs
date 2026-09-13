@@ -72,7 +72,21 @@ pub(super) fn render(cell: &McpToolCallCell, width: u16) -> Option<Vec<Line<'sta
         }
     };
     let body = if let Some(summary) = &summary {
-        summary.detail.clone()
+        if cell.invocation.server == "cutex" && cell.invocation.tool == "send" {
+            summary
+                .detail
+                .iter()
+                .map(|text| {
+                    format_and_truncate_tool_result(
+                        text,
+                        2,
+                        usize::from(width).saturating_sub(2).max(1),
+                    )
+                })
+                .collect()
+        } else {
+            summary.detail.clone()
+        }
     } else {
         match &cell.result {
             Some(Ok(result)) => result

@@ -216,6 +216,22 @@ fn registry_actions_and_shape_fallback() {
     }
 }
 #[test]
+fn message_receipt_resolves_durable_target_to_name_and_bounds_preview() {
+    let args = json!({"to":"cutex.worker-id","message":"long 私有 preview ".repeat(100),"external_message_id":"m","delivery_mode":"after_turn"});
+    let mut call = cell("cutex", "send", args);
+    finish(
+        &mut call,
+        json!({"ok":true,"to":"stock.runtime-id","to_cutex_session_id":"cutex.worker-id","to_name":"worker-name","id":"m","queued":true}),
+        false,
+    );
+    let display = render(call.display_lines(80));
+    assert!(display.contains("Sent message to worker-name · after-turn"));
+    assert!(!display.contains("stock.runtime-id"));
+    assert!(display.lines().count() <= 4, "{display}");
+    assert!(render(call.transcript_lines(80)).contains("long 私有 preview"));
+}
+
+#[test]
 fn messages_receipts_and_terminal_controls() {
     let args = json!({"to":"worker\u{1b}[31m\n二","message":"body","external_message_id":"m","delivery_mode":"soon"});
     let mut call = cell("cutex", "send", args.clone());
@@ -226,7 +242,7 @@ fn messages_receipts_and_terminal_controls() {
     );
     let display = render(call.display_lines(30));
     assert!(!display.contains('\u{1b}'));
-    assert!(display.contains("Queued message"));
+    assert!(display.contains("Sent message to"));
     insta::assert_snapshot!(display);
     let mut management = cell(
         "cutex",

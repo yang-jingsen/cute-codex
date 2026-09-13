@@ -22,6 +22,7 @@ pub(crate) struct ExternalInputHistoryCell {
     body: String,
     view: Option<codex_protocol::external_input_view::View>,
     id_label: Option<String>,
+    agent_header: Option<String>,
 }
 impl ExternalInputHistoryCell {
     pub(crate) fn observe_display_id(&mut self, labels: &mut super::JobLabels) {
@@ -66,6 +67,26 @@ impl ExternalInputHistoryCell {
             SourceKind::Agent => "agent",
             SourceKind::Service => "service",
         };
+        let agent_header = view
+            .filter(|view| view.schema == "cutex.agent-message.v1")
+            .filter(|view| {
+                body.source.kind == SourceKind::Agent
+                    && body.event_type == "message"
+                    && view.data["senderId"].as_str() == Some(body.source.id.as_str())
+            })
+            .and_then(|view| {
+                let mode = match view.data["deliveryMode"].as_str()? {
+                    "soon" => "soon",
+                    "passive" => "passive",
+                    "after_turn" => "after-turn",
+                    _ => return None,
+                };
+                let name = view.data["senderName"]
+                    .as_str()
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or(&body.source.id);
+                Some(format!("Received message from {name} · {mode}"))
+            });
         Some(Self {
             id: id.into(),
             header: format!(
@@ -75,11 +96,38 @@ impl ExternalInputHistoryCell {
             body: body.text,
             view: view.cloned(),
             id_label: None,
+            agent_header,
         })
     }
 }
 impl HistoryCell for ExternalInputHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        if let Some(header) = &self.agent_header {
+            let bullet = "•"
+                .fg(crate::terminal_palette::rgb_color((0xF6, 0xA3, 0xC8)))
+                .bold();
+            let mut lines = super::event_presentation::render_event(
+                Some(header),
+                &[],
+                Some(bullet.clone()),
+                width,
+            );
+            let text = self
+                .body
+                .strip_prefix("Message Type: MESSAGE\nPayload:\n")
+                .unwrap_or(&self.body);
+            let preview = format_and_truncate_tool_result(
+                text,
+                2,
+                usize::from(width).saturating_sub(2).max(1),
+            );
+            lines.extend(
+                super::event_presentation::render_event(None, &[preview], Some(bullet), width)
+                    .into_iter()
+                    .map(Stylize::dim),
+            );
+            return lines;
+        }
         if let Some((header, body)) = self
             .view
             .as_ref()

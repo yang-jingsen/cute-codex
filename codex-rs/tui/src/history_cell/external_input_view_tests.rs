@@ -123,3 +123,58 @@ fn job_metadata_dim_wrap_and_raw_facts() {
     }
     insta::assert_snapshot!(snapshots.join("\n---\n"));
 }
+
+#[test]
+fn agent_message_name_mode_preview_and_full_transcript() {
+    let text = format!(
+        "Message Type: MESSAGE\nPayload:\n{}",
+        "Hello 私有 👩‍💻 message ".repeat(30)
+    );
+    let output = FunctionCallOutputBody::Text(
+        json!({"source":{"kind":"agent","id":"cutex.worker"},"type":"message","text":text})
+            .to_string(),
+    );
+    let view = codex_protocol::external_input_view::View {
+        schema: "cutex.agent-message.v1".into(),
+        data: json!({"senderId":"cutex.worker","senderName":"worker-name","deliveryMode":"soon"}),
+    };
+    let cell = ExternalInputHistoryCell::parse(
+        "id",
+        "external_event",
+        Some("external"),
+        &output,
+        Some(&view),
+    )
+    .unwrap();
+    let display = cell
+        .display_lines(64)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(display);
+    assert!(display.contains("Received message from worker-name · soon"));
+    assert!(display.lines().count() <= 4);
+    assert_eq!(cell.body, text);
+    assert!(
+        cell.raw_lines()
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+            .matches("Hello 私有")
+            .count()
+            >= 30
+    );
+    let mut wrong = view;
+    wrong.data["senderId"] = json!("cutex.other");
+    let fallback = ExternalInputHistoryCell::parse(
+        "id",
+        "external_event",
+        Some("external"),
+        &output,
+        Some(&wrong),
+    )
+    .unwrap();
+    assert!(fallback.agent_header.is_none());
+}
