@@ -1764,3 +1764,32 @@ async fn resume_candidate_matches_cwd_reads_latest_turn_context() -> std::io::Re
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn resumed_paginated_rollout_keeps_float_token_count_ordinal() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let config = test_config(home.path());
+    let rollout_path = home.path().join("rollout.jsonl");
+    write_paginated_rollout(&rollout_path, ThreadId::new(), &[473])?;
+    let tail = serde_json::json!({
+        "timestamp": "2026-09-14T06:55:41.571Z", "ordinal": 474,
+        "type": "event_msg", "payload": {"type": "token_count", "info": null,
+            "rate_limits": {"primary": {"used_percent": 59.0, "window_minutes": 10080, "resets_at": 1789805388}}}
+    });
+    let mut file = fs::OpenOptions::new().append(true).open(&rollout_path)?;
+    writeln!(file, "{tail}")?;
+    drop(file);
+    let recorder =
+        RolloutRecorder::new(&config, RolloutRecorderParams::resume(rollout_path.clone())).await?;
+    recorder
+        .record_canonical_items(&[agent_message_item("after-resume")])
+        .await?;
+    recorder.flush().await?;
+    let contents = fs::read_to_string(&rollout_path)?;
+    let ordinals = contents
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).map(|v| v["ordinal"].as_u64()))
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(ordinals, vec![Some(0), Some(473), Some(474), Some(475)]);
+    recorder.shutdown().await
+}

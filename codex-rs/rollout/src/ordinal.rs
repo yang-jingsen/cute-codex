@@ -10,7 +10,6 @@ use codex_protocol::protocol::HistoryPosition;
 use codex_protocol::protocol::ThreadHistoryMode;
 
 use crate::RolloutItem;
-use crate::RolloutLine;
 use crate::reverse_jsonl_scanner::ReverseJsonlScanner;
 use crate::reverse_jsonl_scanner::ScanOutcome;
 
@@ -67,8 +66,11 @@ pub(crate) fn ordinal_state_for_rollout(
 
     let mut scanner = ReverseJsonlScanner::new(file)?;
     let record = loop {
-        match scanner.scan_next::<RolloutLine>()? {
-            Some(ScanOutcome::Parsed(record)) => break record,
+        match scanner.scan_next::<serde_json::Value>()? {
+            Some(ScanOutcome::Parsed(value)) => match crate::decode_rollout_line(value) {
+                Ok(record) => break record,
+                Err(_) => continue,
+            },
             Some(ScanOutcome::Rejected(_)) => continue,
             None => {
                 return Err(io::Error::other(format!(
@@ -111,12 +113,14 @@ fn read_history_metadata(
         if line.trim().is_empty() {
             continue;
         }
-        let record: RolloutLine = serde_json::from_str(line.as_str()).map_err(|error| {
-            io::Error::other(format!(
-                "failed to parse first rollout record at {}: {error}",
-                path.display()
-            ))
-        })?;
+        let record = serde_json::from_str(line.as_str())
+            .and_then(crate::decode_rollout_line)
+            .map_err(|error| {
+                io::Error::other(format!(
+                    "failed to parse first rollout record at {}: {error}",
+                    path.display()
+                ))
+            })?;
         let RolloutItem::SessionMeta(session_meta) = record.item else {
             return Err(io::Error::other(format!(
                 "rollout at {} does not start with session metadata",
