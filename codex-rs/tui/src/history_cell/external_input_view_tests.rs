@@ -69,7 +69,7 @@ fn job_metadata_dim_wrap_and_raw_facts() {
     let mut view = codex_protocol::external_input_view::View {
         schema: "cutex.job-completion.v1".into(),
         data: json!({"jobId":"job_example","jobRevision":1,"terminalStatus":"exited","exitCode":0,
-            "execution":{"basis":"runner_release_to_wait_v1","observedRunDurationMillis":1048,"startObservedAtEpochMillis":1000,"exitObservedAtEpochMillis":2048},
+            "execution":{"basis":"runner_release_to_wait_v1","observedRunDurationMillis":1048,"startObservedAtEpochMillis":1000},
             "stdout":{"observedBytes":19,"retainedBytes":19,"truncated":false},
             "stderr":{"observedBytes":0,"retainedBytes":0,"truncated":false}}),
     };
@@ -177,4 +177,43 @@ fn agent_message_name_mode_preview_and_full_transcript() {
     )
     .unwrap();
     assert!(fallback.agent_header.is_none());
+}
+
+#[test]
+fn task_notification_legacy_and_structured_headers_keep_full_transcript() {
+    let text = "Task Service transition ReviewReady for assignment assignment-1 (task task-1 revision 1, attempt 1).";
+    let output = FunctionCallOutputBody::Text(json!({"source":{"kind":"service","id":"cutex-task-service"},"type":"task_notification","text":text}).to_string());
+    let view = codex_protocol::external_input_view::View {
+        schema: "cutex.task-notification.v1".into(),
+        data: json!({"kind":"terminal_closure","taskId":"task-1","assignmentId":"assignment-1","taskRevision":1,"attemptNumber":1,"occurredAt":"2025-09-13T17:50:56Z","notificationId":"notification-1","transitionActionId":"close-1"}),
+    };
+    for (facts, title) in [
+        (None, "Task ready for review"),
+        (Some(&view), "Task closed"),
+    ] {
+        let cell = ExternalInputHistoryCell::parse(
+            "id",
+            "external_event",
+            Some("external"),
+            &output,
+            facts,
+        )
+        .unwrap();
+        let lines = cell.display_lines(120);
+        let normal = lines
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(normal.contains(title));
+        assert!(!normal.contains("External input"));
+        assert!(normal.contains("Historical transition"));
+        assert!(lines[0].spans.iter().any(|span| span.content == "task-1"
+            && span.style.fg == Some(crate::terminal_palette::rgb_color((0x74, 0xBA, 0xC3)))));
+        assert!(
+            cell.raw_lines()
+                .iter()
+                .any(|line| line.to_string().contains(text))
+        );
+    }
 }

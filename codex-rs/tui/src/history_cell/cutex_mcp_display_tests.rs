@@ -63,7 +63,7 @@ fn job_lifecycle_pink_and_full_invocation() {
     );
     assert_eq!(
         display[0].spans[0].style.fg,
-        Some(crate::terminal_palette::rgb_color((0xF6, 0xA3, 0xC8)))
+        Some(crate::terminal_palette::rgb_color((0xE0, 0x8E, 0xB2)))
     );
     assert!(render(detailed.1.clone()).contains("full argument retained"));
     let narrow = render(call.display_lines(20));
@@ -83,7 +83,7 @@ fn known_states_never_upgrade_transport_success() {
     assert!(render(call.display_lines(80)).contains("launch_unknown"));
     assert_ne!(
         call.display_lines(80)[0].spans[0].style.fg,
-        Some(crate::terminal_palette::rgb_color((0xF6, 0xA3, 0xC8)))
+        Some(crate::terminal_palette::rgb_color((0xE0, 0x8E, 0xB2)))
     );
     finish(&mut call, job("failed"), false);
     assert_eq!(

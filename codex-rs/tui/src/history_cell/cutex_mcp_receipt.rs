@@ -4,6 +4,7 @@ use super::*;
 pub(in crate::history_cell) struct Outcome {
     pub(in crate::history_cell) text: String,
     pub(in crate::history_cell) job_id: Option<String>,
+    pub(in crate::history_cell) occurred_at_millis: Option<i64>,
     pub(in crate::history_cell) detail: Vec<String>,
     pub(in crate::history_cell) output: Option<super::super::job_output::OutputPage>,
     pub(in crate::history_cell) failed: bool,
@@ -213,6 +214,14 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
     Some(Outcome {
         text: summary.trim_end_matches(" · ").into(),
         job_id,
+        occurred_at_millis: if preset.tool == "send" {
+            value["created_at_epoch_secs"]
+                .as_i64()
+                .filter(|seconds| *seconds > 0)
+                .and_then(|seconds| seconds.checked_mul(1000))
+        } else {
+            None
+        },
         detail,
         output,
         failed,

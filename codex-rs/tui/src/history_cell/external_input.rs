@@ -6,6 +6,8 @@ use codex_protocol::models::FunctionCallOutputBody;
 use serde::Deserialize;
 #[path = "external_job_view.rs"]
 mod job_view;
+#[path = "external_task_view.rs"]
+mod task_view;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,6 +25,7 @@ pub(crate) struct ExternalInputHistoryCell {
     view: Option<codex_protocol::external_input_view::View>,
     id_label: Option<String>,
     agent_header: Option<String>,
+    task_display: Option<(String, Vec<String>, Option<String>)>,
 }
 impl ExternalInputHistoryCell {
     pub(crate) fn observe_display_id(&mut self, labels: &mut super::JobLabels) {
@@ -87,6 +90,7 @@ impl ExternalInputHistoryCell {
                     .unwrap_or(&body.source.id);
                 Some(format!("Received message from {name} · {mode}"))
             });
+        let task_display = task_view::render(&body, view);
         Some(Self {
             id: id.into(),
             header: format!(
@@ -97,19 +101,25 @@ impl ExternalInputHistoryCell {
             view: view.cloned(),
             id_label: None,
             agent_header,
+            task_display,
         })
     }
 }
 impl HistoryCell for ExternalInputHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         if let Some(header) = &self.agent_header {
-            let bullet = "•"
-                .fg(crate::terminal_palette::rgb_color((0xF6, 0xA3, 0xC8)))
-                .bold();
-            let mut lines = super::event_presentation::render_event(
-                Some(header),
-                &[],
-                Some(bullet.clone()),
+            let bullet = super::custom_event_style::bullet();
+            let time = self
+                .view
+                .as_ref()
+                .and_then(|view| view.data["occurredAtEpochSeconds"].as_i64())
+                .and_then(|seconds| seconds.checked_mul(1000))
+                .and_then(super::custom_event_style::timestamp);
+            let mut lines = super::custom_event_style::header(
+                header,
+                super::custom_event_style::Entity::Agent,
+                time,
+                bullet.clone(),
                 width,
             );
             let text = self
@@ -128,13 +138,43 @@ impl HistoryCell for ExternalInputHistoryCell {
             );
             return lines;
         }
+        if let Some((header, body, time)) = &self.task_display {
+            let bullet = super::custom_event_style::bullet();
+            let mut lines = super::custom_event_style::header(
+                header,
+                super::custom_event_style::Entity::Task,
+                time.clone(),
+                bullet.clone(),
+                width,
+            );
+            lines.extend(
+                super::event_presentation::render_event(None, body, Some(bullet), width)
+                    .into_iter()
+                    .map(Stylize::dim),
+            );
+            return lines;
+        }
         if let Some((header, body)) = self
             .view
             .as_ref()
             .and_then(|view| job_view::render(view, self.id_label.as_deref()))
         {
-            let mut lines =
-                super::event_presentation::render_event(Some(&header), &[], Some("•".dim()), width);
+            let time = self
+                .view
+                .as_ref()
+                .and_then(|view| {
+                    view.data
+                        .pointer("/execution/exitObservedAtEpochMillis")
+                        .and_then(serde_json::Value::as_i64)
+                })
+                .and_then(super::custom_event_style::timestamp);
+            let mut lines = super::custom_event_style::header(
+                &header,
+                super::custom_event_style::Entity::Job,
+                time,
+                super::custom_event_style::bullet(),
+                width,
+            );
             lines.extend(
                 super::event_presentation::render_event(None, &body, Some("•".dim()), width)
                     .into_iter()

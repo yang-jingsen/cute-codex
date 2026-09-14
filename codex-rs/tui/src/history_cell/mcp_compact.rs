@@ -63,7 +63,7 @@ pub(super) fn render(cell: &McpToolCallCell, width: u16) -> Option<Vec<Line<'sta
                     (
                         header,
                         "•"
-                            .fg(crate::terminal_palette::rgb_color((0xF6, 0xA3, 0xC8)))
+                            .fg(crate::terminal_palette::rgb_color((0xE0, 0x8E, 0xB2)))
                             .bold(),
                     )
                 }
@@ -102,10 +102,21 @@ pub(super) fn render(cell: &McpToolCallCell, width: u16) -> Option<Vec<Line<'sta
             None => Vec::new(),
         }
     };
-    let mut lines = super::super::event_presentation::render_event(
-        Some(&header),
-        &[],
-        Some(bullet.clone()),
+    let entity = if cell.invocation.server == "cutex_job" {
+        super::super::custom_event_style::Entity::Job
+    } else if cell.invocation.tool.contains("task") {
+        super::super::custom_event_style::Entity::Task
+    } else {
+        super::super::custom_event_style::Entity::Agent
+    };
+    let mut lines = super::super::custom_event_style::header(
+        &header,
+        entity,
+        summary
+            .as_ref()
+            .and_then(|s| s.occurred_at_millis)
+            .and_then(super::super::custom_event_style::timestamp),
+        bullet.clone(),
         width,
     );
     let details = super::super::event_presentation::render_event(None, &body, Some(bullet), width);
