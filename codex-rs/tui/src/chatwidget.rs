@@ -326,6 +326,7 @@ mod command_lifecycle;
 mod connector_mentions;
 mod connectors;
 mod constructor;
+mod notification_ack;
 mod notification_control;
 pub(crate) use self::connectors::ConnectorScopeGeneration;
 use self::connectors::ConnectorsState;

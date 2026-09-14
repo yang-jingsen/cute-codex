@@ -835,6 +835,11 @@ impl App {
         app_server: &mut AppServerSession,
         event: TuiEvent,
     ) -> Result<AppRunControl> {
+        if matches!(&event, TuiEvent::Paste(_))
+            || matches!(&event, TuiEvent::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat))
+        {
+            self.chat_widget.acknowledge_notification_interaction();
+        }
         if self.reconnect.offline
             && let TuiEvent::Key(key) = &event
             && matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat)

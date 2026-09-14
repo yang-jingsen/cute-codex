@@ -5,7 +5,8 @@ use std::sync::mpsc::{self};
 
 #[derive(Default)]
 pub(super) struct NotificationControl {
-    thread: Option<String>,
+    pub(super) thread: Option<String>,
+    pub(super) ack: super::notification_ack::NotificationAck,
     pub(super) label: Option<String>,
     pub(super) style: Option<ratatui::style::Style>,
     queued_cycles: usize,
@@ -23,6 +24,9 @@ impl ChatWidget {
             };
         }
         let Some(thread) = thread else { return };
+        self.notification_control
+            .ack
+            .poll(&thread, &self.frame_requester);
         if cycle {
             self.notification_control.queued_cycles =
                 (self.notification_control.queued_cycles + 1) % 3;
@@ -32,6 +36,7 @@ impl ChatWidget {
                 Ok(result) => {
                     match result {
                         Ok(display) => {
+                            self.notification_control.ack.observe(display.reminder_id);
                             self.notification_control.label = Some(display.label);
                             self.notification_control.style = Some(display.style);
                         }
@@ -109,10 +114,12 @@ async fn query(thread: &str, cycle: bool) -> Result<NotificationDisplay, String>
     Ok(NotificationDisplay {
         label: parse_response(thread, &output.stdout)?,
         style: parse_style(&output.stdout)?,
+        reminder_id: parse_reminder(&output.stdout)?,
     })
 }
 
 struct NotificationDisplay {
+    reminder_id: Option<String>,
     label: String,
     style: ratatui::style::Style,
 }
@@ -161,3 +168,19 @@ fn parse_response(thread: &str, bytes: &[u8]) -> Result<String, String> {
 #[cfg(test)]
 #[path = "notification_control_tests.rs"]
 mod tests;
+
+fn parse_reminder(bytes: &[u8]) -> Result<Option<String>, String> {
+    #[derive(serde::Deserialize)]
+    struct Response {
+        reminder_id: Option<String>,
+    }
+    let response: Response = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+    if response
+        .reminder_id
+        .as_ref()
+        .is_some_and(|id| id.is_empty() || id.len() > 512 || id.chars().any(char::is_control))
+    {
+        return Err("invalid reminder id".into());
+    }
+    Ok(response.reminder_id)
+}
