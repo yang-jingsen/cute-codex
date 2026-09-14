@@ -23,6 +23,7 @@ pub(super) async fn revert(
     let RevertThreadParams {
         thread_id,
         before_turn_id,
+        multi_agent_version,
     } = params;
     let state_db = store
         .state_db()
@@ -48,7 +49,7 @@ pub(super) async fn revert(
         .await?
         .ok_or(ThreadStoreError::ThreadNotFound { thread_id })?;
     let source_path = current_rollout.path;
-    let source_meta = codex_rollout::read_session_meta_line(source_path.as_path())
+    let mut source_meta = codex_rollout::read_session_meta_line(source_path.as_path())
         .await
         .map_err(|err| ThreadStoreError::Internal {
             message: format!(
@@ -111,6 +112,7 @@ pub(super) async fn revert(
         history_base.map_or(0, |base| base.end_ordinal_exclusive),
     )
     .await?;
+    source_meta.multi_agent_version = multi_agent_version.or(source_meta.multi_agent_version);
     let rollout_id = ThreadId::new();
     let recorder = create_replacement_recorder(
         store,

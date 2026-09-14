@@ -201,6 +201,7 @@ impl AppServerSession {
         turn_cursor: Option<String>,
         item_cursor: Option<String>,
         config: Option<&Config>,
+        local_settings: Option<&crate::local_settings::LocalSettings>,
         scope: HistoryHydrationScope,
     ) -> Result<()> {
         let thread_id = ThreadId::from_string(&thread.id)
@@ -234,7 +235,8 @@ impl AppServerSession {
         let row_budget = if scope == HistoryHydrationScope::Complete {
             None
         } else {
-            config.and_then(|config| resize_reflow_max_rows(config.terminal_resize_reflow))
+            local_settings
+                .and_then(|settings| resize_reflow_max_rows(settings.terminal_resize_reflow()))
         };
         let item_budget = match (scope, config, row_budget) {
             (HistoryHydrationScope::Complete, _, _)
@@ -276,10 +278,18 @@ impl AppServerSession {
             let items = self
                 .merge_thread_item_page(thread_id, page, &mut state, &mut thread.turns)
                 .await?;
-            // Complete hydration has no row budget; defer rendering to transcript replay.
-            if let Some(config) = config.filter(|_| row_budget.is_some()) {
-                rendered_rows =
-                    rendered_history_rows(thread_id, thread, items, config, width, rendered_rows);
+            if let Some((config, local_settings)) =
+                config.zip(local_settings).filter(|_| row_budget.is_some())
+            {
+                rendered_rows = rendered_history_rows(
+                    thread_id,
+                    thread,
+                    items,
+                    config,
+                    local_settings,
+                    width,
+                    rendered_rows,
+                );
             } else {
                 rendered_rows = rendered_rows.saturating_add(items.len());
             }
@@ -299,6 +309,7 @@ fn rendered_history_rows(
     thread: &Thread,
     items: Vec<ThreadItem>,
     config: &Config,
+    local_settings: &crate::local_settings::LocalSettings,
     width: u16,
     rendered_rows: usize,
 ) -> usize {
@@ -307,7 +318,7 @@ fn rendered_history_rows(
     } else {
         RawReasoningVisibility::Hidden
     };
-    let mode = if config.tui_raw_output_mode {
+    let mode = if local_settings.tui.raw_output_mode {
         HistoryRenderMode::Raw
     } else {
         HistoryRenderMode::Rich

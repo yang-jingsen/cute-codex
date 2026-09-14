@@ -161,6 +161,7 @@ impl ModelContextScan {
             | RolloutItem::InterAgentCommunicationMetadata { .. }
             | RolloutItem::ExternalInput(_)
             | RolloutItem::RealtimeItem(_)
+            | RolloutItem::RetainedContext(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::TokenUsageRecord(_) => {}
         }

@@ -90,7 +90,6 @@ async fn legacy_cache_reuses_history_and_invalidates_append_replacement_and_erro
 
 #[tokio::test]
 async fn legacy_pages_share_reconstruction_and_preserve_order() {
-    use crate::ThreadStore;
     use codex_protocol::protocol::SessionSource;
     let home = TempDir::new().unwrap();
     let config = crate::local::test_support::test_config(home.path());
