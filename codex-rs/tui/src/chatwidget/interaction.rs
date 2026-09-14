@@ -13,6 +13,13 @@ impl ChatWidget {
     }
 
     pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if key_event.kind == KeyEventKind::Press
+            && key_event.modifiers == KeyModifiers::ALT
+            && key_event.code == KeyCode::Char('n')
+        {
+            self.refresh_notification_control(/*cycle*/ true);
+            return;
+        }
         if self.bottom_pane.has_active_view()
             && !matches!(
                 key_event,

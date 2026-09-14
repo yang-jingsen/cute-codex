@@ -336,6 +336,7 @@ mod command_lifecycle;
 mod connector_mentions;
 mod connectors;
 mod constructor;
+mod notification_control;
 pub(crate) use self::connectors::ConnectorScopeGeneration;
 use self::connectors::ConnectorsState;
 mod exec_state;
@@ -708,6 +709,7 @@ pub(crate) struct ChatWidget {
     queued_message_edit_hint_binding: Option<crate::key_hint::ShortcutHint>,
     // Pending notification to show when unfocused on next Draw
     pending_notification: Option<Notification>,
+    notification_control: notification_control::NotificationControl,
     /// When `Some`, the user has pressed a quit shortcut and the second press
     /// must occur before `quit_shortcut_expires_at`.
     quit_shortcut_expires_at: Option<Instant>,
@@ -1220,6 +1222,7 @@ impl ChatWidget {
         }
         self.refresh_status_line_if_workspace_headline_due();
         self.refresh_thread_usage_if_settlement_due();
+        self.refresh_notification_control(/*cycle*/ false);
     }
 
     fn flush_active_cell(&mut self) {

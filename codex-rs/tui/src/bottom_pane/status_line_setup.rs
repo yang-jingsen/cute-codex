@@ -60,6 +60,8 @@ pub(crate) enum StatusLineItem {
     /// Inert reviewed static greeting.
     #[strum(to_string = "custom:bon-voyage")]
     CustomBonVoyage,
+    /// Per-session Cutex external notification priority.
+    Notification,
     /// The current model name.
     #[strum(to_string = "model", serialize = "model-name")]
     ModelName,
@@ -166,6 +168,7 @@ impl StatusLineItem {
         match self {
             Self::CustomProfile => "Reviewed launch display label (not account identity)",
             Self::CustomBonVoyage => "Reviewed static greeting",
+            Self::Notification => "Cutex notification priority (Alt+N to cycle)",
             StatusLineItem::ModelName => "Current model name",
             StatusLineItem::ModelWithReasoning => "Current model name with reasoning level",
             StatusLineItem::Reasoning => "Current reasoning level",
@@ -226,6 +229,7 @@ impl StatusLineItem {
         match self {
             Self::CustomProfile => StatusSurfacePreviewItem::CustomProfile,
             Self::CustomBonVoyage => StatusSurfacePreviewItem::CustomBonVoyage,
+            Self::Notification => StatusSurfacePreviewItem::Notification,
             StatusLineItem::ModelName => StatusSurfacePreviewItem::Model,
             StatusLineItem::ModelWithReasoning => StatusSurfacePreviewItem::ModelWithReasoning,
             StatusLineItem::Reasoning => StatusSurfacePreviewItem::Reasoning,

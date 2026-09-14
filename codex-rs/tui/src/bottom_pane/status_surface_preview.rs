@@ -9,6 +9,7 @@ use super::status_line_setup::StatusLineItem;
 pub(crate) enum StatusSurfacePreviewItem {
     CustomProfile,
     CustomBonVoyage,
+    Notification,
     AppName,
     ProjectName,
     ProjectRoot,
@@ -47,6 +48,7 @@ impl StatusSurfacePreviewItem {
         match self {
             Self::CustomProfile => "[custom:profile unavailable]",
             Self::CustomBonVoyage => "[custom:bon-voyage unavailable]",
+            Self::Notification => "OFF",
             StatusSurfacePreviewItem::AppName => "codex",
             StatusSurfacePreviewItem::ProjectName => "my-project",
             StatusSurfacePreviewItem::ProjectRoot => "my-project",
@@ -85,6 +87,7 @@ impl StatusSurfacePreviewItem {
         [
             Self::CustomProfile,
             Self::CustomBonVoyage,
+            Self::Notification,
             Self::AppName,
             Self::ProjectName,
             Self::ProjectRoot,

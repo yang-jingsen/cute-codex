@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/status_line_setup.rs
+assertion_line: 775
 expression: "render_lines(&view,\n100).lines().map(str::trim_end).collect::<Vec<_>>().join(\"\\n\")"
 ---
 
@@ -12,10 +13,10 @@ expression: "render_lines(&view,\n100).lines().map(str::trim_end).collect::<Vec<
   ───────────────────────
   [x] hostname              Current machine hostname (omitted when unavailable)
   [x] current-dir           Current working directory
+  [ ] notification          Cutex notification priority (Alt+N to cycle)
   [ ] model                 Current model name
   [ ] model-with-reasoning  Current model name with reasoning level
   [ ] reasoning             Current reasoning level
-  [ ] project-name          Project name (omitted when unavailable)
 
   ssh-build-01.example.com · ~/codex-rs
   Press space to toggle; ←/→ to move; enter to confirm and close; esc to close

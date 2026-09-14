@@ -668,6 +668,12 @@ impl ChatWidget {
     /// git metadata.
     pub(super) fn status_line_value_for_item(&mut self, item: StatusLineItem) -> Option<String> {
         match item {
+            StatusLineItem::Notification => Some(
+                self.notification_control
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| "NOTIFY?".into()),
+            ),
             StatusLineItem::CustomProfile | StatusLineItem::CustomBonVoyage => {
                 Some(crate::custom_status_items::value(item))
             }
@@ -805,6 +811,7 @@ impl ChatWidget {
     ) -> Option<String> {
         let status_line_item = match item {
             StatusSurfacePreviewItem::CustomProfile => StatusLineItem::CustomProfile,
+            StatusSurfacePreviewItem::Notification => StatusLineItem::Notification,
             StatusSurfacePreviewItem::CustomBonVoyage => StatusLineItem::CustomBonVoyage,
             StatusSurfacePreviewItem::AppName => return Some("codex".to_string()),
             StatusSurfacePreviewItem::ProjectName => return self.terminal_title_project_name(),
