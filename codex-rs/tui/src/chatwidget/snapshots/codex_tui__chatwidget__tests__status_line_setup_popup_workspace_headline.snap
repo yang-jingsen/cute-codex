@@ -11,7 +11,7 @@ expression: value
 › [x] Use theme colors      Apply colors from the active /theme
   ───────────────────────
   [x] workspace-headline    Workspace notification headline (Enterprise workspaces only; omitted …
-  [ ] notification          Cutex notification priority (Alt+N to cycle)
+  [ ] Cutex Notification    Cutex notification priority (Alt+N to cycle)
   [ ] model                 Current model name
   [ ] model-with-reasoning  Current model name with reasoning level
   [ ] reasoning             Current reasoning level

@@ -4,7 +4,6 @@
 //! behavior easier to review without paging through the rest of `chatwidget.rs`.
 
 use super::*;
-use crate::bottom_pane::status_line_from_segments;
 use crate::branch_summary;
 use crate::chatwidget::limit_label_for_window;
 use crate::chatwidget::rate_limits::get_limits_duration;
@@ -213,9 +212,10 @@ impl ChatWidget {
             }
         }
 
-        self.set_status_line(status_line_from_segments(
+        self.set_status_line(crate::bottom_pane::status_line_with_notification_style(
             segments,
             self.config.tui_status_line_use_colors,
+            self.notification_control.style,
         ));
         let hyperlink_url = selections
             .status_line_items

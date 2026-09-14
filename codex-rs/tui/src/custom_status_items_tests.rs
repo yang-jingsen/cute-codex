@@ -101,7 +101,7 @@ fn selected_file_isolation_missing_and_malformed() {
     }
     assert_eq!(
         StatusItems::default().value(StatusLineItem::CustomProfile),
-        "[custom:profile unavailable]"
+        "[cutex_profile unavailable]"
     );
     assert!("custom:other".parse::<StatusLineItem>().is_err());
 }
@@ -201,7 +201,26 @@ fn default_status_items_reentry_does_not_read_a_catalog() {
     initialize(None).unwrap();
     assert_eq!(
         value(StatusLineItem::CustomProfile),
-        "[custom:profile unavailable]"
+        "[cutex_profile unavailable]"
     );
     assert!(initialize(Some(Path::new("/not-selected.json"))).is_err());
+}
+
+#[test]
+fn canonical_and_legacy_item_ids_share_values_and_duplicate_detection() {
+    let old = document("configured profile");
+    let new = String::from_utf8(old.clone())
+        .unwrap()
+        .replace("custom:profile", "cutex_profile")
+        .replace("custom:bon-voyage", "cutex_welcome");
+    let old = StatusItems::parse(&old).unwrap();
+    let new = StatusItems::parse(new.as_bytes()).unwrap();
+    for item in [
+        StatusLineItem::CustomProfile,
+        StatusLineItem::CustomBonVoyage,
+    ] {
+        assert_eq!(old.value(item), new.value(item));
+        assert_eq!(old.style(item), new.style(item));
+    }
+    assert!(StatusItems::parse(br#"{"version":1,"items":[{"id":"custom:profile","text":"old"},{"id":"cutex_profile","text":"new"}]}"#).is_err());
 }

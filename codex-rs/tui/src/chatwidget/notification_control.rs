@@ -7,8 +7,9 @@ use std::sync::mpsc::{self};
 pub(super) struct NotificationControl {
     thread: Option<String>,
     pub(super) label: Option<String>,
+    pub(super) style: Option<ratatui::style::Style>,
     queued_cycles: usize,
-    response: Option<Receiver<Result<String, String>>>,
+    response: Option<Receiver<Result<NotificationDisplay, String>>>,
     next_read: Option<Instant>,
 }
 
@@ -29,10 +30,17 @@ impl ChatWidget {
         if let Some(response) = self.notification_control.response.as_ref() {
             match response.try_recv() {
                 Ok(result) => {
-                    self.notification_control.label = Some(result.unwrap_or_else(|error| {
-                        tracing::warn!(%error, "Cutex notification preference unavailable");
-                        "NOTIFY?".into()
-                    }));
+                    match result {
+                        Ok(display) => {
+                            self.notification_control.label = Some(display.label);
+                            self.notification_control.style = Some(display.style);
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, "Cutex notification preference unavailable");
+                            self.notification_control.label = Some("NOTIFY?".into());
+                            self.notification_control.style = None;
+                        }
+                    }
                     self.notification_control.response = None;
                     self.notification_control.next_read =
                         Some(Instant::now() + Duration::from_secs(5));
@@ -42,6 +50,7 @@ impl ChatWidget {
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.notification_control.response = None;
                     self.notification_control.label = Some("NOTIFY?".into());
+                    self.notification_control.style = None;
                     self.notification_control.next_read =
                         Some(Instant::now() + Duration::from_secs(5));
                     self.refresh_status_line();
@@ -57,12 +66,11 @@ impl ChatWidget {
                     .schedule_frame_in(due.saturating_duration_since(Instant::now()));
                 return;
             }
-            if !self
-                .config
-                .tui_status_line
-                .as_ref()
-                .is_some_and(|items| items.iter().any(|item| item == "notification"))
-            {
+            if !self.config.tui_status_line.as_ref().is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item.parse::<StatusLineItem>() == Ok(StatusLineItem::Notification))
+            }) {
                 return;
             }
         }
@@ -80,7 +88,7 @@ impl ChatWidget {
     }
 }
 
-async fn query(thread: &str, cycle: bool) -> Result<String, String> {
+async fn query(thread: &str, cycle: bool) -> Result<NotificationDisplay, String> {
     let helper = std::env::var_os("CUTEX_NOTIFICATION_CONTROL").unwrap_or_else(|| "cutex".into());
     let mut command = tokio::process::Command::new(helper);
     command
@@ -98,7 +106,39 @@ async fn query(thread: &str, cycle: bool) -> Result<String, String> {
     if !output.status.success() || output.stdout.len() > 8192 {
         return Err("preference helper failed".into());
     }
-    parse_response(thread, &output.stdout)
+    Ok(NotificationDisplay {
+        label: parse_response(thread, &output.stdout)?,
+        style: parse_style(&output.stdout)?,
+    })
+}
+
+struct NotificationDisplay {
+    label: String,
+    style: ratatui::style::Style,
+}
+
+fn parse_style(bytes: &[u8]) -> Result<ratatui::style::Style, String> {
+    #[derive(Default, serde::Deserialize)]
+    struct ItemStyle {
+        fg: Option<String>,
+        #[serde(default)]
+        bold: bool,
+    }
+    #[derive(serde::Deserialize)]
+    struct Response {
+        #[serde(default)]
+        style: ItemStyle,
+    }
+    let response: Response = serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
+    let mut style = ratatui::style::Style::default();
+    if let Some(fg) = response.style.fg {
+        style = style
+            .fg(crate::custom_status_items::parse_color(&fg).map_err(|error| error.to_string())?);
+    }
+    if response.style.bold {
+        style = style.add_modifier(ratatui::style::Modifier::BOLD);
+    }
+    Ok(style)
 }
 
 fn parse_response(thread: &str, bytes: &[u8]) -> Result<String, String> {

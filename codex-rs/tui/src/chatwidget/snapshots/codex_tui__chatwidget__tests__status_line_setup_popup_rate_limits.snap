@@ -12,7 +12,7 @@ expression: value
   ───────────────────────
   [x] monthly-limit         Remaining usage on the monthly usage limit (omitted when unavailable)
   [x] weekly-limit          Remaining usage on the weekly usage limit (omitted when unavailable)
-  [ ] notification          Cutex notification priority (Alt+N to cycle)
+  [ ] Cutex Notification    Cutex notification priority (Alt+N to cycle)
   [ ] model                 Current model name
   [ ] model-with-reasoning  Current model name with reasoning level
   [ ] reasoning             Current reasoning level

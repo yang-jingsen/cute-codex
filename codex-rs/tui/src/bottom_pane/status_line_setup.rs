@@ -55,12 +55,21 @@ const STATUS_LINE_USE_THEME_COLORS_ITEM_ID: &str = "status-line-use-theme-colors
 #[strum(serialize_all = "kebab_case")]
 pub(crate) enum StatusLineItem {
     /// Inert reviewed launch label, never account identity.
-    #[strum(to_string = "custom:profile")]
+    #[strum(to_string = "cutex_profile", serialize = "custom:profile")]
     CustomProfile,
     /// Inert reviewed static greeting.
-    #[strum(to_string = "custom:bon-voyage")]
+    #[strum(
+        to_string = "cutex_welcome",
+        serialize = "custom:bon-voyage",
+        serialize = "cutex_bon_voyage"
+    )]
     CustomBonVoyage,
     /// Per-session Cutex external notification priority.
+    #[strum(
+        to_string = "cutex_notification",
+        serialize = "notification",
+        serialize = "custom:notification"
+    )]
     Notification,
     /// The current model name.
     #[strum(to_string = "model", serialize = "model-name")]
@@ -389,6 +398,11 @@ impl StatusLineSetupView {
         let default_name = item.to_string();
         let default_description = item.description();
         let (name, description) = match item {
+            StatusLineItem::CustomBonVoyage => ("Cutex Welcome".into(), default_description.into()),
+            StatusLineItem::CustomProfile => ("Cutex Profile".into(), default_description.into()),
+            StatusLineItem::Notification => {
+                ("Cutex Notification".into(), default_description.into())
+            }
             StatusLineItem::FiveHourLimit | StatusLineItem::WeeklyLimit => (
                 preview_data.rate_limit_item_name(item.preview_item(), &default_name),
                 preview_data.rate_limit_item_description(item.preview_item(), default_description),

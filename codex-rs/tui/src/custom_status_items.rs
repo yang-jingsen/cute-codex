@@ -119,8 +119,15 @@ impl StatusItems {
             return Err(invalid("unsupported status items version or item count"));
         }
         let mut items = BTreeMap::new();
-        for item in document.items {
-            if !matches!(item.id.as_str(), "custom:profile" | "custom:bon-voyage")
+        for mut item in document.items {
+            item.id = item
+                .id
+                .parse::<StatusLineItem>()
+                .ok()
+                .filter(|id| is_custom(*id))
+                .ok_or_else(|| invalid("unsupported static status item ID"))?
+                .to_string();
+            if !matches!(item.id.as_str(), "cutex_profile" | "cutex_welcome")
                 || item.text.is_empty()
                 || item.text.len() > 256
             {
@@ -174,7 +181,7 @@ impl StatusItems {
 }
 
 #[allow(clippy::disallowed_methods)] // Explicit reviewed #RRGGBB preserves legacy display style.
-fn parse_color(value: &str) -> io::Result<Color> {
+pub(crate) fn parse_color(value: &str) -> io::Result<Color> {
     let hex = value
         .strip_prefix('#')
         .filter(|hex| hex.len() == 6 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))

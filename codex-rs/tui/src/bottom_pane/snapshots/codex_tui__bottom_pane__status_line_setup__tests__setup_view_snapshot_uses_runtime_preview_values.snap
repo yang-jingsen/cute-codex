@@ -1,6 +1,6 @@
 ---
 source: tui/src/bottom_pane/status_line_setup.rs
-assertion_line: 723
+assertion_line: 727
 expression: "render_lines(&view, 72)"
 ---
                                                                         
@@ -14,7 +14,7 @@ expression: "render_lines(&view, 72)"
   [x] model                 Current model name                          
   [x] current-dir           Current working directory                   
   [x] git-branch            Current Git branch (omitted when unavaila…  
-  [ ] notification          Cutex notification priority (Alt+N to cyc…  
+  [ ] Cutex Notification    Cutex notification priority (Alt+N to cyc…  
   [ ] model-with-reasoning  Current model name with reasoning level     
   [ ] reasoning             Current reasoning level                     
                                                                         

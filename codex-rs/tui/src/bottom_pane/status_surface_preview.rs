@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use ratatui::text::Line;
 
-use super::status_line_from_segments;
 use super::status_line_setup::StatusLineItem;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -46,8 +45,8 @@ pub(crate) enum StatusSurfacePreviewItem {
 impl StatusSurfacePreviewItem {
     fn placeholder(self) -> &'static str {
         match self {
-            Self::CustomProfile => "[custom:profile unavailable]",
-            Self::CustomBonVoyage => "[custom:bon-voyage unavailable]",
+            Self::CustomProfile => "[cutex_profile unavailable]",
+            Self::CustomBonVoyage => "[cutex_welcome unavailable]",
             Self::Notification => "OFF",
             StatusSurfacePreviewItem::AppName => "codex",
             StatusSurfacePreviewItem::ProjectName => "my-project",
@@ -132,6 +131,7 @@ struct PreviewValue {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StatusSurfacePreviewData {
+    pub(crate) notification_style: Option<ratatui::style::Style>,
     values: BTreeMap<StatusSurfacePreviewItem, PreviewValue>,
 }
 
@@ -139,6 +139,7 @@ impl Default for StatusSurfacePreviewData {
     fn default() -> Self {
         let mut data = Self {
             values: BTreeMap::new(),
+            notification_style: None,
         };
         for item in StatusSurfacePreviewItem::iter() {
             data.set_placeholder(item, item.placeholder());
@@ -251,7 +252,11 @@ impl StatusSurfacePreviewData {
             self.value_for(item.preview_item())
                 .map(|value| (item, value.to_string()))
         });
-        status_line_from_segments(segments, use_theme_colors)
+        super::status_line_style::status_line_with_notification_style(
+            segments.collect(),
+            use_theme_colors,
+            self.notification_style,
+        )
     }
 }
 

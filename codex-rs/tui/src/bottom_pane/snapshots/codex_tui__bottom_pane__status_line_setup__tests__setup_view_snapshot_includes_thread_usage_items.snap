@@ -1,6 +1,6 @@
 ---
 source: tui/src/bottom_pane/status_line_setup.rs
-assertion_line: 749
+assertion_line: 753
 expression: "render_lines(&view, 100)"
 ---
                                                                                                     
@@ -13,7 +13,7 @@ expression: "render_lines(&view, 100)"
   ───────────────────────                                                                           
   [x] thread-credits         Estimated current-thread credits (Enterprise workspaces only; omitte…  
   [x] estimated-thread-cost  Estimated current-thread cost in USD (Enterprise workspaces only; om…  
-  [ ] notification           Cutex notification priority (Alt+N to cycle)                           
+  [ ] Cutex Notification     Cutex notification priority (Alt+N to cycle)                           
   [ ] model                  Current model name                                                     
   [ ] model-with-reasoning   Current model name with reasoning level                                
   [ ] reasoning              Current reasoning level                                                

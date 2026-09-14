@@ -97,6 +97,22 @@ where
     })
 }
 
+/// Apply the session-specific Cutex style without sharing mutable state across threads.
+pub(crate) fn status_line_with_notification_style(
+    segments: Vec<(StatusLineItem, String)>,
+    use_theme_colors: bool,
+    notification_style: Option<Style>,
+) -> Option<Line<'static>> {
+    let position = segments
+        .iter()
+        .position(|(item, _)| *item == StatusLineItem::Notification);
+    let mut line = status_line_from_segments(segments, use_theme_colors)?;
+    if let (Some(position), Some(style)) = (position, notification_style) {
+        line.spans[position * 2].style = style;
+    }
+    Some(line)
+}
+
 fn status_line_from_segments_with_resolver<I, F>(
     segments: I,
     use_theme_colors: bool,

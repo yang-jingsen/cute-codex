@@ -329,6 +329,7 @@ impl ChatWidget {
             }),
         );
 
+        preview_data.notification_style = self.notification_control.style;
         if self.rate_limit_snapshots_by_limit_id.contains_key("codex") {
             for item in [
                 StatusSurfacePreviewItem::FiveHourLimit,
