@@ -133,6 +133,7 @@ pub struct LocalThreadStore {
     writer_lock_coordinator: Arc<WriterLockCoordinator>,
     state_db: Option<StateDbHandle>,
     thread_history_db: Arc<OnceCell<sqlx::SqlitePool>>,
+    legacy_timeline: Arc<Mutex<Option<thread_history::CachedTimeline>>>,
     presentation_validation: Arc<Mutex<Option<presentation_history::ValidationStamp>>>,
 }
 
@@ -247,6 +248,7 @@ impl LocalThreadStore {
             writer_lock_coordinator,
             state_db,
             thread_history_db: Arc::new(OnceCell::new()),
+            legacy_timeline: Arc::new(Mutex::new(None)),
             presentation_validation: Arc::new(Mutex::new(None)),
         }
     }

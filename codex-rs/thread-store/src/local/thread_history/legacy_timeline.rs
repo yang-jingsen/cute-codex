@@ -12,6 +12,50 @@ use codex_app_server_protocol::TurnStatus;
 use codex_protocol::protocol::EventMsg;
 use codex_rollout::RolloutItem;
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::SystemTime;
+
+#[derive(PartialEq, Eq)]
+struct SourceStamp {
+    thread_id: codex_protocol::ThreadId,
+    path: PathBuf,
+    len: u64,
+    modified: SystemTime,
+    created: Option<SystemTime>,
+    #[cfg(unix)]
+    identity: (u64, u64, i64, i64),
+}
+
+pub(in crate::local) struct CachedTimeline {
+    stamp: SourceStamp,
+    entries: Arc<Vec<ThreadTimelineEntry>>,
+}
+
+impl SourceStamp {
+    async fn read(thread_id: codex_protocol::ThreadId, path: &Path) -> ThreadStoreResult<Self> {
+        let metadata = tokio::fs::metadata(path)
+            .await
+            .map_err(thread_history_error)?;
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+        Ok(Self {
+            thread_id,
+            path: path.to_path_buf(),
+            len: metadata.len(),
+            modified: metadata.modified().map_err(thread_history_error)?,
+            created: metadata.created().ok(),
+            #[cfg(unix)]
+            identity: (
+                metadata.dev(),
+                metadata.ino(),
+                metadata.ctime(),
+                metadata.ctime_nsec(),
+            ),
+        })
+    }
+}
 
 pub(super) async fn list(
     store: &LocalThreadStore,
@@ -22,8 +66,75 @@ pub(super) async fn list(
         .ok_or(crate::ThreadStoreError::ThreadNotFound {
             thread_id: params.thread_id,
         })?;
+    let entries = cached_entries(store, params.thread_id, &source.path).await?;
+    let mut start = 0;
+    if let Some(cursor) = params.cursor {
+        let cursor: TimelineCursor = serde_json::from_str(&cursor).map_err(thread_history_error)?;
+        if cursor.thread_id != params.thread_id || cursor.kind > 4 {
+            return Err(thread_history_error("invalid legacy timeline cursor"));
+        }
+        start = entries.partition_point(|entry| {
+            entry_key(entry) >= (cursor.position, cursor.kind, cursor.id.as_str())
+        });
+    }
+    let end = start.saturating_add(params.page_size).min(entries.len());
+    let more = end < entries.len();
+    let mut entries = entries[start..end].to_vec();
+    let next_cursor = if more {
+        entries
+            .last()
+            .map(|entry| {
+                let (position, kind, id) = entry_key(entry);
+                serde_json::to_string(&TimelineCursor {
+                    thread_id: params.thread_id,
+                    position,
+                    kind,
+                    id: id.to_owned(),
+                })
+                .map_err(thread_history_error)
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    entries.reverse();
+    Ok(TimelinePage {
+        items: entries,
+        next_cursor,
+        active_realtime_session_at_page_start: None,
+    })
+}
+
+async fn cached_entries(
+    store: &LocalThreadStore,
+    thread_id: codex_protocol::ThreadId,
+    path: &Path,
+) -> ThreadStoreResult<Arc<Vec<ThreadTimelineEntry>>> {
+    // One slot per store bounds retained histories. Serialize misses so simultaneous
+    // readers do not each rebuild the same long rollout.
+    let mut cache = store.legacy_timeline.lock().await;
+    let stamp = SourceStamp::read(thread_id, path).await?;
+    if let Some(cached) = cache.as_ref()
+        && cached.stamp == stamp
+    {
+        return Ok(Arc::clone(&cached.entries));
+    }
+    *cache = None;
+    let entries = Arc::new(reconstruct(path).await?);
+    // Do not retain a reconstruction if a writer appended/replaced its source
+    // during the read. Exceptionally large sources remain readable, uncached.
+    if stamp.len <= 256 * 1024 * 1024 && SourceStamp::read(thread_id, path).await? == stamp {
+        *cache = Some(CachedTimeline {
+            stamp,
+            entries: Arc::clone(&entries),
+        });
+    }
+    Ok(entries)
+}
+
+async fn reconstruct(path: &Path) -> ThreadStoreResult<Vec<ThreadTimelineEntry>> {
     // This reader rejects undecodable rows before deriving positions or absence.
-    let items = super::super::read_thread::load_presentation_history_items(&source.path).await?;
+    let items = super::super::read_thread::load_presentation_history_items(path).await?;
     let mut builder = ThreadHistoryBuilder::new();
     let mut ordinary = BTreeMap::new();
     let mut starts = BTreeMap::new();
@@ -91,37 +202,9 @@ pub(super) async fn list(
         .chain(displays.into_values())
         .collect::<Vec<_>>();
     entries.sort_by(|a, b| entry_key(b).cmp(&entry_key(a)));
-    if let Some(cursor) = params.cursor {
-        let cursor: TimelineCursor = serde_json::from_str(&cursor).map_err(thread_history_error)?;
-        if cursor.thread_id != params.thread_id || cursor.kind > 4 {
-            return Err(thread_history_error("invalid legacy timeline cursor"));
-        }
-        entries
-            .retain(|entry| entry_key(entry) < (cursor.position, cursor.kind, cursor.id.as_str()));
-    }
-    let more = entries.len() > params.page_size;
-    entries.truncate(params.page_size);
-    let next_cursor = if more {
-        entries
-            .last()
-            .map(|entry| {
-                let (position, kind, id) = entry_key(entry);
-                serde_json::to_string(&TimelineCursor {
-                    thread_id: params.thread_id,
-                    position,
-                    kind,
-                    id: id.to_owned(),
-                })
-                .map_err(thread_history_error)
-            })
-            .transpose()?
-    } else {
-        None
-    };
-    entries.reverse();
-    Ok(TimelinePage {
-        items: entries,
-        next_cursor,
-        active_realtime_session_at_page_start: None,
-    })
+    Ok(entries)
 }
+
+#[cfg(test)]
+#[path = "legacy_timeline_tests.rs"]
+mod tests;

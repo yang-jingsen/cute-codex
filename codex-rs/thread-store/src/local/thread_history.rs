@@ -10,6 +10,7 @@ use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
 
 mod legacy_timeline;
+pub(super) use legacy_timeline::CachedTimeline;
 mod read;
 mod realtime;
 mod search;
