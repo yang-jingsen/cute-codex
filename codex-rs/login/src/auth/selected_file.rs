@@ -23,11 +23,16 @@ fn open_selected(path: PathBuf) -> io::Result<Arc<dyn AuthStorageBackend>> {
     Ok(Arc::new(linux::SelectedFile::open(path)?))
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+fn open_selected(path: PathBuf) -> io::Result<Arc<dyn AuthStorageBackend>> {
+    Ok(Arc::new(windows::SelectedFile::open(path)?))
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
 fn open_selected(_path: PathBuf) -> io::Result<Arc<dyn AuthStorageBackend>> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "explicit auth-file custody is supported on Linux only",
+        "explicit auth-file custody is supported on Linux and Windows",
     ))
 }
 
@@ -70,6 +75,8 @@ mod linux;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "selected_file_tests.rs"]
 mod tests;
+#[cfg(windows)]
+mod windows;
 
 /// Whether local launch owns an explicit auth file; remote/daemon reuse cannot honor it.
 pub fn explicit_auth_file_selected() -> bool {

@@ -481,17 +481,28 @@ pub async fn run_main_with_transport_options(
     auth: AppServerWebsocketAuthSettings,
     runtime_options: AppServerRuntimeOptions,
 ) -> IoResult<()> {
-    let external_input_binding =
-        if let Some(path) = runtime_options.external_input_binding_file.as_ref() {
-            if !matches!(transport, AppServerTransport::UnixSocket { .. }) {
-                return Err(std::io::Error::other(
-                    "ExternalInput requires private Unix transport",
+    let external_input_binding = if let Some(path) =
+        runtime_options.external_input_binding_file.as_ref()
+    {
+        let private_transport = matches!(transport, AppServerTransport::UnixSocket { .. });
+        #[cfg(windows)]
+        let private_transport = private_transport
+            || (matches!(&transport, AppServerTransport::WebSocket { bind_address } if bind_address.ip().is_loopback())
+                && matches!(
+                    &auth.config,
+                    Some(
+                        crate::transport::auth::AppServerWebsocketAuthConfig::CapabilityToken { .. }
+                    )
                 ));
-            }
-            Some(external_input_binding::ExternalInputBinding::load(path)?)
-        } else {
-            None
-        };
+        if !private_transport {
+            return Err(std::io::Error::other(
+                "ExternalInput requires a private socket or authenticated Windows loopback transport",
+            ));
+        }
+        Some(external_input_binding::ExternalInputBinding::load(path)?)
+    } else {
+        None
+    };
     let loader_overrides = loader_overrides_with_test_user_config_file(
         loader_overrides,
         test_user_config_file_from_env(),

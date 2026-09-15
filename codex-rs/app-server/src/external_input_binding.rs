@@ -76,7 +76,51 @@ impl ExternalInputBinding {
         Ok(binding)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    pub(crate) fn load(path: &Path) -> std::io::Result<Self> {
+        use std::io::Read;
+        use std::os::windows::fs::MetadataExt;
+        use std::os::windows::fs::OpenOptionsExt;
+        let invalid = || std::io::Error::other("invalid ExternalInput launch binding");
+        if !path.is_absolute() {
+            return Err(invalid());
+        }
+        let parent = path.parent().ok_or_else(invalid)?.canonicalize()?;
+        // The explicit launch file is configuration, like --auth-file. Cutex
+        // creates it in an owner-private directory; keep that directory pinned
+        // while reading and reject a reparse-point payload.
+        let _directory = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(3)
+            .custom_flags(0x02000000)
+            .open(&parent)?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .custom_flags(0x00200000)
+            .open(parent.join(path.file_name().ok_or_else(invalid)?))?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.file_attributes() & 0x400 != 0 || metadata.len() > 4096 {
+            return Err(invalid());
+        }
+        let mut bytes = Vec::new();
+        file.take(4097).read_to_end(&mut bytes)?;
+        if bytes.len() > 4096 {
+            return Err(invalid());
+        }
+        let binding: Self = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+        if binding.version != 1
+            || binding.owner_id.is_empty()
+            || binding.owner_id.len() > 256
+            || binding.thread_id.is_empty()
+            || binding.thread_id.len() > 256
+        {
+            return Err(invalid());
+        }
+        Ok(binding)
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(crate) fn load(_path: &Path) -> std::io::Result<Self> {
         Err(std::io::Error::other(
             "ExternalInput requires private Unix transport",
@@ -87,3 +131,30 @@ impl ExternalInputBinding {
 #[cfg(all(test, unix))]
 #[path = "external_input_binding_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    #[test]
+    fn windows_binding_load_validates_payload_and_size() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("external-input.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"ownerId":"cutex.test","threadId":"thread","runtimeGeneration":1}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ExternalInputBinding::load(&path).unwrap().owner_id,
+            "cutex.test"
+        );
+        std::fs::write(
+            &path,
+            r#"{"version":2,"ownerId":"cutex.test","threadId":"thread","runtimeGeneration":1}"#,
+        )
+        .unwrap();
+        assert!(ExternalInputBinding::load(&path).is_err());
+        std::fs::write(&path, vec![b' '; 4097]).unwrap();
+        assert!(ExternalInputBinding::load(&path).is_err());
+    }
+}

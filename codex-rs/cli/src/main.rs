@@ -127,7 +127,7 @@ use codex_terminal_detection::TerminalName;
     override_usage = "codex [OPTIONS] [PROMPT]\n       codex [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct MultitoolCli {
-    /// Use this private auth file independently of CODEX_HOME (Linux, local launch only).
+    /// Use this private auth file independently of CODEX_HOME (Linux and Windows, local launch only).
     #[arg(long, global = true, value_name = "ABS_PATH")]
     auth_file: Option<std::path::PathBuf>,
     #[clap(flatten)]

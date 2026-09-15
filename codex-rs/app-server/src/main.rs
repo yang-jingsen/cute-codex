@@ -30,10 +30,10 @@ const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_C
 #[derive(Debug, Parser)]
 #[command(version)]
 struct AppServerArgs {
-    /// Use this private auth file independently of CODEX_HOME (Linux only).
+    /// Use this private auth file independently of CODEX_HOME (Linux and Windows).
     #[arg(long, value_name = "ABS_PATH")]
     auth_file: Option<PathBuf>,
-    /// Read a private, owner-only ExternalInput binding once at launch (Unix only).
+    /// Read an ExternalInput launch binding (private socket or authenticated Windows loopback).
     #[arg(long, value_name = "ABS_PATH")]
     external_input_binding_file: Option<PathBuf>,
     #[command(flatten)]
