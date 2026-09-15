@@ -39,6 +39,9 @@ impl ChatWidget {
                             self.notification_control
                                 .ack
                                 .observe_at(display.reminder_id, display.reminder_at);
+                            self.notification_control
+                                .ack
+                                .poll(&thread, &self.frame_requester);
                             self.notification_control.label = Some(display.label);
                             self.notification_control.style = Some(display.style);
                         }
