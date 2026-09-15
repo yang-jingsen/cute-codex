@@ -36,7 +36,9 @@ impl ChatWidget {
                 Ok(result) => {
                     match result {
                         Ok(display) => {
-                            self.notification_control.ack.observe(display.reminder_id);
+                            self.notification_control
+                                .ack
+                                .observe_at(display.reminder_id, display.reminder_at);
                             self.notification_control.label = Some(display.label);
                             self.notification_control.style = Some(display.style);
                         }
@@ -71,13 +73,7 @@ impl ChatWidget {
                     .schedule_frame_in(due.saturating_duration_since(Instant::now()));
                 return;
             }
-            if !self.config.tui_status_line.as_ref().is_some_and(|items| {
-                items
-                    .iter()
-                    .any(|item| item.parse::<StatusLineItem>() == Ok(StatusLineItem::Notification))
-            }) {
-                return;
-            }
+            // Receipt polling belongs to the session, independently of item visibility.
         }
         if cycle {
             self.notification_control.queued_cycles -= 1;
@@ -115,11 +111,17 @@ async fn query(thread: &str, cycle: bool) -> Result<NotificationDisplay, String>
         label: parse_response(thread, &output.stdout)?,
         style: parse_style(&output.stdout)?,
         reminder_id: parse_reminder(&output.stdout)?,
+        reminder_at: serde_json::from_slice::<serde_json::Value>(&output.stdout)
+            .map_err(|e| e.to_string())?["reminder_at"]
+            .as_str()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .map(|at| at.with_timezone(&chrono::Utc)),
     })
 }
 
 struct NotificationDisplay {
     reminder_id: Option<String>,
+    reminder_at: Option<chrono::DateTime<chrono::Utc>>,
     label: String,
     style: ratatui::style::Style,
 }

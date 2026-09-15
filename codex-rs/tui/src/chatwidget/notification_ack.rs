@@ -11,6 +11,7 @@ pub(super) struct NotificationAck {
     response: Option<Receiver<Result<(), String>>>,
     retry_at: Option<Instant>,
     attempts: u8,
+    last_interaction: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl NotificationAck {
@@ -23,7 +24,26 @@ impl NotificationAck {
         }
     }
 
+    pub(super) fn observe_at(
+        &mut self,
+        reminder: Option<String>,
+        at: Option<chrono::DateTime<chrono::Utc>>,
+    ) {
+        self.observe(reminder);
+        if at
+            .zip(self.last_interaction)
+            .is_some_and(|(reminder, input)| reminder <= input)
+        {
+            self.queue_current();
+        }
+    }
+
     fn interact(&mut self) {
+        self.last_interaction = Some(chrono::Utc::now());
+        self.queue_current();
+    }
+
+    fn queue_current(&mut self) {
         if self.current.is_some() && self.current != self.submitted && self.pending.is_none() {
             self.pending = self.current.clone();
             self.attempts = 0;

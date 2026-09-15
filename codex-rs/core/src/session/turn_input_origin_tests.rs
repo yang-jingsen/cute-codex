@@ -113,3 +113,34 @@ async fn external_reservation_rechecks_work_under_the_gate_lock() {
     ));
     assert!(session.active_turn.lock().await.is_none());
 }
+
+#[tokio::test]
+async fn poisoned_external_input_log_does_not_prevent_interrupting_reserved_turn() {
+    let (session, _) = make_session_and_context().await;
+    reserve_idle_turn(&session, IdleReservation::Origin(TurnStartOrigin::Explicit))
+        .await
+        .unwrap();
+    let mut gate = runtime();
+    gate.poisoned = true;
+    *session.external_input.lock().await = Some(gate);
+    let session = Arc::new(session);
+    session.interrupt_task().await;
+    assert!(session.active_turn.lock().await.is_none());
+    assert!(
+        session
+            .external_input
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .poisoned
+    );
+    assert!(matches!(
+        reserve_idle_turn(
+            &session,
+            IdleReservation::Origin(TurnStartOrigin::Automatic)
+        )
+        .await,
+        Err(NotSubmittedReason::Interrupted)
+    ));
+}

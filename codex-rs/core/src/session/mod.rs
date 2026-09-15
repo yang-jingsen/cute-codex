@@ -4617,8 +4617,7 @@ impl Session {
 
     pub async fn interrupt_task(self: &Arc<Self>) {
         if let Err(err) = self.external_input_gate(true).await {
-            warn!(%err, "external input interruption gate could not be persisted");
-            return;
+            warn!(%err, "external input interruption gate could not be persisted; cancelling current work with dispatch still blocked");
         }
         info!("interrupt received: abort current task, if any");
         let had_active_turn = self.active_turn.lock().await.is_some();

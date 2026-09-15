@@ -62,3 +62,26 @@ async fn old_failure_does_not_acknowledge_a_replacement_without_input() {
     assert!(ack.pending.is_none());
     assert!(ack.response.is_none());
 }
+
+#[test]
+fn input_before_poll_only_acknowledges_reminders_created_before_input() {
+    let at = chrono::DateTime::parse_from_rfc3339("2026-09-15T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let mut ack = NotificationAck {
+        last_interaction: Some(at),
+        ..Default::default()
+    };
+    ack.observe_at(
+        Some("older".into()),
+        Some(at - chrono::Duration::milliseconds(1)),
+    );
+    assert_eq!(ack.pending.as_deref(), Some("older"));
+    ack.observe_at(
+        Some("newer".into()),
+        Some(at + chrono::Duration::milliseconds(1)),
+    );
+    assert!(ack.pending.is_none());
+    ack.observe_at(Some("legacy".into()), None);
+    assert!(ack.pending.is_none());
+}

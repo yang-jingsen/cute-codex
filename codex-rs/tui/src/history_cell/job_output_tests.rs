@@ -125,3 +125,20 @@ fn output_page_ordinary_preview_is_dim() {
     assert_eq!(output.bytes, "plain\n世界 e\u{301}".as_bytes());
     assert_eq!(value, original);
 }
+
+#[test]
+fn service_r2_text_pages_use_raw_offsets_even_for_lossy_utf8() {
+    for (text, bytes) in [("hello", 5), ("中文", 6), ("�", 1), ("", 0)] {
+        let value = json!({"jobId":"j", "stream":"stdout", "fromOffset":7,
+            "nextOffset":7 + bytes, "text":text, "encoding":"utf-8-lossy",
+            "gap":true, "truncated":false, "pageLimited":true});
+        let parsed = parsed(&value).unwrap();
+        let lines: Vec<String> = parsed.lines(80).iter().map(ToString::to_string).collect();
+        assert!(lines[0].contains(&format!("{bytes} B")));
+        assert!(lines.iter().any(|line| line.contains("Page limited")));
+        assert!(lines.iter().any(|line| line.contains("Output gap")));
+        if !text.is_empty() {
+            assert!(lines.iter().any(|line| line.contains(text)));
+        }
+    }
+}

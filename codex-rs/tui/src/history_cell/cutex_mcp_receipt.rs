@@ -168,6 +168,8 @@ pub(in crate::history_cell) fn outcome(invocation: &McpInvocation, body: &str) -
     } else {
         let schema = if preset.tool == "cutex_task_service" {
             "cutex/task-service-tool-receipt/v1"
+        } else if preset.tool == "cutex_task_service_terminal" {
+            "cutex/task-service-terminal-tool-receipt/v1"
         } else {
             "cutex/task-service-director-tool-receipt/v1"
         };

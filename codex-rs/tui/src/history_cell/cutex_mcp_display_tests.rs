@@ -318,7 +318,7 @@ fn director_terminal_and_observation_receipts() {
             let mut call = cell("cutex", tool, args);
             assert_ne!(call.display_lines(80), call.transcript_lines(80));
             headers.push(render(call.display_lines(80)));
-            let receipt = json!({"schema":"cutex/task-service-director-tool-receipt/v1","status":"committed","action_id":"action"});
+            let receipt = json!({"schema":if tool.ends_with("terminal") { "cutex/task-service-terminal-tool-receipt/v1" } else { "cutex/task-service-director-tool-receipt/v1" },"status":"committed","action_id":"action"});
             finish(&mut call, receipt.clone(), false);
             headers.push(
                 render(call.display_lines(80))

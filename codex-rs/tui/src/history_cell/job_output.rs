@@ -11,6 +11,7 @@ pub(super) struct OutputPage {
     next: u64,
     gap: bool,
     truncated: bool,
+    page_limited: bool,
 }
 impl OutputPage {
     pub(super) fn parse(value: &Value, args: &Value) -> Option<Self> {
@@ -21,25 +22,34 @@ impl OutputPage {
         if !matches!(stream, "stdout" | "stderr") {
             return None;
         }
-        let hex = value["bytesHex"].as_str()?;
-        if hex.len() % 2 != 0 || !hex.is_ascii() {
-            return None;
-        }
-        let bytes: Option<Vec<u8>> = hex
-            .as_bytes()
-            .chunks_exact(2)
-            .map(|pair| {
-                let high = char::from(pair[0]).to_digit(16)?;
-                let low = char::from(pair[1]).to_digit(16)?;
-                Some((high * 16 + low) as u8)
-            })
-            .collect();
-        let bytes = bytes?;
         let from = value["fromOffset"].as_u64()?;
         let next = value["nextOffset"].as_u64()?;
-        if from.checked_add(bytes.len() as u64)? != next {
-            return None;
-        }
+        next.checked_sub(from)?;
+        let bytes = if let Some(text) = value.get("text").and_then(Value::as_str) {
+            if value["encoding"] != "utf-8-lossy" {
+                return None;
+            }
+            text.as_bytes().to_vec()
+        } else {
+            let hex = value["bytesHex"].as_str()?;
+            if hex.len() % 2 != 0 || !hex.is_ascii() {
+                return None;
+            }
+            let bytes: Option<Vec<u8>> = hex
+                .as_bytes()
+                .chunks_exact(2)
+                .map(|pair| {
+                    let high = char::from(pair[0]).to_digit(16)?;
+                    let low = char::from(pair[1]).to_digit(16)?;
+                    Some((high * 16 + low) as u8)
+                })
+                .collect();
+            let bytes = bytes?;
+            if from.checked_add(bytes.len() as u64)? != next {
+                return None;
+            }
+            bytes
+        };
         Some(Self {
             bytes,
             stream: stream.into(),
@@ -47,11 +57,15 @@ impl OutputPage {
             next,
             gap: value["gap"].as_bool()?,
             truncated: value["truncated"].as_bool()?,
+            page_limited: value
+                .get("pageLimited")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         })
     }
 
     pub(super) fn lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut summary = format!("{} · {} B", self.stream, self.bytes.len());
+        let mut summary = format!("{} · {} B", self.stream, self.next - self.from);
         if self.from > 0 {
             if self.bytes.is_empty() {
                 summary.push_str(&format!(" · offset {}", self.from));
@@ -68,6 +82,9 @@ impl OutputPage {
         }
         if self.truncated {
             metadata.push("Output truncated at source".into());
+        }
+        if self.page_limited {
+            metadata.push("Page limited — more output available".into());
         }
         let mut lines =
             super::event_presentation::render_event(None, &metadata, Some("•".dim()), width);
