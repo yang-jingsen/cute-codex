@@ -1194,6 +1194,7 @@ impl ChatWidget {
         {
             self.refresh_terminal_title();
         }
+        self.refresh_custom_status_animation();
         self.refresh_status_line_if_workspace_headline_due();
         self.refresh_thread_usage_if_settlement_due();
         self.refresh_notification_control(/*cycle*/ false);

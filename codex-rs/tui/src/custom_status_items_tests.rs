@@ -66,7 +66,7 @@ fn bounds_controls_and_unsupported_sources() {
         assert!(StatusItems::parse(&serde_json::to_vec(&bad).unwrap()).is_err());
     }
     let mut exact = br#"{"version":1,"items":[]}"#.to_vec();
-    exact.resize(8192, b' ');
+    exact.resize(MAX_FILE_BYTES as usize, b' ');
     assert!(StatusItems::parse(&exact).is_ok());
     exact.push(b' ');
     assert!(StatusItems::parse(&exact).is_err());
@@ -223,4 +223,11 @@ fn canonical_and_legacy_item_ids_share_values_and_duplicate_detection() {
         assert_eq!(old.style(item), new.style(item));
     }
     assert!(StatusItems::parse(br#"{"version":1,"items":[{"id":"custom:profile","text":"old"},{"id":"cutex_profile","text":"new"}]}"#).is_err());
+}
+
+#[test]
+fn malformed_animation_keeps_the_static_fallback() {
+    let bytes = serde_json::to_vec(&json!({"version":1,"items":[{"id":"cutex_welcome","text":"旅途愉快","animation":{"frames":[]}}]})).unwrap();
+    let items = StatusItems::parse(&bytes).unwrap();
+    assert_eq!(items.value(StatusLineItem::CustomBonVoyage), "旅途愉快");
 }

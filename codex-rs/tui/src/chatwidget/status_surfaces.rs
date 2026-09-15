@@ -214,11 +214,19 @@ impl ChatWidget {
             }
         }
 
-        self.set_status_line(crate::bottom_pane::status_line_with_notification_style(
+        let ids: Vec<_> = segments.iter().map(|(id, _)| *id).collect();
+        let mut line = crate::bottom_pane::status_line_with_notification_style(
             segments,
             self.local_settings.tui.status_line_use_colors,
             self.notification_control.style,
-        ));
+        );
+        if self.local_settings.tui.animations
+            && let Some(line) = line.as_mut()
+            && let Some(delay) = crate::custom_status_items::animate_line(line, &ids)
+        {
+            self.frame_requester.schedule_frame_in(delay);
+        }
+        self.set_status_line(line);
         let hyperlink_url = selections
             .status_line_items
             .contains(&StatusLineItem::PullRequestNumber)
@@ -1254,4 +1262,16 @@ where
         }
     }
     (items, invalid)
+}
+
+impl ChatWidget {
+    pub(super) fn refresh_custom_status_animation(&mut self) {
+        if self.local_settings.tui.animations
+            && !self.bottom_pane.has_active_view()
+            && crate::custom_status_items::has_animation()
+        {
+            let selections = self.status_surface_selections();
+            self.refresh_status_line_from_selections(&selections);
+        }
+    }
 }

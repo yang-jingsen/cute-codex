@@ -1,4 +1,4 @@
-//! Loaded-once, inert statusline values from a reviewed launcher.
+//! Loaded-once inert status-line values and optional precompiled animations.
 //!
 //! These labels are presentation only. No environment, account, repository config,
 //! model context, or runtime source resolution participates in their interpretation.
@@ -17,11 +17,14 @@ use serde::Deserialize;
 
 use crate::bottom_pane::StatusLineItem;
 
-const MAX_FILE_BYTES: u64 = 8192;
+const MAX_FILE_BYTES: u64 = 1_048_576;
+static ORIGIN: OnceLock<std::time::Instant> = OnceLock::new();
 static ITEMS: OnceLock<(Option<PathBuf>, StatusItems)> = OnceLock::new();
 
 #[derive(Default)]
-pub(crate) struct StatusItems(BTreeMap<String, (String, Style)>);
+pub(crate) struct StatusItems(
+    BTreeMap<String, (String, Style, Option<crate::status_animation::Animation>)>,
+);
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,11 +40,13 @@ struct Item {
     text: String,
     #[serde(default)]
     style: ItemStyle,
+    #[serde(default)]
+    animation: Option<serde_json::Value>,
 }
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-struct ItemStyle {
+pub(crate) struct ItemStyle {
     fg: Option<String>,
     bg: Option<String>,
     bold: bool,
@@ -63,6 +68,7 @@ pub(crate) fn initialize(path: Option<&Path>) -> io::Result<()> {
         };
     }
     let items = path.map(StatusItems::load).transpose()?.unwrap_or_default();
+    ORIGIN.get_or_init(std::time::Instant::now);
     ITEMS
         .set((path.map(Path::to_path_buf), items))
         .map_err(|_| io::Error::other("status items already initialized"))
@@ -111,7 +117,7 @@ impl StatusItems {
 
     fn parse(bytes: &[u8]) -> io::Result<Self> {
         if bytes.len() > MAX_FILE_BYTES as usize {
-            return Err(invalid("status items file exceeds 8192 bytes"));
+            return Err(invalid("status items file exceeds 1048576 bytes"));
         }
         let document: Document = serde_json::from_slice(bytes)
             .map_err(|_| invalid("invalid status items v1 JSON or unsupported fields"))?;
@@ -145,24 +151,17 @@ impl StatusItems {
             if text.is_empty() {
                 return Err(invalid("status item text is empty after sanitation"));
             }
-            let mut style = Style::default();
-            if let Some(fg) = item.style.fg {
-                style = style.fg(parse_color(&fg)?);
-            }
-            if let Some(bg) = item.style.bg {
-                style = style.bg(parse_color(&bg)?);
-            }
-            for (enabled, modifier) in [
-                (item.style.bold, Modifier::BOLD),
-                (item.style.dim, Modifier::DIM),
-                (item.style.italic, Modifier::ITALIC),
-                (item.style.underlined, Modifier::UNDERLINED),
-            ] {
-                if enabled {
-                    style = style.add_modifier(modifier);
+            let style = item.style.resolve()?;
+            let animation = item.animation.and_then(|value| {
+                match crate::status_animation::Animation::parse(value, style) {
+                    Ok(animation) => Some(animation),
+                    Err(error) => {
+                        tracing::warn!(%error, "Invalid status animation; using static fallback");
+                        None
+                    }
                 }
-            }
-            if items.insert(item.id, (text, style)).is_some() {
+            });
+            if items.insert(item.id, (text, style, animation)).is_some() {
                 return Err(invalid("duplicate status item ID"));
             }
         }
@@ -170,13 +169,14 @@ impl StatusItems {
     }
 
     fn value(&self, item: StatusLineItem) -> String {
-        self.0
-            .get(&item.to_string())
-            .map_or_else(|| format!("[{item} unavailable]"), |(text, _)| text.clone())
+        self.0.get(&item.to_string()).map_or_else(
+            || format!("[{item} unavailable]"),
+            |(text, _, _)| text.clone(),
+        )
     }
 
     fn style(&self, item: StatusLineItem) -> Option<Style> {
-        self.0.get(&item.to_string()).map(|(_, style)| *style)
+        self.0.get(&item.to_string()).map(|(_, style, _)| *style)
     }
 }
 
@@ -197,3 +197,63 @@ fn invalid(message: &str) -> io::Error {
 #[cfg(test)]
 #[path = "custom_status_items_tests.rs"]
 mod tests;
+
+impl ItemStyle {
+    pub(crate) fn resolve(&self) -> io::Result<Style> {
+        let mut style = Style::default();
+        if let Some(fg) = &self.fg {
+            style = style.fg(parse_color(fg)?);
+        }
+        if let Some(bg) = &self.bg {
+            style = style.bg(parse_color(bg)?);
+        }
+        for (enabled, modifier) in [
+            (self.bold, Modifier::BOLD),
+            (self.dim, Modifier::DIM),
+            (self.italic, Modifier::ITALIC),
+            (self.underlined, Modifier::UNDERLINED),
+        ] {
+            if enabled {
+                style = style.add_modifier(modifier);
+            }
+        }
+        Ok(style)
+    }
+}
+
+/// Expand the existing one-span-per-item line after notification styling has run.
+pub(crate) fn animate_line(
+    line: &mut ratatui::text::Line<'static>,
+    ids: &[StatusLineItem],
+) -> Option<std::time::Duration> {
+    let (_, items) = ITEMS.get()?;
+    let elapsed = ORIGIN.get()?.elapsed();
+    let mut next = None;
+    let mut spans = Vec::new();
+    for (index, span) in std::mem::take(&mut line.spans).into_iter().enumerate() {
+        let animation = (index % 2 == 0)
+            .then(|| ids.get(index / 2))
+            .flatten()
+            .and_then(|id| items.0.get(&id.to_string()))
+            .and_then(|(_, _, animation)| animation.as_ref());
+        if let Some(animation) = animation {
+            let (frame, delay) = animation.sample(elapsed);
+            spans.extend_from_slice(frame);
+            if let Some(delay) = delay {
+                next = Some(next.map_or(delay, |old: std::time::Duration| old.min(delay)));
+            }
+        } else {
+            spans.push(span);
+        }
+    }
+    line.spans = spans;
+    next
+}
+pub(crate) fn has_animation() -> bool {
+    ITEMS.get().is_some_and(|(_, items)| {
+        items
+            .0
+            .values()
+            .any(|(_, _, animation)| animation.is_some())
+    })
+}
