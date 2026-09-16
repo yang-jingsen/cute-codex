@@ -88,6 +88,21 @@ impl ChatWidget {
             .filter(|pair| crate::app_backtrack::is_hidden_nested_review_turn(&pair[0], &pair[1]))
             .map(|pair| pair[1].id.clone())
             .collect();
+        let mut completed_times = turns
+            .iter()
+            .map(|turn| (turn.id.clone(), turn.completed_at))
+            .collect::<std::collections::HashMap<_, _>>();
+        // A timeline page can carry completion timestamps even without Turn snapshots.
+        for entry in &timeline {
+            if let ThreadTimelineEntry::TurnCompleted {
+                turn_id,
+                completed_at: Some(time),
+                ..
+            } = entry
+            {
+                completed_times.insert(turn_id.clone(), Some(*time));
+            }
+        }
         let mut timeline = timeline.into_iter().peekable();
         while let Some(entry) = timeline.next() {
             let pair = match (&entry, timeline.peek()) {
@@ -167,6 +182,8 @@ impl ChatWidget {
                             record: record.clone(),
                             counterpart_first,
                         });
+                    self.transcript.replay_turn_completed_at =
+                        completed_times.get(&turn_id).copied().flatten();
                     self.replay_thread_item(*item, turn_id, replay_kind);
                     if self.transcript.pending_presentation_group.take().is_some() {
                         // A duplicate/non-rendered counterpart cannot justify hiding this fact.
@@ -192,6 +209,8 @@ impl ChatWidget {
                     {
                         continue;
                     }
+                    self.transcript.replay_turn_completed_at =
+                        completed_times.get(&turn_id).copied().flatten();
                     self.replay_thread_item(*item, turn_id, replay_kind);
                 }
                 ThreadTimelineEntry::TurnStarted { turn_id, .. } => {
@@ -238,5 +257,6 @@ impl ChatWidget {
                 ThreadTimelineEntry::Realtime { .. } => {}
             }
         }
+        self.transcript.replay_turn_completed_at = None;
     }
 }

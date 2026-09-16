@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Live rendering can capture wall time; replay must use persisted turn completion time.
+pub(crate) enum SeparatorTime {
+    Live,
+    Historical(Option<i64>),
+}
+
 #[derive(Debug)]
 /// A visual divider between turns, optionally showing how long the assistant "worked for".
 ///
@@ -20,8 +26,27 @@ impl FinalMessageSeparator {
         elapsed_seconds: Option<u64>,
         runtime_metrics: Option<RuntimeMetricsSummary>,
     ) -> Self {
+        Self::with_time(elapsed_seconds, runtime_metrics, SeparatorTime::Live)
+    }
+
+    pub(crate) fn with_time(
+        elapsed_seconds: Option<u64>,
+        runtime_metrics: Option<RuntimeMetricsSummary>,
+        time: SeparatorTime,
+    ) -> Self {
+        let occurred_at = match time {
+            SeparatorTime::Live => chrono::Local::now().format("%H:%M").to_string(),
+            SeparatorTime::Historical(timestamp) => timestamp
+                .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0))
+                .map(|time| {
+                    time.with_timezone(&chrono::Local)
+                        .format("%H:%M")
+                        .to_string()
+                })
+                .unwrap_or_default(),
+        };
         Self {
-            occurred_at: chrono::Local::now().format("%H:%M").to_string(),
+            occurred_at,
             elapsed_seconds,
             runtime_metrics,
         }
@@ -29,7 +54,10 @@ impl FinalMessageSeparator {
 }
 impl HistoryCell for FinalMessageSeparator {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let mut label_parts = vec![self.occurred_at.clone()];
+        let mut label_parts = Vec::new();
+        if !self.occurred_at.is_empty() {
+            label_parts.push(self.occurred_at.clone());
+        }
         if let Some(elapsed_seconds) = self
             .elapsed_seconds
             .filter(|seconds| *seconds > 60)
@@ -41,7 +69,11 @@ impl HistoryCell for FinalMessageSeparator {
             label_parts.push(metrics_label);
         }
 
-        let label = format!("─ {} ─", label_parts.join(" • "));
+        let label = if label_parts.is_empty() {
+            String::new()
+        } else {
+            format!("─ {} ─", label_parts.join(" • "))
+        };
         let (label, _suffix, label_width) = take_prefix_by_width(&label, width as usize);
         vec![
             Line::from_iter([
@@ -53,7 +85,10 @@ impl HistoryCell for FinalMessageSeparator {
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
-        let mut label_parts = vec![self.occurred_at.clone()];
+        let mut label_parts = Vec::new();
+        if !self.occurred_at.is_empty() {
+            label_parts.push(self.occurred_at.clone());
+        }
         if let Some(elapsed_seconds) = self
             .elapsed_seconds
             .filter(|seconds| *seconds > 60)

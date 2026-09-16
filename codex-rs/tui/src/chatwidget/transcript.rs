@@ -33,6 +33,8 @@ pub(super) struct StatusCopySource {
 
 #[derive(Default)]
 pub(super) struct TranscriptState {
+    /// Completion time of the turn currently being replayed; never the resume wall clock.
+    pub(super) replay_turn_completed_at: Option<i64>,
     pub(super) pending_presentation_group: Option<crate::history_cell::PendingPresentationGroup>,
     pub(super) grouped_mcp_seen: std::collections::HashMap<String, bool>,
     pub(super) job_labels: crate::history_cell::JobLabels,

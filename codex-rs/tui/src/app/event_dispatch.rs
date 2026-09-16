@@ -2992,13 +2992,12 @@ impl App {
                 use_theme_colors,
             } => {
                 let ids = items.iter().map(ToString::to_string).collect::<Vec<_>>();
-                let items_edit = crate::legacy_core::config::edit::status_line_items_edit(&ids);
-                let colors_edit =
-                    crate::legacy_core::config::edit::status_line_use_colors_edit(use_theme_colors);
-                let apply_result = ConfigEditsBuilder::for_config_path(self.local_settings.user_config_path.as_path())
-                    .with_edits([items_edit, colors_edit])
-                    .apply()
-                    .await;
+                let apply_result = super::status_preferences::save(
+                    self.local_settings.user_config_path.as_path(),
+                    std::env::var_os("CUTEX_STATUS_LINE_CONFIG"),
+                    &ids,
+                    use_theme_colors,
+                ).await;
                 match apply_result {
                     Ok(()) => {
                         self.local_settings.tui.status_line = Some(ids.clone());

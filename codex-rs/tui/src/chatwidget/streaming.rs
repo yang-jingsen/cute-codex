@@ -334,7 +334,9 @@ impl ChatWidget {
         }
         let parsed = parse_assistant_markdown(&message, self.config.cwd.as_path());
         if from_replay && self.stream_controller.is_none() && !parsed.visible_markdown.is_empty() {
-            self.prepare_assistant_message();
+            self.prepare_assistant_message(history_cell::SeparatorTime::Historical(
+                self.transcript.replay_turn_completed_at,
+            ));
             self.mark_safety_buffering_agent_message_started();
             self.bottom_pane.hide_status_indicator();
             let context = self.thread_id.and_then(|thread_id| {
@@ -480,7 +482,7 @@ impl ChatWidget {
             self.mark_safety_buffering_agent_message_started();
         }
         if self.stream_controller.is_none() {
-            self.prepare_assistant_message();
+            self.prepare_assistant_message(history_cell::SeparatorTime::Live);
             let inline_visualization_context = self.thread_id.and_then(|thread_id| {
                 crate::inline_visualization::InlineVisualizationContext::from_config(
                     &self.config,

@@ -52,3 +52,33 @@ fn new_separator_captures_local_time_at_creation() {
     assert!(cell.occurred_at == before || cell.occurred_at == after);
     assert_eq!(cell.raw_lines()[0].to_string(), cell.occurred_at);
 }
+
+#[test]
+fn historical_separator_uses_persisted_time_and_never_invents_missing_time() {
+    let timestamp = 1_700_000_000;
+    let expected = chrono::DateTime::from_timestamp(timestamp, 0)
+        .unwrap()
+        .with_timezone(&chrono::Local)
+        .format("%H:%M")
+        .to_string();
+    let cell = FinalMessageSeparator::with_time(
+        /*elapsed_seconds*/ Some(87),
+        /*runtime_metrics*/ None,
+        SeparatorTime::Historical(Some(timestamp)),
+    );
+    assert_eq!(
+        cell.raw_lines()[0].to_string(),
+        format!("{expected} • Worked for 1m 27s")
+    );
+    for timestamp in [None, Some(i64::MAX)] {
+        let cell = FinalMessageSeparator::with_time(
+            /*elapsed_seconds*/ None,
+            /*runtime_metrics*/ None,
+            SeparatorTime::Historical(timestamp),
+        );
+        assert_eq!(cell.raw_lines()[0].to_string(), "");
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(cell.display_lines(20)[0].to_string(), @"────────────────────");
+        }
+    }
+}

@@ -7,15 +7,15 @@ use super::*;
 
 impl ChatWidget {
     /// Flush prior activity and preserve its separator before live or replayed assistant text.
-    pub(super) fn prepare_assistant_message(&mut self) {
+    pub(super) fn prepare_assistant_message(&mut self, time: history_cell::SeparatorTime) {
         // Before starting an agent stream, flush any active exec cell group.
         self.flush_unified_exec_wait_streak();
         self.flush_active_cell();
         // If the previous turn inserted non-stream history (exec output, patch status, MCP
         // calls), render a separator before starting the next streamed assistant message.
         if self.transcript.needs_final_message_separator && self.transcript.had_work_activity {
-            self.add_to_history(history_cell::FinalMessageSeparator::new(
-                /*elapsed_seconds*/ None, /*runtime_metrics*/ None,
+            self.add_to_history(history_cell::FinalMessageSeparator::with_time(
+                /*elapsed_seconds*/ None, /*runtime_metrics*/ None, time,
             ));
             self.transcript.needs_final_message_separator = false;
         } else if self.transcript.needs_final_message_separator {
@@ -54,6 +54,7 @@ impl ChatWidget {
                 completed_at,
                 duration_ms,
             } = turn;
+            self.transcript.replay_turn_completed_at = completed_at;
             if matches!(status, TurnStatus::InProgress) {
                 self.warning_display_state.startup_complete = true;
                 self.turn_lifecycle.last_turn_id = Some(turn_id.clone());
@@ -102,6 +103,7 @@ impl ChatWidget {
                 );
             }
         }
+        self.transcript.replay_turn_completed_at = None;
     }
 
     pub(crate) fn replay_thread_item(
