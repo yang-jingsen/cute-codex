@@ -1435,7 +1435,10 @@ impl ThreadManager {
             initial_history: history,
             persistence: fork_persistence,
         } = fork_history;
-        if let InitialHistory::Resumed(resumed) = &history
+        // Only the local store owns on-disk rollout bytes. Other stores can
+        // expose logical rollout paths; their typed history is checked below.
+        if self.state.thread_store.as_any().is::<LocalThreadStore>()
+            && let InitialHistory::Resumed(resumed) = &history
             && let Some(path) = resumed.rollout_path.as_ref()
         {
             let (items, _, parse_errors) =
@@ -1451,7 +1454,10 @@ impl ThreadManager {
         crate::external_input::recovery::ensure_migration_allowed(history.get_rollout_items())
             .map_err(|error| CodexErr::InvalidRequest(error.to_string()))?;
         let live_source = if let InitialHistory::Resumed(resumed) = &history {
-            self.get_thread(resumed.conversation_id).await.ok()
+            self.get_thread(resumed.conversation_id)
+                .await
+                .ok()
+                .filter(|thread| thread.is_running())
         } else {
             None
         };

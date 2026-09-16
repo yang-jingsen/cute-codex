@@ -35,6 +35,10 @@ impl Session {
                 .await
                 .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?
         {
+            // Fresh threads allocate a rollout path before writing the file.
+            // Materialize under the admission guard before strictly reading it.
+            self.try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+                .await?;
             let (items, _, parse_errors) =
                 codex_rollout::RolloutRecorder::load_rollout_items(&path).await?;
             if parse_errors != 0 {

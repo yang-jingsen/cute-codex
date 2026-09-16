@@ -4502,7 +4502,7 @@ contentLength=0"
     )?;
     let calls = rollout
         .lines()
-        .map(serde_json::from_str::<codex_history::RolloutLine>)
+        .map(codex_rollout::parse_rollout_line)
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .filter_map(|row| match row.item {
